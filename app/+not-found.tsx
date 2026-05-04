@@ -1,3 +1,7 @@
+/**
+ * Fallback screen shown when a user navigates to an unknown route.
+ */
+
 import { Link, Stack } from 'expo-router';
 import { StyleSheet } from 'react-native';
 

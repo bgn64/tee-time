@@ -1,3 +1,7 @@
+/**
+ * Root app layout that loads fonts, applies theming, and hosts app-wide providers.
+ */
+
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
@@ -7,6 +11,7 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { GolfRoundProvider } from '@/state/GolfRoundContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -42,7 +47,11 @@ export default function RootLayout() {
     return null;
   }
 
-  return <RootLayoutNav />;
+  return (
+    <GolfRoundProvider>
+      <RootLayoutNav />
+    </GolfRoundProvider>
+  );
 }
 
 function RootLayoutNav() {
@@ -52,6 +61,7 @@ function RootLayoutNav() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="new-round" options={{ title: 'New Round' }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
     </ThemeProvider>
