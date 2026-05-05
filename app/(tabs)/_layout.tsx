@@ -6,41 +6,44 @@ import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
 
-import Colors from '@/constants/Colors';
-import { useColorScheme } from '@/components/useColorScheme';
-import { useClientOnlyValue } from '@/components/useClientOnlyValue';
+import { useTheme } from '@/state/ThemeContext';
 
-// You can explore the built-in icon families and icons on the web at https://icons.expo.fyi/
 function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
   color: string;
 }) {
-  return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
+  return <FontAwesome size={24} style={{ marginBottom: -3 }} {...props} />;
 }
 
 export default function TabLayout() {
-  const colorScheme = useColorScheme();
+  const { colors } = useTheme();
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
-        // Disable the static render of the header on web
-        // to prevent a hydration error in React Navigation v6.
-        headerShown: useClientOnlyValue(false, true),
+        tabBarActiveTintColor: colors.tabBarActive,
+        tabBarInactiveTintColor: colors.tabBarInactive,
+        tabBarStyle: {
+          backgroundColor: colors.tabBar,
+          borderTopColor: colors.border,
+        },
+        headerStyle: { backgroundColor: colors.background },
+        headerTintColor: colors.textTitle,
       }}>
       <Tabs.Screen
-        name="index"
+        name="(home)"
         options={{
-          title: 'Scorecard',
-          tabBarIcon: ({ color }) => <TabBarIcon name="flag" color={color} />,
+          title: 'Home',
+          headerShown: false,
+          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
         }}
       />
       <Tabs.Screen
         name="two"
         options={{
-          title: 'Rounds',
-          tabBarIcon: ({ color }) => <TabBarIcon name="list" color={color} />,
+          title: 'Settings',
+          headerShown: false,
+          tabBarIcon: ({ color }) => <TabBarIcon name="cog" color={color} />,
         }}
       />
     </Tabs>

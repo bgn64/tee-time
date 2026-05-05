@@ -6,6 +6,7 @@ export type Player = {
   id: string;
   name: string;
   isUser: boolean;
+  color?: string;
 };
 
 export type Hole = {

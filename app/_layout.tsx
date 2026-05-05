@@ -3,15 +3,17 @@
  */
 
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { View, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
-import { useColorScheme } from '@/components/useColorScheme';
+import { TopBanner } from '@/components/TopBanner';
 import { GolfRoundProvider } from '@/state/GolfRoundContext';
+import { PlayerProvider } from '@/state/PlayerContext';
+import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -19,7 +21,6 @@ export {
 } from 'expo-router';
 
 export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
   initialRouteName: '(tabs)',
 };
 
@@ -32,7 +33,6 @@ export default function RootLayout() {
     ...FontAwesome.font,
   });
 
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
   useEffect(() => {
     if (error) throw error;
   }, [error]);
@@ -48,22 +48,32 @@ export default function RootLayout() {
   }
 
   return (
-    <GolfRoundProvider>
-      <RootLayoutNav />
-    </GolfRoundProvider>
+    <AppThemeProvider>
+      <PlayerProvider>
+        <GolfRoundProvider>
+          <RootLayoutNav />
+        </GolfRoundProvider>
+      </PlayerProvider>
+    </AppThemeProvider>
   );
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
-
+  const { colors } = useTheme();
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="new-round" options={{ title: 'New Round' }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
-      </Stack>
-    </ThemeProvider>
+    <View style={[styles.root, { backgroundColor: colors.background }]}>
+      <TopBanner />
+      <View style={styles.content}>
+        <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="new-course" options={{ headerShown: true, title: 'New Course' }} />
+        </Stack>
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  content: { flex: 1 },
+});

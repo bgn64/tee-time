@@ -1,89 +1,110 @@
 /**
- * Rounds tab with a lightweight current/completed round summary for the prototype.
+ * Settings tab — allows toggling between color themes.
  */
 
-import { ScrollView, StyleSheet } from 'react-native';
+import { useMemo } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Text, View } from '@/components/Themed';
-import { useGolfRound } from '@/state/GolfRoundContext';
+import { themeNames, ThemeName, themes } from '@/constants/themes';
+import { useTheme } from '@/state/ThemeContext';
 
-export default function TabTwoScreen() {
-  const { completedRounds, currentRound } = useGolfRound();
+export default function SettingsScreen() {
+  const { colors, themeName, setThemeName } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.eyebrow}>Rounds</Text>
-      <Text style={styles.title}>Round summary</Text>
-
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Current Round</Text>
-        {currentRound ? (
-          <>
-            <Text style={styles.cardText}>{currentRound.course.name}</Text>
-            <Text style={styles.cardMeta}>Hole {currentRound.currentHoleNumber}</Text>
-          </>
-        ) : (
-          <Text style={styles.cardMeta}>No round in progress.</Text>
-        )}
+    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <Text style={styles.title}>Settings</Text>
+      <Text style={styles.sectionTitle}>Color Theme</Text>
+      <View style={styles.grid}>
+        {themeNames.map(({ key, label }) => {
+          const isActive = key === themeName;
+          const swatch = themes[key];
+          return (
+            <Pressable
+              key={key}
+              style={[styles.themeCard, isActive && styles.themeCardActive]}
+              onPress={() => setThemeName(key as ThemeName)}
+            >
+              <View style={styles.swatchRow}>
+                <View style={[styles.swatch, { backgroundColor: swatch.primary }]} />
+                <View style={[styles.swatch, { backgroundColor: swatch.accent }]} />
+                <View style={[styles.swatch, { backgroundColor: swatch.primaryDark }]} />
+              </View>
+              <Text style={[styles.themeLabel, isActive && styles.themeLabelActive]}>
+                {label}
+              </Text>
+              {isActive && <Text style={styles.checkmark}>✓</Text>}
+            </Pressable>
+          );
+        })}
       </View>
-
-      <Text style={styles.sectionTitle}>Completed in this session</Text>
-      {completedRounds.length === 0 ? (
-        <Text style={styles.cardMeta}>Completed rounds will appear here until the app restarts.</Text>
-      ) : (
-        completedRounds.map((round) => (
-          <View key={round.id} style={styles.card}>
-            <Text style={styles.cardTitle}>{round.course.name}</Text>
-            <Text style={styles.cardMeta}>
-              {round.scores.length} score{round.scores.length === 1 ? '' : 's'} recorded
-            </Text>
-          </View>
-        ))
-      )}
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
-  content: {
-    padding: 24,
-    paddingBottom: 40,
-  },
-  eyebrow: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12,
-    marginTop: 28,
-  },
-  card: {
-    borderColor: '#d0d7de',
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 16,
-    padding: 16,
-  },
-  cardTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-  },
-  cardText: {
-    fontSize: 16,
-    marginTop: 8,
-  },
-  cardMeta: {
-    color: '#687076',
-    lineHeight: 20,
-    marginTop: 8,
-  },
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    content: {
+      padding: 24,
+      paddingTop: 20,
+      paddingBottom: 40,
+    },
+    title: {
+      fontSize: 34,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.textTitle,
+      marginTop: 24,
+      marginBottom: 16,
+    },
+    grid: {
+      gap: 12,
+    },
+    themeCard: {
+      backgroundColor: colors.cardBg,
+      borderRadius: 14,
+      borderWidth: 2,
+      borderColor: colors.border,
+      padding: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    themeCardActive: {
+      borderColor: colors.primary,
+    },
+    swatchRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginRight: 14,
+    },
+    swatch: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+    },
+    themeLabel: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: colors.textBody,
+      flex: 1,
+    },
+    themeLabelActive: {
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    checkmark: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.primary,
+    },
+  });
+}

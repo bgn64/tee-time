@@ -2,13 +2,7 @@
  * Seed course data used for recent courses and round setup in the prototype.
  */
 
-import { Course, Player } from '@/types/golf';
-
-export const defaultPlayer: Player = {
-  id: 'user',
-  name: 'You',
-  isUser: true,
-};
+import { Course } from '@/types/golf';
 
 export const recentCourses: Course[] = [
   {

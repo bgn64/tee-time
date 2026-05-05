@@ -4,13 +4,14 @@
 
 import { createContext, PropsWithChildren, useContext, useMemo, useState } from 'react';
 
-import { defaultPlayer, recentCourses as seededRecentCourses } from '@/data/courses';
+import { recentCourses as seededRecentCourses } from '@/data/courses';
 import { Course, Player, Round, RoundScore } from '@/types/golf';
 
 type GolfRoundContextValue = {
   completedRounds: Round[];
+  courses: Course[];
   currentRound: Round | null;
-  recentCourses: Course[];
+  addCourse: (course: Course) => void;
   startRound: (courseId: string, players?: Player[]) => void;
   setHoleScore: (playerId: string, holeNumber: number, relativeScore: number) => void;
   setCustomHoleScore: (playerId: string, holeNumber: number, strokes: number) => void;
@@ -35,16 +36,20 @@ function replaceScore(scores: RoundScore[], nextScore: RoundScore) {
 }
 
 export function GolfRoundProvider({ children }: PropsWithChildren) {
+  const [courses, setCourses] = useState<Course[]>(seededRecentCourses);
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   const [completedRounds, setCompletedRounds] = useState<Round[]>([]);
 
   const value = useMemo<GolfRoundContextValue>(
     () => ({
       completedRounds,
+      courses,
       currentRound,
-      recentCourses: seededRecentCourses,
-      startRound: (courseId, players = [defaultPlayer]) => {
-        const course = seededRecentCourses.find((recentCourse) => recentCourse.id === courseId);
+      addCourse: (course) => {
+        setCourses((prev) => [...prev, course]);
+      },
+      startRound: (courseId, players = []) => {
+        const course = courses.find((c) => c.id === courseId);
 
         if (!course) {
           throw new Error(`Cannot start round for unknown course: ${courseId}`);
@@ -140,7 +145,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         });
       },
     }),
-    [completedRounds, currentRound]
+    [completedRounds, courses, currentRound]
   );
 
   return <GolfRoundContext.Provider value={value}>{children}</GolfRoundContext.Provider>;

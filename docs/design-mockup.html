@@ -748,5 +748,391 @@
   </div>
 </div>
 
+<!-- ==================== ADAPTIVE SCORING LAYOUT ==================== -->
+<div class="flow-section">
+  <h2>Adaptive Scoring Layout (1-4 Players)</h2>
+  <p class="desc">The scoring UI adapts based on player count. Fewer players = larger chips, no accordion needed. More players = compact accordion with auto-expand. The threshold for accordion behavior is 3+ players. Hole info and progress bar are always centered.</p>
+
+  <div style="background:#2a2a2a; border-radius:16px; padding:24px; max-width:750px; margin-bottom:32px;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px; line-height:1.6; color:#ccc;">
+      <thead>
+        <tr style="border-bottom:2px solid #444; text-align:left;">
+          <th style="padding:8px 12px; color:#fff;">Players</th>
+          <th style="padding:8px 12px; color:#fff;">Layout</th>
+          <th style="padding:8px 12px; color:#fff;">Chip Size</th>
+          <th style="padding:8px 12px; color:#fff;">Behavior</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:8px 12px; font-weight:700;">1</td>
+          <td style="padding:8px 12px;">No accordion - single expanded card</td>
+          <td style="padding:8px 12px;">Large (64px)</td>
+          <td style="padding:8px 12px;">Always expanded. Spacious layout.</td>
+        </tr>
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:8px 12px; font-weight:700;">2</td>
+          <td style="padding:8px 12px;">No accordion - both cards expanded</td>
+          <td style="padding:8px 12px;">Medium (44px)</td>
+          <td style="padding:8px 12px;">Both visible and scoreable without collapsing.</td>
+        </tr>
+        <tr style="border-bottom:1px solid #333;">
+          <td style="padding:8px 12px; font-weight:700;">3</td>
+          <td style="padding:8px 12px;">Accordion - one expanded at a time</td>
+          <td style="padding:8px 12px;">Standard (46px)</td>
+          <td style="padding:8px 12px;">Auto-advances to next unscored. Tap to expand any.</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; font-weight:700;">4</td>
+          <td style="padding:8px 12px;">Accordion - one expanded at a time</td>
+          <td style="padding:8px 12px;">Standard (46px)</td>
+          <td style="padding:8px 12px;">Same as 3. All fit on screen without scrolling.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="phone-row">
+    <!-- 1 PLAYER -->
+    <div class="phone-col">
+      <div class="step-badge active">1 PLAYER</div>
+      <div class="phone-frame">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;">
+            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
+            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
+            <div class="dot current"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+          <div style="text-align:center; margin-bottom:24px;">
+            <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;margin:0 auto 8px;">7</div>
+            <div style="font-size:18px;font-weight:800;color:var(--text-title);">Hole 7</div>
+            <div style="font-size:14px;color:var(--brown);margin-top:4px;">Par 3 &middot; 158 yards</div>
+          </div>
+          <div style="background:#fff;border-radius:18px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+              <div class="player-avatar" style="background:var(--green);">Y</div>
+              <div style="flex:1;font-size:16px;font-weight:700;color:var(--text);">You</div>
+              <div style="font-size:13px;font-weight:800;color:var(--brown);background:var(--tan);padding:5px 12px;border-radius:8px;">+2 thru 6</div>
+            </div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">-2</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Eagle</div></div>
+              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">-1</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Birdie</div></div>
+              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;box-shadow:0 3px 10px rgba(255,143,0,0.3);">E</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Par</div></div>
+              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">+1</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Bogey</div></div>
+              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">+2</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Dbl</div></div>
+              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">...</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Other</div></div>
+            </div>
+          </div>
+          <div class="nav-row">
+            <div class="nav-btn">&#8592; Back</div>
+            <div class="nav-btn next">Next &#8594;</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">No accordion. Large centered hole badge. Big 64px chips. Spacious and easy to tap.</div>
+    </div>
+
+    <!-- 2 PLAYERS -->
+    <div class="phone-col">
+      <div class="step-badge active">2 PLAYERS</div>
+      <div class="phone-frame">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;">
+            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
+            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
+            <div class="dot current"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+          <div style="text-align:center; margin-bottom:14px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;margin:0 auto 4px;">7</div>
+            <div style="font-size:15px;font-weight:800;color:var(--text-title);">Hole 7</div>
+            <div style="font-size:12px;color:var(--brown);margin-top:2px;">Par 3 &middot; 158 yards</div>
+          </div>
+          <!-- Player 1 -->
+          <div style="background:#fff;border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">Y</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:var(--text);">You</div>
+              <div style="font-size:11px;font-weight:800;color:var(--brown);background:var(--tan);padding:3px 8px;border-radius:7px;">+2 thru 6</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-2</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Eagle</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-1</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Birdie</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;box-shadow:0 2px 8px rgba(255,143,0,0.3);">E</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Par</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+1</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Bogey</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+2</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Dbl</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">...</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Other</div></div>
+            </div>
+          </div>
+          <!-- Player 2 -->
+          <div style="background:#fff;border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+              <div style="width:28px;height:28px;border-radius:50%;background:#42a5f5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">M</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:var(--text);">Mike</div>
+              <div style="font-size:11px;font-weight:800;color:var(--brown);background:var(--tan);padding:3px 8px;border-radius:7px;">E thru 6</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-2</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Eagle</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-1</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Birdie</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">E</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Par</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+1</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Bogey</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+2</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Dbl</div></div>
+              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">...</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Other</div></div>
+            </div>
+          </div>
+          <div class="nav-row">
+            <div class="nav-btn">&#8592; Back</div>
+            <div class="nav-btn next">Next &#8594;</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">No accordion. Both players expanded with 44px chips. Compact padding keeps it in frame.</div>
+    </div>
+
+    <!-- 3 PLAYERS -->
+    <div class="phone-col">
+      <div class="step-badge active">3 PLAYERS</div>
+      <div class="phone-frame">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;">
+            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
+            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
+            <div class="dot current"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+          <div style="text-align:center; margin-bottom:18px;">
+            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin:0 auto 6px;">7</div>
+            <div style="font-size:16px;font-weight:800;color:var(--text-title);">Hole 7</div>
+            <div style="font-size:13px;color:var(--brown);margin-top:3px;">Par 3 &middot; 158 yards</div>
+          </div>
+          <!-- Player 1: scored, collapsed -->
+          <div class="accordion-player">
+            <div class="accordion-header">
+              <div class="accordion-avatar" style="background:var(--green);">Y</div>
+              <div class="accordion-name">You</div>
+              <div class="accordion-score-badge scored">3 &#10003;</div>
+              <div class="accordion-score-badge overall">+2 thru 7</div>
+              <div class="accordion-chevron">&#9654;</div>
+            </div>
+          </div>
+          <!-- Player 2: expanded -->
+          <div class="accordion-player" style="border:1.5px solid var(--orange);">
+            <div class="accordion-header">
+              <div class="accordion-avatar" style="background:#42a5f5;">M</div>
+              <div class="accordion-name">Mike</div>
+              <div class="accordion-score-badge overall">E thru 6</div>
+              <div class="accordion-chevron">&#9660;</div>
+            </div>
+            <div class="accordion-body">
+              <div class="accordion-chips">
+                <div><div class="acc-chip">-2</div><div class="chip-label">Eagle</div></div>
+                <div><div class="acc-chip">-1</div><div class="chip-label">Birdie</div></div>
+                <div><div class="acc-chip">E</div><div class="chip-label">Par</div></div>
+                <div><div class="acc-chip">+1</div><div class="chip-label">Bogey</div></div>
+                <div><div class="acc-chip">+2</div><div class="chip-label">Dbl</div></div>
+                <div><div class="acc-chip">...</div><div class="chip-label">Other</div></div>
+              </div>
+            </div>
+          </div>
+          <!-- Player 3: collapsed -->
+          <div class="accordion-player">
+            <div class="accordion-header">
+              <div class="accordion-avatar" style="background:#ab47bc;">S</div>
+              <div class="accordion-name">Sarah</div>
+              <div class="accordion-score-badge empty">&mdash;</div>
+              <div class="accordion-score-badge overall">+4 thru 6</div>
+              <div class="accordion-chevron">&#9654;</div>
+            </div>
+          </div>
+          <div class="nav-row">
+            <div class="nav-btn">&#8592; Back</div>
+            <div class="nav-btn next">Next &#8594;</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">Accordion at 3 players. One expanded, 46px chips. Auto-advances after scoring.</div>
+    </div>
+
+    <!-- 4 PLAYERS -->
+    <div class="phone-col">
+      <div class="step-badge active">4 PLAYERS</div>
+      <div class="phone-frame">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;">
+            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
+            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
+            <div class="dot current"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          </div>
+          <div style="text-align:center; margin-bottom:18px;">
+            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin:0 auto 6px;">7</div>
+            <div style="font-size:16px;font-weight:800;color:var(--text-title);">Hole 7</div>
+            <div style="font-size:13px;color:var(--brown);margin-top:3px;">Par 3 &middot; 158 yards</div>
+          </div>
+          <!-- Player 1: scored -->
+          <div class="accordion-player">
+            <div class="accordion-header">
+              <div class="accordion-avatar" style="background:var(--green);">Y</div>
+              <div class="accordion-name">You</div>
+              <div class="accordion-score-badge scored">3 &#10003;</div>
+              <div class="accordion-score-badge overall">+2 thru 7</div>
+              <div class="accordion-chevron">&#9654;</div>
+            </div>
+          </div>
+          <!-- Player 2: expanded -->
+          <div class="accordion-player" style="border:1.5px solid var(--orange);">
+            <div class="accordion-header">
+              <div class="accordion-avatar" style="background:#42a5f5;">M</div>
+              <div class="accordion-name">Mike</div>
+              <div class="accordion-score-badge overall">E thru 6</div>
+              <div class="accordion-chevron">&#9660;</div>
+            </div>
+            <div class="accordion-body">
+              <div class="accordion-chips">
+                <div><div class="acc-chip">-2</div><div class="chip-label">Eagle</div></div>
+                <div><div class="acc-chip">-1</div><div class="chip-label">Birdie</div></div>
+                <div><div class="acc-chip">E</div><div class="chip-label">Par</div></div>
+                <div><div class="acc-chip">+1</div><div class="chip-label">Bogey</div></div>
+                <div><div class="acc-chip">+2</div><div class="chip-label">Dbl</div></div>
+                <div><div class="acc-chip">...</div><div class="chip-label">Other</div></div>
+              </div>
+            </div>
+          </div>
+          <!-- Player 3: collapsed -->
+          <div class="accordion-player">
+            <div class="accordion-header">
+              <div class="accordion-avatar" style="background:#ab47bc;">S</div>
+              <div class="accordion-name">Sarah</div>
+              <div class="accordion-score-badge empty">&mdash;</div>
+              <div class="accordion-score-badge overall">+4 thru 6</div>
+              <div class="accordion-chevron">&#9654;</div>
+            </div>
+          </div>
+          <!-- Player 4: collapsed -->
+          <div class="accordion-player">
+            <div class="accordion-header">
+              <div class="accordion-avatar" style="background:var(--orange);">D</div>
+              <div class="accordion-name">Dave</div>
+              <div class="accordion-score-badge empty">&mdash;</div>
+              <div class="accordion-score-badge overall">-1 thru 6</div>
+              <div class="accordion-chevron">&#9654;</div>
+            </div>
+          </div>
+          <div class="nav-row">
+            <div class="nav-btn">&#8592; Back</div>
+            <div class="nav-btn next">Next &#8594;</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">4 players - same accordion. All fit without scrolling. Collapsed rows show score summaries.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== THEME SYSTEM ==================== -->
+<div class="flow-section">
+  <h2>Color Themes (User-Selectable)</h2>
+  <p class="desc">The app supports multiple color themes, togglable from a settings/preferences area. All themes use the same semantic token structure so switching is instant. Themes are implemented via a ThemeProvider context wrapping the app.</p>
+
+  <div style="background:#2a2a2a; border-radius:16px; padding:24px; max-width:800px; margin-bottom:32px;">
+    <div style="font-size:14px; color:#ccc; margin-bottom:16px; font-weight:600;">Implementation Notes:</div>
+    <ul style="font-size:13px; color:#aaa; line-height:2; padding-left:20px;">
+      <li>Each theme defines: <code style="color:#a3e635;">background, primary, primaryDark, accent, textTitle, textBody, textMuted, cardBg, chipBg, chipText</code></li>
+      <li>Components consume colors via <code style="color:#a3e635;">useTheme()</code> hook - no hardcoded hex values</li>
+      <li>Styles are generated with <code style="color:#a3e635;">useMemo</code> keyed on the current theme</li>
+      <li>Theme preference persisted with AsyncStorage</li>
+      <li>Switching is instant (no reload needed)</li>
+    </ul>
+  </div>
+
+  <div style="display:flex; gap:16px; flex-wrap:wrap; max-width:900px; margin-bottom:32px;">
+    <div style="background:#fefcf8; border-radius:16px; padding:20px; width:160px; text-align:center;">
+      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
+        <div style="width:24px;height:24px;border-radius:50%;background:#7cb342;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#558b2f;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#ff8f00;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#7c6b4f;"></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#2d5016;">Earthy Green</div>
+      <div style="font-size:11px;color:#8a8a6d;margin-top:2px;">Default &middot; Warm &amp; Natural</div>
+    </div>
+    <div style="background:#f8fcfd; border-radius:16px; padding:20px; width:160px; text-align:center;">
+      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
+        <div style="width:24px;height:24px;border-radius:50%;background:#0891b2;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#0e7490;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#f97066;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#5e8a94;"></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#164e63;">Ocean Blue</div>
+      <div style="font-size:11px;color:#7c9aa3;margin-top:2px;">Cool &amp; Modern</div>
+    </div>
+    <div style="background:#0f1419; border-radius:16px; padding:20px; width:160px; text-align:center;">
+      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
+        <div style="width:24px;height:24px;border-radius:50%;background:#a3e635;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#65a30d;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#fbbf24;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#8899a6;"></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#e7e9ea;">Dark + Lime</div>
+      <div style="font-size:11px;color:#8899a6;margin-top:2px;">OLED &middot; Sporty</div>
+    </div>
+    <div style="background:#faf8ff; border-radius:16px; padding:20px; width:160px; text-align:center;">
+      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
+        <div style="width:24px;height:24px;border-radius:50%;background:#a78bfa;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#7c3aed;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#fb923c;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#8b7aac;"></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#3b1f6e;">Lavender</div>
+      <div style="font-size:11px;color:#8b7aac;margin-top:2px;">Calm &amp; Distinctive</div>
+    </div>
+    <div style="background:#f8fafc; border-radius:16px; padding:20px; width:160px; text-align:center;">
+      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
+        <div style="width:24px;height:24px;border-radius:50%;background:#1e3a5f;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#0f172a;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#f59e0b;"></div>
+        <div style="width:24px;height:24px;border-radius:50%;background:#64748b;"></div>
+      </div>
+      <div style="font-size:13px;font-weight:700;color:#1e293b;">Navy &amp; Gold</div>
+      <div style="font-size:11px;color:#64748b;margin-top:2px;">Premium &middot; Classic</div>
+    </div>
+  </div>
+
+  <div style="background:#2a2a2a; border-radius:16px; padding:24px; max-width:800px;">
+    <div style="font-size:14px; color:#ccc; margin-bottom:12px; font-weight:600;">Token Mapping per Theme:</div>
+    <table style="width:100%; border-collapse:collapse; font-size:12px; color:#ccc; font-family:monospace;">
+      <thead>
+        <tr style="border-bottom:1px solid #444;">
+          <th style="padding:6px 8px;text-align:left;color:#fff;">Token</th>
+          <th style="padding:6px 8px;text-align:left;color:#7cb342;">Earthy</th>
+          <th style="padding:6px 8px;text-align:left;color:#0891b2;">Ocean</th>
+          <th style="padding:6px 8px;text-align:left;color:#a3e635;">Dark</th>
+          <th style="padding:6px 8px;text-align:left;color:#a78bfa;">Lavender</th>
+          <th style="padding:6px 8px;text-align:left;color:#f59e0b;">Navy</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">background</td><td style="padding:5px 8px;">#fefcf8</td><td style="padding:5px 8px;">#f8fcfd</td><td style="padding:5px 8px;">#0f1419</td><td style="padding:5px 8px;">#faf8ff</td><td style="padding:5px 8px;">#f8fafc</td></tr>
+        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">primary</td><td style="padding:5px 8px;">#7cb342</td><td style="padding:5px 8px;">#0891b2</td><td style="padding:5px 8px;">#a3e635</td><td style="padding:5px 8px;">#a78bfa</td><td style="padding:5px 8px;">#1e3a5f</td></tr>
+        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">primaryDark</td><td style="padding:5px 8px;">#558b2f</td><td style="padding:5px 8px;">#0e7490</td><td style="padding:5px 8px;">#65a30d</td><td style="padding:5px 8px;">#7c3aed</td><td style="padding:5px 8px;">#0f172a</td></tr>
+        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">accent</td><td style="padding:5px 8px;">#ff8f00</td><td style="padding:5px 8px;">#f97066</td><td style="padding:5px 8px;">#fbbf24</td><td style="padding:5px 8px;">#fb923c</td><td style="padding:5px 8px;">#f59e0b</td></tr>
+        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">textTitle</td><td style="padding:5px 8px;">#2d5016</td><td style="padding:5px 8px;">#164e63</td><td style="padding:5px 8px;">#e7e9ea</td><td style="padding:5px 8px;">#3b1f6e</td><td style="padding:5px 8px;">#1e293b</td></tr>
+        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">textMuted</td><td style="padding:5px 8px;">#7c6b4f</td><td style="padding:5px 8px;">#5e8a94</td><td style="padding:5px 8px;">#8899a6</td><td style="padding:5px 8px;">#8b7aac</td><td style="padding:5px 8px;">#64748b</td></tr>
+        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">cardBg</td><td style="padding:5px 8px;">#ffffff</td><td style="padding:5px 8px;">#ffffff</td><td style="padding:5px 8px;">#1c2732</td><td style="padding:5px 8px;">#ffffff</td><td style="padding:5px 8px;">#ffffff</td></tr>
+        <tr><td style="padding:5px 8px;">chipBg</td><td style="padding:5px 8px;">#f5f0e8</td><td style="padding:5px 8px;">#ecfeff</td><td style="padding:5px 8px;">#2d3a45</td><td style="padding:5px 8px;">#f3f0ff</td><td style="padding:5px 8px;">#f1f5f9</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 </body>
 </html>

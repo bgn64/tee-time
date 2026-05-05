@@ -1,0 +1,633 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tee Time – Color Schemes & Empty State Ideas</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1a;
+      padding: 40px 20px;
+      color: #fff;
+    }
+    h1 { text-align: center; font-size: 28px; margin-bottom: 8px; }
+    .subtitle { text-align: center; color: #999; margin-bottom: 48px; font-size: 15px; line-height: 1.5; max-width: 700px; margin-left: auto; margin-right: auto; }
+    .section { max-width: 1600px; margin: 0 auto 80px; }
+    .section h2 { font-size: 20px; margin-bottom: 6px; }
+    .section p.desc { color: #aaa; margin-bottom: 24px; line-height: 1.6; max-width: 750px; font-size: 14px; }
+    .phone-row { display: flex; gap: 28px; flex-wrap: wrap; }
+    .phone-col { display: flex; flex-direction: column; align-items: center; }
+    .phone-frame {
+      width: 375px;
+      min-height: 720px;
+      border-radius: 40px;
+      overflow: hidden;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.4);
+      flex-shrink: 0;
+      position: relative;
+    }
+    .phone-label {
+      text-align: center;
+      margin-top: 12px;
+      font-size: 12px;
+      color: #777;
+      font-weight: 600;
+      max-width: 375px;
+      line-height: 1.4;
+    }
+    .badge {
+      display: inline-block;
+      background: #333;
+      color: #ccc;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      letter-spacing: 0.5px;
+    }
+    .badge.highlight { background: #ff8f00; color: #fff; }
+
+    /* ===== Shared component patterns ===== */
+    .screen { padding: 52px 22px 28px; min-height: 720px; }
+    .hole-progress { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
+
+    /* ===== EMPTY STATE IDEAS ===== */
+    .idea-card {
+      background: #2a2a2a;
+      border-radius: 16px;
+      padding: 20px 24px;
+      margin-bottom: 12px;
+      max-width: 750px;
+    }
+    .idea-card h3 { font-size: 15px; margin-bottom: 6px; color: #eee; }
+    .idea-card p { font-size: 13px; color: #999; line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+<h1>Tee Time – Empty States & Color Schemes</h1>
+<p class="subtitle">Part 1: Ideas for filling space with 1-2 players. Part 2: Alternative color palettes applied to the scoring and home screens.</p>
+
+<!-- ==================== PART 1: EMPTY STATE IDEAS ==================== -->
+<div class="section">
+  <h2>Filling Empty Space (1-2 Players)</h2>
+  <p class="desc">When there are only 1-2 players, the accordion takes up much less vertical space. Here are ideas for what can fill that space meaningfully.</p>
+
+  <div class="idea-card">
+    <h3>💡 Idea 1: Inline Mini-Scorecard</h3>
+    <p>Show a condensed scorecard grid below the accordion — hole numbers across the top, scores filled in as you go. This gives at-a-glance context without needing a separate screen. With 1-2 players there's plenty of room for it.</p>
+  </div>
+  <div class="idea-card">
+    <h3>💡 Idea 2: Round Stats / Running Summary</h3>
+    <p>Show live stats: total score vs par, fairways hit, putts (if tracked later), best/worst hole so far. Grows richer as the round progresses. Feels like a "dashboard" below the scoring area.</p>
+  </div>
+  <div class="idea-card">
+    <h3>💡 Idea 3: Larger Hole Illustration</h3>
+    <p>Expand the hole header area — bigger badge, more hole info (yardage, handicap index if available), maybe a simple par-indicator visual (dots representing strokes). The scoring area expands vertically to breathe more.</p>
+  </div>
+  <div class="idea-card">
+    <h3>💡 Idea 4: Adaptive Chip Size</h3>
+    <p>When fewer players are present, make the score chips larger and more spaced out. The accordion body grows to fill available space. Bigger tap targets and a more relaxed feel.</p>
+  </div>
+
+  <p class="desc" style="margin-top:32px;">Below are mockups showing Ideas 1 and 4 applied to a 1-player scoring screen:</p>
+
+  <div class="phone-row">
+    <!-- Idea 1: Mini scorecard -->
+    <div class="phone-col">
+      <div class="badge highlight">IDEA 1 – MINI SCORECARD</div>
+      <div class="phone-frame" style="background:#fefcf8;">
+        <div class="screen">
+          <div class="hole-progress">
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:20px;height:8px;border-radius:4px;background:#ff8f00;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#7cb342,#558b2f);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;">7</div>
+            <div>
+              <div style="font-size:16px;font-weight:800;color:#2d5016;">Hole 7</div>
+              <div style="font-size:13px;color:#7c6b4f;margin-top:2px;">Par 3 · 158 yards</div>
+            </div>
+          </div>
+
+          <!-- Single player expanded -->
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:12px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#7cb342;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">Y</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#2d2d2d;">You</div>
+              <div style="font-size:12px;font-weight:800;color:#7c6b4f;background:#f5f0e8;padding:4px 10px;border-radius:8px;">+2 thru 6</div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+              <div style="text-align:center;"><div style="width:50px;height:50px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#555;">-2</div><div style="font-size:9px;color:#aaa;margin-top:3px;">Eagle</div></div>
+              <div style="text-align:center;"><div style="width:50px;height:50px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#555;">-1</div><div style="font-size:9px;color:#aaa;margin-top:3px;">Birdie</div></div>
+              <div style="text-align:center;"><div style="width:50px;height:50px;border-radius:50%;background:#ff8f00;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#fff;">E</div><div style="font-size:9px;color:#aaa;margin-top:3px;">Par</div></div>
+              <div style="text-align:center;"><div style="width:50px;height:50px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#555;">+1</div><div style="font-size:9px;color:#aaa;margin-top:3px;">Bogey</div></div>
+              <div style="text-align:center;"><div style="width:50px;height:50px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#555;">+2</div><div style="font-size:9px;color:#aaa;margin-top:3px;">Dbl</div></div>
+              <div style="text-align:center;"><div style="width:50px;height:50px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;color:#555;">…</div><div style="font-size:9px;color:#aaa;margin-top:3px;">Other</div></div>
+            </div>
+          </div>
+
+          <!-- Mini scorecard -->
+          <div style="margin-top:20px;">
+            <div style="font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#aaa;font-weight:700;margin-bottom:10px;">Scorecard</div>
+            <div style="background:#fff;border-radius:14px;padding:14px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+              <!-- Header row -->
+              <div style="display:flex;gap:2px;margin-bottom:6px;">
+                <div style="width:32px;font-size:10px;font-weight:700;color:#aaa;text-align:center;">Hole</div>
+                <div style="flex:1;display:flex;gap:2px;">
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#aaa;text-align:center;">1</div>
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#aaa;text-align:center;">2</div>
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#aaa;text-align:center;">3</div>
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#aaa;text-align:center;">4</div>
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#aaa;text-align:center;">5</div>
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#aaa;text-align:center;">6</div>
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#ff8f00;text-align:center;">7</div>
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#aaa;text-align:center;">8</div>
+                  <div style="flex:1;font-size:10px;font-weight:700;color:#aaa;text-align:center;">9</div>
+                </div>
+              </div>
+              <!-- Par row -->
+              <div style="display:flex;gap:2px;margin-bottom:4px;">
+                <div style="width:32px;font-size:10px;font-weight:600;color:#bbb;text-align:center;">Par</div>
+                <div style="flex:1;display:flex;gap:2px;">
+                  <div style="flex:1;font-size:10px;color:#999;text-align:center;">4</div>
+                  <div style="flex:1;font-size:10px;color:#999;text-align:center;">3</div>
+                  <div style="flex:1;font-size:10px;color:#999;text-align:center;">5</div>
+                  <div style="flex:1;font-size:10px;color:#999;text-align:center;">4</div>
+                  <div style="flex:1;font-size:10px;color:#999;text-align:center;">4</div>
+                  <div style="flex:1;font-size:10px;color:#999;text-align:center;">3</div>
+                  <div style="flex:1;font-size:10px;color:#ff8f00;text-align:center;">3</div>
+                  <div style="flex:1;font-size:10px;color:#999;text-align:center;">5</div>
+                  <div style="flex:1;font-size:10px;color:#999;text-align:center;">4</div>
+                </div>
+              </div>
+              <!-- Score row -->
+              <div style="display:flex;gap:2px;">
+                <div style="width:32px;font-size:10px;font-weight:600;color:#7cb342;text-align:center;">You</div>
+                <div style="flex:1;display:flex;gap:2px;">
+                  <div style="flex:1;font-size:11px;font-weight:700;color:#2d2d2d;text-align:center;background:#e8f5e9;border-radius:4px;padding:2px 0;">4</div>
+                  <div style="flex:1;font-size:11px;font-weight:700;color:#2d2d2d;text-align:center;background:#e8f5e9;border-radius:4px;padding:2px 0;">4</div>
+                  <div style="flex:1;font-size:11px;font-weight:700;color:#2d2d2d;text-align:center;background:#e8f5e9;border-radius:4px;padding:2px 0;">5</div>
+                  <div style="flex:1;font-size:11px;font-weight:700;color:#b42318;text-align:center;background:#fef3f2;border-radius:4px;padding:2px 0;">6</div>
+                  <div style="flex:1;font-size:11px;font-weight:700;color:#2d2d2d;text-align:center;background:#e8f5e9;border-radius:4px;padding:2px 0;">4</div>
+                  <div style="flex:1;font-size:11px;font-weight:700;color:#2d2d2d;text-align:center;background:#e8f5e9;border-radius:4px;padding:2px 0;">3</div>
+                  <div style="flex:1;font-size:11px;font-weight:700;color:#ff8f00;text-align:center;background:#fff8e1;border-radius:4px;padding:2px 0;">—</div>
+                  <div style="flex:1;font-size:11px;color:#ddd;text-align:center;padding:2px 0;">·</div>
+                  <div style="flex:1;font-size:11px;color:#ddd;text-align:center;padding:2px 0;">·</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;margin-top:24px;gap:12px;">
+            <div style="flex:1;padding:14px;border-radius:20px;background:#f5f0e8;text-align:center;font-weight:700;font-size:15px;color:#7c6b4f;">← Back</div>
+            <div style="flex:1;padding:14px;border-radius:20px;background:linear-gradient(135deg,#7cb342,#558b2f);text-align:center;font-weight:700;font-size:15px;color:#fff;">Next →</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">Mini scorecard fills the space below.<br>Color-coded scores (red = over par). Current hole highlighted in orange.</div>
+    </div>
+
+    <!-- Idea 4: Adaptive larger chips -->
+    <div class="phone-col">
+      <div class="badge highlight">IDEA 4 – ADAPTIVE SIZING</div>
+      <div class="phone-frame" style="background:#fefcf8;">
+        <div class="screen">
+          <div class="hole-progress">
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:20px;height:8px;border-radius:4px;background:#ff8f00;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+          </div>
+
+          <!-- Larger hole area -->
+          <div style="text-align:center; margin-bottom:24px;">
+            <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,#7cb342,#558b2f);color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;margin:0 auto 8px;">7</div>
+            <div style="font-size:18px;font-weight:800;color:#2d5016;">Hole 7</div>
+            <div style="font-size:14px;color:#7c6b4f;margin-top:4px;">Par 3 · 158 yards</div>
+          </div>
+
+          <!-- Player with large chips -->
+          <div style="background:#fff;border-radius:18px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+              <div style="width:36px;height:36px;border-radius:50%;background:#7cb342;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;color:#fff;">Y</div>
+              <div style="flex:1;font-size:16px;font-weight:700;color:#2d2d2d;">You</div>
+              <div style="font-size:13px;font-weight:800;color:#7c6b4f;background:#f5f0e8;padding:5px 12px;border-radius:8px;">+2 thru 6</div>
+            </div>
+            <!-- Large chips -->
+            <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
+              <div style="text-align:center;">
+                <div style="width:64px;height:64px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">-2</div>
+                <div style="font-size:10px;color:#aaa;margin-top:4px;">Eagle</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="width:64px;height:64px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">-1</div>
+                <div style="font-size:10px;color:#aaa;margin-top:4px;">Birdie</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="width:64px;height:64px;border-radius:50%;background:#ff8f00;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;box-shadow:0 3px 10px rgba(255,143,0,0.3);">E</div>
+                <div style="font-size:10px;color:#aaa;margin-top:4px;">Par</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="width:64px;height:64px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">+1</div>
+                <div style="font-size:10px;color:#aaa;margin-top:4px;">Bogey</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="width:64px;height:64px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">+2</div>
+                <div style="font-size:10px;color:#aaa;margin-top:4px;">Dbl</div>
+              </div>
+              <div style="text-align:center;">
+                <div style="width:64px;height:64px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">…</div>
+                <div style="font-size:10px;color:#aaa;margin-top:4px;">Other</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;margin-top:32px;gap:12px;">
+            <div style="flex:1;padding:14px;border-radius:20px;background:#f5f0e8;text-align:center;font-weight:700;font-size:15px;color:#7c6b4f;">← Back</div>
+            <div style="flex:1;padding:14px;border-radius:20px;background:linear-gradient(135deg,#7cb342,#558b2f);text-align:center;font-weight:700;font-size:15px;color:#fff;">Next →</div>
+          </div>
+        </div>
+      </div>
+      <div class="phone-label">Larger hole badge + bigger chips fill the screen.<br>More spacious and easier to tap. Feels premium with 1-2 players.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PART 2: COLOR SCHEMES ==================== -->
+<div class="section">
+  <h2>Color Scheme Variations</h2>
+  <p class="desc">Same layout and UI structure, different palettes. Each shown on the scoring screen (most complex) and home screen.</p>
+</div>
+
+<!-- SCHEME 1: Original (reference) -->
+<div class="section">
+  <h2 style="color:#7cb342;">Scheme 1: Earthy Green & Orange (Current)</h2>
+  <p class="desc">The existing palette — warm cream background, green primary, orange accent. Friendly and natural.</p>
+  <div class="phone-row">
+    <div class="phone-col">
+      <div class="badge">HOME</div>
+      <div class="phone-frame" style="background:#fefcf8;">
+        <div class="screen">
+          <div style="font-size:15px;color:#7c6b4f;margin-bottom:4px;">Good morning ☀️</div>
+          <div style="font-size:24px;font-weight:800;color:#2d5016;margin-bottom:16px;">Let's hit the course</div>
+          <div style="background:#fff;border-radius:20px;padding:18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid #ff8f00;">
+            <div style="font-size:16px;font-weight:700;color:#2d2d2d;">Pine Ridge Golf Club</div>
+            <div style="font-size:13px;color:#8a8a6d;margin-top:3px;">Seattle, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="background:#fff;border-radius:20px;padding:18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid #7cb342;">
+            <div style="font-size:16px;font-weight:700;color:#2d2d2d;">Cedar Hills</div>
+            <div style="font-size:13px;color:#8a8a6d;margin-top:3px;">Bellevue, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="display:block;width:100%;padding:14px;background:#f5f0e8;color:#7c6b4f;border:none;border-radius:16px;font-size:14px;font-weight:700;text-align:center;margin-top:12px;">+ Create New Course</div>
+          <div style="display:block;width:100%;padding:16px;background:linear-gradient(135deg,#7cb342,#558b2f);color:#fff;border:none;border-radius:24px;font-size:16px;font-weight:800;text-align:center;margin-top:20px;box-shadow:0 4px 12px rgba(124,179,66,0.3);">Next →</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-col">
+      <div class="badge">SCORING</div>
+      <div class="phone-frame" style="background:#fefcf8;">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#7cb342;"></div>
+            <div style="width:20px;height:8px;border-radius:4px;background:#ff8f00;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0ddd4;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#7cb342,#558b2f);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;">4</div>
+            <div><div style="font-size:16px;font-weight:800;color:#2d5016;">Hole 4</div><div style="font-size:13px;color:#7c6b4f;">Par 4 · 408 yds</div></div>
+          </div>
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.04);border:1.5px solid #ff8f00;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#7cb342;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">Y</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#2d2d2d;">You</div>
+              <div style="font-size:12px;font-weight:800;color:#7c6b4f;background:#f5f0e8;padding:4px 10px;border-radius:8px;">+1 thru 3</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="width:44px;height:44px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#ff8f00;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;">E</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+2</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">…</div>
+            </div>
+          </div>
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#42a5f5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">M</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#2d2d2d;">Mike</div>
+              <div style="font-size:12px;font-weight:800;color:#bbb;background:#f5f5f5;padding:4px 10px;border-radius:8px;">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCHEME 2: Ocean Blue -->
+<div class="section">
+  <h2 style="color:#0891b2;">Scheme 2: Ocean Blue & Coral</h2>
+  <p class="desc">Cool teal primary with a warm coral accent. Feels modern and clean — like a fitness app.</p>
+  <div class="phone-row">
+    <div class="phone-col">
+      <div class="badge">HOME</div>
+      <div class="phone-frame" style="background:#f8fcfd;">
+        <div class="screen">
+          <div style="font-size:15px;color:#5e8a94;margin-bottom:4px;">Good morning ☀️</div>
+          <div style="font-size:24px;font-weight:800;color:#164e63;margin-bottom:16px;">Let's hit the course</div>
+          <div style="background:#fff;border-radius:20px;padding:18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid #f97066;">
+            <div style="font-size:16px;font-weight:700;color:#1e293b;">Pine Ridge Golf Club</div>
+            <div style="font-size:13px;color:#7c9aa3;margin-top:3px;">Seattle, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="background:#fff;border-radius:20px;padding:18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid #0891b2;">
+            <div style="font-size:16px;font-weight:700;color:#1e293b;">Cedar Hills</div>
+            <div style="font-size:13px;color:#7c9aa3;margin-top:3px;">Bellevue, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="display:block;width:100%;padding:14px;background:#ecfeff;color:#0891b2;border:none;border-radius:16px;font-size:14px;font-weight:700;text-align:center;margin-top:12px;">+ Create New Course</div>
+          <div style="display:block;width:100%;padding:16px;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;border:none;border-radius:24px;font-size:16px;font-weight:800;text-align:center;margin-top:20px;box-shadow:0 4px 12px rgba(8,145,178,0.3);">Next →</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-col">
+      <div class="badge">SCORING</div>
+      <div class="phone-frame" style="background:#f8fcfd;">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#0891b2;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#0891b2;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#0891b2;"></div>
+            <div style="width:20px;height:8px;border-radius:4px;background:#f97066;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0e7e9;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e0e7e9;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#0891b2,#0e7490);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;">4</div>
+            <div><div style="font-size:16px;font-weight:800;color:#164e63;">Hole 4</div><div style="font-size:13px;color:#5e8a94;">Par 4 · 408 yds</div></div>
+          </div>
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.04);border:1.5px solid #f97066;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#0891b2;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">Y</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#1e293b;">You</div>
+              <div style="font-size:12px;font-weight:800;color:#5e8a94;background:#ecfeff;padding:4px 10px;border-radius:8px;">+1 thru 3</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="width:44px;height:44px;border-radius:50%;background:#ecfeff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#0e7490;">-1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f97066;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;box-shadow:0 2px 8px rgba(249,112,102,0.3);">E</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#ecfeff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#0e7490;">+1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#ecfeff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#0e7490;">+2</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#ecfeff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#0e7490;">…</div>
+            </div>
+          </div>
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#42a5f5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">M</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#1e293b;">Mike</div>
+              <div style="font-size:12px;font-weight:800;color:#bbb;background:#f5f5f5;padding:4px 10px;border-radius:8px;">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCHEME 3: Dark Mode -->
+<div class="section">
+  <h2 style="color:#a3e635;">Scheme 3: Dark Mode + Lime</h2>
+  <p class="desc">Dark background with lime green and soft amber. High contrast, easy on the eyes outdoors (OLED-friendly). Sporty but not aggressive.</p>
+  <div class="phone-row">
+    <div class="phone-col">
+      <div class="badge">HOME</div>
+      <div class="phone-frame" style="background:#0f1419;">
+        <div class="screen">
+          <div style="font-size:15px;color:#8899a6;margin-bottom:4px;">Good morning ☀️</div>
+          <div style="font-size:24px;font-weight:800;color:#e7e9ea;margin-bottom:16px;">Let's hit the course</div>
+          <div style="background:#1c2732;border-radius:20px;padding:18px;margin-bottom:12px;border-left:4px solid #fbbf24;">
+            <div style="font-size:16px;font-weight:700;color:#e7e9ea;">Pine Ridge Golf Club</div>
+            <div style="font-size:13px;color:#8899a6;margin-top:3px;">Seattle, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="background:#1c2732;border-radius:20px;padding:18px;margin-bottom:12px;border-left:4px solid #a3e635;">
+            <div style="font-size:16px;font-weight:700;color:#e7e9ea;">Cedar Hills</div>
+            <div style="font-size:13px;color:#8899a6;margin-top:3px;">Bellevue, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="display:block;width:100%;padding:14px;background:#1c2732;color:#a3e635;border:none;border-radius:16px;font-size:14px;font-weight:700;text-align:center;margin-top:12px;">+ Create New Course</div>
+          <div style="display:block;width:100%;padding:16px;background:linear-gradient(135deg,#a3e635,#65a30d);color:#0f1419;border:none;border-radius:24px;font-size:16px;font-weight:800;text-align:center;margin-top:20px;box-shadow:0 4px 12px rgba(163,230,53,0.2);">Next →</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-col">
+      <div class="badge">SCORING</div>
+      <div class="phone-frame" style="background:#0f1419;">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#a3e635;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#a3e635;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#a3e635;"></div>
+            <div style="width:20px;height:8px;border-radius:4px;background:#fbbf24;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#2d3a45;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#2d3a45;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#a3e635,#65a30d);color:#0f1419;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;">4</div>
+            <div><div style="font-size:16px;font-weight:800;color:#e7e9ea;">Hole 4</div><div style="font-size:13px;color:#8899a6;">Par 4 · 408 yds</div></div>
+          </div>
+          <div style="background:#1c2732;border-radius:14px;padding:14px 16px;margin-bottom:8px;border:1.5px solid #fbbf24;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#a3e635;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#0f1419;">Y</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#e7e9ea;">You</div>
+              <div style="font-size:12px;font-weight:800;color:#a3e635;background:#1a2e1a;padding:4px 10px;border-radius:8px;">+1 thru 3</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="width:44px;height:44px;border-radius:50%;background:#2d3a45;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#e7e9ea;">-1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#fbbf24;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#0f1419;box-shadow:0 2px 8px rgba(251,191,36,0.3);">E</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#2d3a45;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#e7e9ea;">+1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#2d3a45;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#e7e9ea;">+2</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#2d3a45;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#e7e9ea;">…</div>
+            </div>
+          </div>
+          <div style="background:#1c2732;border-radius:14px;padding:14px 16px;margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#42a5f5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">M</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#e7e9ea;">Mike</div>
+              <div style="font-size:12px;font-weight:800;color:#556;background:#2d3a45;padding:4px 10px;border-radius:8px;">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCHEME 4: Lavender & Soft -->
+<div class="section">
+  <h2 style="color:#a78bfa;">Scheme 4: Lavender & Peach</h2>
+  <p class="desc">Soft purple primary with peach accent. Calm and distinctive — stands out from typical sports apps. Gender-neutral and modern.</p>
+  <div class="phone-row">
+    <div class="phone-col">
+      <div class="badge">HOME</div>
+      <div class="phone-frame" style="background:#faf8ff;">
+        <div class="screen">
+          <div style="font-size:15px;color:#8b7aac;margin-bottom:4px;">Good morning ☀️</div>
+          <div style="font-size:24px;font-weight:800;color:#3b1f6e;margin-bottom:16px;">Let's hit the course</div>
+          <div style="background:#fff;border-radius:20px;padding:18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);border-left:4px solid #fb923c;">
+            <div style="font-size:16px;font-weight:700;color:#2d2d2d;">Pine Ridge Golf Club</div>
+            <div style="font-size:13px;color:#8b7aac;margin-top:3px;">Seattle, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="background:#fff;border-radius:20px;padding:18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.05);border-left:4px solid #a78bfa;">
+            <div style="font-size:16px;font-weight:700;color:#2d2d2d;">Cedar Hills</div>
+            <div style="font-size:13px;color:#8b7aac;margin-top:3px;">Bellevue, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="display:block;width:100%;padding:14px;background:#f3f0ff;color:#7c3aed;border:none;border-radius:16px;font-size:14px;font-weight:700;text-align:center;margin-top:12px;">+ Create New Course</div>
+          <div style="display:block;width:100%;padding:16px;background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;border-radius:24px;font-size:16px;font-weight:800;text-align:center;margin-top:20px;box-shadow:0 4px 12px rgba(167,139,250,0.3);">Next →</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-col">
+      <div class="badge">SCORING</div>
+      <div class="phone-frame" style="background:#faf8ff;">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#a78bfa;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#a78bfa;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#a78bfa;"></div>
+            <div style="width:20px;height:8px;border-radius:4px;background:#fb923c;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e8e4f0;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e8e4f0;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;">4</div>
+            <div><div style="font-size:16px;font-weight:800;color:#3b1f6e;">Hole 4</div><div style="font-size:13px;color:#8b7aac;">Par 4 · 408 yds</div></div>
+          </div>
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.04);border:1.5px solid #fb923c;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#a78bfa;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">Y</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#2d2d2d;">You</div>
+              <div style="font-size:12px;font-weight:800;color:#7c3aed;background:#f3f0ff;padding:4px 10px;border-radius:8px;">+1 thru 3</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="width:44px;height:44px;border-radius:50%;background:#f3f0ff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#7c3aed;">-1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#fb923c;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;box-shadow:0 2px 8px rgba(251,146,60,0.3);">E</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f3f0ff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#7c3aed;">+1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f3f0ff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#7c3aed;">+2</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f3f0ff;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#7c3aed;">…</div>
+            </div>
+          </div>
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#42a5f5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">M</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#2d2d2d;">Mike</div>
+              <div style="font-size:12px;font-weight:800;color:#bbb;background:#f5f5f5;padding:4px 10px;border-radius:8px;">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SCHEME 5: Navy & Gold -->
+<div class="section">
+  <h2 style="color:#f59e0b;">Scheme 5: Navy & Gold</h2>
+  <p class="desc">Deep navy primary with warm gold accent. Classic, premium feel — like a country club membership card. Sophisticated but not stuffy.</p>
+  <div class="phone-row">
+    <div class="phone-col">
+      <div class="badge">HOME</div>
+      <div class="phone-frame" style="background:#f8fafc;">
+        <div class="screen">
+          <div style="font-size:15px;color:#64748b;margin-bottom:4px;">Good morning ☀️</div>
+          <div style="font-size:24px;font-weight:800;color:#1e293b;margin-bottom:16px;">Let's hit the course</div>
+          <div style="background:#fff;border-radius:20px;padding:18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid #f59e0b;">
+            <div style="font-size:16px;font-weight:700;color:#1e293b;">Pine Ridge Golf Club</div>
+            <div style="font-size:13px;color:#64748b;margin-top:3px;">Seattle, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="background:#fff;border-radius:20px;padding:18px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-left:4px solid #1e3a5f;">
+            <div style="font-size:16px;font-weight:700;color:#1e293b;">Cedar Hills</div>
+            <div style="font-size:13px;color:#64748b;margin-top:3px;">Bellevue, WA · 18 holes · Par 72</div>
+          </div>
+          <div style="display:block;width:100%;padding:14px;background:#f1f5f9;color:#1e3a5f;border:none;border-radius:16px;font-size:14px;font-weight:700;text-align:center;margin-top:12px;">+ Create New Course</div>
+          <div style="display:block;width:100%;padding:16px;background:linear-gradient(135deg,#1e3a5f,#0f172a);color:#fff;border:none;border-radius:24px;font-size:16px;font-weight:800;text-align:center;margin-top:20px;box-shadow:0 4px 12px rgba(30,58,95,0.3);">Next →</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-col">
+      <div class="badge">SCORING</div>
+      <div class="phone-frame" style="background:#f8fafc;">
+        <div class="screen">
+          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+            <div style="width:8px;height:8px;border-radius:50%;background:#1e3a5f;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#1e3a5f;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#1e3a5f;"></div>
+            <div style="width:20px;height:8px;border-radius:4px;background:#f59e0b;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e2e8f0;"></div>
+            <div style="width:8px;height:8px;border-radius:50%;background:#e2e8f0;"></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#1e3a5f,#0f172a);color:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;">4</div>
+            <div><div style="font-size:16px;font-weight:800;color:#1e293b;">Hole 4</div><div style="font-size:13px;color:#64748b;">Par 4 · 408 yds</div></div>
+          </div>
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.04);border:1.5px solid #f59e0b;">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#1e3a5f;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#f59e0b;">Y</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#1e293b;">You</div>
+              <div style="font-size:12px;font-weight:800;color:#1e3a5f;background:#f1f5f9;padding:4px 10px;border-radius:8px;">+1 thru 3</div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <div style="width:44px;height:44px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#1e3a5f;">-1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;box-shadow:0 2px 8px rgba(245,158,11,0.3);">E</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#1e3a5f;">+1</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#1e3a5f;">+2</div>
+              <div style="width:44px;height:44px;border-radius:50%;background:#f1f5f9;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#1e3a5f;">…</div>
+            </div>
+          </div>
+          <div style="background:#fff;border-radius:14px;padding:14px 16px;margin-bottom:8px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <div style="width:30px;height:30px;border-radius:50%;background:#42a5f5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">M</div>
+              <div style="flex:1;font-size:14px;font-weight:700;color:#1e293b;">Mike</div>
+              <div style="font-size:12px;font-weight:800;color:#bbb;background:#f5f5f5;padding:4px 10px;border-radius:8px;">—</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
