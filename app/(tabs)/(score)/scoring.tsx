@@ -1,9 +1,8 @@
 /**
  * Scoring screen — root of the Score tab once a round is active (Model B
- * "locked round"). Adaptive layout for 1–4 players:
- *   1 player : single expanded card, large chips
- *   2 players: both expanded, medium chips
- *   3–4     : accordion (one expanded), auto-advance to next unscored player
+ * "locked round"). Every player is rendered as an always-expanded card with
+ * labeled score chips; chip size scales by player count (60 / 44 / 42 px) for
+ * touch ergonomics, but layout and behavior are otherwise uniform.
  *
  * Header chrome: left = "SCORE" (no back button), right = ⋯ overflow menu.
  * Hardware back is intercepted on Android so the locked round can't be exited
@@ -84,45 +83,16 @@ export default function ScoringScreen() {
   );
 
   const playerCount = currentRound?.players.length ?? 0;
-  const useAccordion = playerCount >= 3;
   const chipSize = playerCount === 1 ? 60 : playerCount === 2 ? 44 : 42;
 
-  const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(
-    currentRound?.players[0]?.id ?? null
-  );
-
-  const styles = useMemo(
-    () => makeStyles(colors, chipSize, useAccordion),
-    [colors, chipSize, useAccordion]
-  );
+  const styles = useMemo(() => makeStyles(colors, chipSize), [colors, chipSize]);
 
   const handleScore = useCallback(
     (playerId: string, relative: number) => {
       if (!currentRound) return;
-
-      // Per design: only auto-advance on the FIRST score for this player on
-      // this hole. Overwrites keep the user where they are so they can review.
-      const wasAlreadyScored = currentRound.scores.some(
-        (s) => s.playerId === playerId && s.holeNumber === currentRound.currentHoleNumber
-      );
-
       setHoleScore(playerId, currentRound.currentHoleNumber, relative);
-
-      if (useAccordion && !wasAlreadyScored) {
-        const currentIdx = currentRound.players.findIndex((p) => p.id === playerId);
-        const nextUnscored = currentRound.players.find((p, i) => {
-          if (i <= currentIdx) return false;
-          const hasScore = currentRound.scores.some(
-            (s) => s.playerId === p.id && s.holeNumber === currentRound.currentHoleNumber
-          );
-          return !hasScore;
-        });
-        if (nextUnscored) {
-          setExpandedPlayerId(nextUnscored.id);
-        }
-      }
     },
-    [currentRound, setHoleScore, useAccordion]
+    [currentRound, setHoleScore]
   );
 
   if (!currentRound) {
@@ -151,9 +121,6 @@ export default function ScoringScreen() {
       router.replace('/(tabs)/(score)');
     } else {
       goToNextHole();
-      if (useAccordion) {
-        setExpandedPlayerId(currentRound!.players[0]?.id ?? null);
-      }
     }
   }
 
@@ -203,7 +170,7 @@ export default function ScoringScreen() {
           <View style={styles.holeBadge}>
             <Text style={styles.holeBadgeText}>{currentHole.number}</Text>
           </View>
-          <View style={styles.holeHeadText}>
+          <View>
             <Text style={styles.holeTitle}>
               Hole {currentHole.number}
               {isLastHole ? ' — Final' : ''}
@@ -221,15 +188,10 @@ export default function ScoringScreen() {
           );
           const relativeScore = score ? score.strokes - currentHole.par : null;
           const totalStr = getPlayerTotalRelative(currentRound, player.id);
-          const isExpanded = !useAccordion || expandedPlayerId === player.id;
 
           return (
-            <View
-              key={player.id}
-              style={[styles.playerCard, isExpanded && styles.playerCardExpanded]}>
-              <Pressable
-                style={styles.playerHeader}
-                onPress={() => useAccordion && setExpandedPlayerId(player.id)}>
+            <View key={player.id} style={styles.playerCard}>
+              <View style={styles.playerHeader}>
                 <View
                   style={[styles.playerAvatar, { backgroundColor: player.color || colors.primary }]}>
                   <Text style={styles.playerAvatarText}>{player.name[0]}</Text>
@@ -244,33 +206,26 @@ export default function ScoringScreen() {
                     <Text style={styles.totalBadgeEmptyText}>—</Text>
                   </View>
                 )}
-                {useAccordion && (
-                  <Text style={styles.chevron}>{isExpanded ? '▼' : '▶'}</Text>
-                )}
-              </Pressable>
+              </View>
 
-              {isExpanded && (
-                <View style={styles.chipsContainer}>
-                  {SCORE_OPTIONS.map((rel) => {
-                    const isSelected = relativeScore === rel;
-                    return (
-                      <Pressable
-                        key={rel}
-                        onPress={() => handleScore(player.id, rel)}
-                        style={styles.chipWrapper}>
-                        <View style={[styles.chip, isSelected && styles.chipSelected]}>
-                          <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                            {formatScore(rel)}
-                          </Text>
-                        </View>
-                        {playerCount === 1 && (
-                          <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
-                        )}
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              )}
+              <View style={styles.chipsContainer}>
+                {SCORE_OPTIONS.map((rel) => {
+                  const isSelected = relativeScore === rel;
+                  return (
+                    <Pressable
+                      key={rel}
+                      onPress={() => handleScore(player.id, rel)}
+                      style={styles.chipWrapper}>
+                      <View style={[styles.chip, isSelected && styles.chipSelected]}>
+                        <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
+                          {formatScore(rel)}
+                        </Text>
+                      </View>
+                      <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
           );
         })}
@@ -314,8 +269,7 @@ export default function ScoringScreen() {
 
 function makeStyles(
   colors: ReturnType<typeof useTheme>['colors'],
-  chipSize: number,
-  useAccordion: boolean
+  chipSize: number
 ) {
   return StyleSheet.create({
     container: {
@@ -342,6 +296,7 @@ function makeStyles(
     holeHead: {
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'center',
       gap: 10,
       marginBottom: 14,
     },
@@ -358,7 +313,6 @@ function makeStyles(
       fontSize: 16,
       fontWeight: '800',
     },
-    holeHeadText: { flex: 1 },
     holeTitle: {
       fontSize: 15,
       fontWeight: '800',
@@ -374,12 +328,8 @@ function makeStyles(
       borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
-      marginBottom: useAccordion ? 6 : 10,
-      padding: useAccordion ? 10 : 12,
-    },
-    playerCardExpanded: {
-      borderColor: colors.accent,
-      borderWidth: 1.5,
+      marginBottom: 10,
+      padding: 12,
     },
     playerHeader: {
       flexDirection: 'row',
@@ -422,11 +372,6 @@ function makeStyles(
       fontSize: 11,
       fontWeight: '700',
       color: colors.textMuted,
-    },
-    chevron: {
-      fontSize: 10,
-      color: colors.textMuted,
-      marginLeft: 4,
     },
     chipsContainer: {
       flexDirection: 'row',
