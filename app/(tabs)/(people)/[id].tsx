@@ -1,22 +1,29 @@
 /**
  * Person detail — per-roster-entry view. Shows avatar, name, badge, count of
- * rounds together, recent rounds, and an inactive "Connect to a friend →" CTA
- * that previews the Phase 3 claim flow.
+ * rounds together, recent rounds, and (depending on state) one of:
+ *   · "Connect to a friend →" CTA — when signed in, the entry isn't linked,
+ *     and isn't the user themselves. Routes into the friend-search flow.
+ *   · "REQUEST PENDING" pill — when there's an outgoing pending friend
+ *     request whose `sourcePlayerId` matches this entry. The label is
+ *     intentionally informational (no cancel-request affordance shipped
+ *     in this step; flips to FRIEND on auto-accept).
+ *   · Nothing — for YOU, FRIEND, or pre-account UNCLAIMED entries.
  *
- * In Phase 1 the CTA's tap shows a small alert pointing at Phase 3 — the
- * surface and copy exist so users build the right mental model before the
- * feature ships.
+ * Step 8 also threads the FRIEND chip + @handle inline alongside the
+ * UNCLAIMED-vs-FRIEND-vs-YOU badge.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
-import { Player, Round } from '@/types/golf';
+import { Round } from '@/types/golf';
 
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -28,15 +35,13 @@ function formatDate(d: Date): string {
   return `${MONTH_SHORT[d.getMonth()]} ${d.getDate()}`;
 }
 
-function hasLinkedAccount(player: Player): boolean {
-  return Boolean((player as Player & { userId?: string }).userId);
-}
-
 export default function PersonDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const { getPlayer, defaultPlayerId } = usePlayers();
   const { completedRounds } = useGolfRound();
+  const { account } = useAccount();
+  const { friends, outgoingRequests } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -66,27 +71,24 @@ export default function PersonDetailScreen() {
   }
 
   const isYou = player.id === defaultPlayerId;
-  const linked = hasLinkedAccount(player);
-
-  function handleConnectTap() {
-    Alert.alert(
-      'Coming soon',
-      'Linking a roster entry to a real account will be available in Phase 3 once accounts ship.'
-    );
-  }
+  const linked = Boolean(player.userId && friends.includes(player.userId));
+  const pendingRequest = outgoingRequests.find(
+    (r) => r.sourcePlayerId === player.id && r.status === 'pending'
+  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.profileCard}>
         <View style={[styles.bigAvatar, { backgroundColor: player.color || colors.primary }]}>
-          <Text style={styles.bigAvatarText}>{player.name[0]?.toUpperCase()}</Text>
+          <Text style={styles.bigAvatarText}>{player.nickname[0]?.toUpperCase()}</Text>
         </View>
-        <Text style={styles.name}>{player.name}</Text>
+        <Text style={styles.name}>{player.nickname}</Text>
+        {linked && player.handle ? (
+          <Text style={styles.handleLine}>@{player.handle}</Text>
+        ) : null}
         <View style={styles.badgeRow}>
           {isYou && <Text style={[styles.badge, styles.badgeYou]}>YOU · DEFAULT PLAYER</Text>}
-          {!isYou && linked && (
-            <Text style={[styles.badge, styles.badgeFriend]}>FRIEND</Text>
-          )}
+          {!isYou && linked && <Text style={[styles.badge, styles.badgeFriend]}>FRIEND</Text>}
           {!isYou && !linked && <Text style={styles.badge}>UNCLAIMED</Text>}
         </View>
       </View>
@@ -100,16 +102,47 @@ export default function PersonDetailScreen() {
         </Text>
       </View>
 
-      {!isYou && !linked && (
+      {/* Connect-to-a-friend CTA — only when there's an account, this entry
+          isn't already linked, isn't the user, and there's no in-flight
+          outgoing request from this row. */}
+      {!isYou && !linked && account && !pendingRequest && (
         <View style={styles.connectBlock}>
           <Pressable
-            onPress={handleConnectTap}
+            onPress={() =>
+              router.push({
+                pathname: '/(tabs)/(people)/search',
+                params: { sourcePlayerId: player.id },
+              })
+            }
             style={({ pressed }) => [styles.connectBtn, pressed && styles.connectBtnPressed]}>
             <Text style={styles.connectBtnText}>Connect to a friend  →</Text>
           </Pressable>
           <Text style={styles.connectExplainer}>
-            Coming soon. Once accounts ship, you'll be able to link {player.name} to a real
-            user account — your shared rounds will appear on both of your histories.
+            Link {player.nickname} to a real account so they can see your shared rounds.
+          </Text>
+        </View>
+      )}
+
+      {/* Outgoing-pending state — unique to source-rooted requests. */}
+      {!isYou && !linked && pendingRequest && (
+        <View style={styles.pendingBlock}>
+          <Text style={styles.pendingPill}>REQUEST PENDING</Text>
+          <Text style={styles.pendingExplainer}>
+            Sent to <Text style={styles.pendingExplainerEm}>@{pendingRequest.toHandle}</Text>.
+            Once they accept, this entry will link automatically.
+          </Text>
+        </View>
+      )}
+
+      {/* Pre-account UNCLAIMED entries get the original Phase 1 explainer. */}
+      {!isYou && !linked && !account && (
+        <View style={styles.connectBlock}>
+          <View style={styles.connectBtnDisabled}>
+            <Text style={styles.connectBtnText}>Connect to a friend  →</Text>
+          </View>
+          <Text style={styles.connectExplainer}>
+            Sign in to link {player.nickname} to a real account. Their shared rounds will appear
+            on both of your histories.
           </Text>
         </View>
       )}
@@ -184,6 +217,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '800',
       color: colors.textTitle,
     },
+    handleLine: {
+      fontSize: 13,
+      color: colors.primaryDark,
+      fontWeight: '700',
+      marginTop: 2,
+    },
     badgeRow: {
       flexDirection: 'row',
       gap: 6,
@@ -234,11 +273,20 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     connectBtn: {
       borderRadius: 12,
       borderWidth: 1.5,
+      borderColor: colors.primary,
+      paddingVertical: 14,
+      alignItems: 'center',
+      backgroundColor: colors.cardBg,
+    },
+    connectBtnDisabled: {
+      borderRadius: 12,
+      borderWidth: 1.5,
       borderStyle: 'dashed',
       borderColor: colors.border,
       paddingVertical: 14,
       alignItems: 'center',
       backgroundColor: colors.cardBg,
+      opacity: 0.7,
     },
     connectBtnPressed: {
       opacity: 0.6,
@@ -246,7 +294,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     connectBtnText: {
       fontSize: 13,
       fontWeight: '700',
-      color: colors.textMuted,
+      color: colors.primaryDark,
     },
     connectExplainer: {
       fontSize: 11.5,
@@ -256,6 +304,37 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 8,
       marginTop: 8,
       fontStyle: 'italic',
+    },
+    pendingBlock: {
+      marginBottom: 16,
+      alignItems: 'center',
+    },
+    pendingPill: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.7,
+      backgroundColor: '#fff8e7',
+      color: colors.accent,
+      borderWidth: 1,
+      borderColor: '#f5e0b8',
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 6,
+      overflow: 'hidden',
+    },
+    pendingExplainer: {
+      fontSize: 11.5,
+      color: colors.textMuted,
+      lineHeight: 17,
+      textAlign: 'center',
+      paddingHorizontal: 8,
+      marginTop: 8,
+      fontStyle: 'italic',
+    },
+    pendingExplainerEm: {
+      color: colors.primaryDark,
+      fontWeight: '700',
+      fontStyle: 'normal',
     },
     recentSection: {
       marginTop: 8,

@@ -33,14 +33,14 @@ export function PlayerBottomSheet({ visible, onClose, onSelectPlayer, excludeIds
   const filteredPlayers = allPlayers.filter(
     (p) =>
       !excludeIds.includes(p.id) &&
-      p.name.toLowerCase().includes(search.toLowerCase())
+      p.nickname.toLowerCase().includes(search.toLowerCase())
   );
 
   function handleCreate() {
     if (!newName.trim()) return;
     const player: Player = {
       id: `player-${Date.now()}`,
-      name: newName.trim(),
+      nickname: newName.trim(),
       color: selectedColor,
     };
     addPlayer(player);
@@ -95,9 +95,9 @@ export function PlayerBottomSheet({ visible, onClose, onSelectPlayer, excludeIds
                         styles.avatar,
                         { backgroundColor: player.color || colors.primary },
                       ]}>
-                      <Text style={styles.avatarText}>{player.name[0]}</Text>
+                      <Text style={styles.avatarText}>{player.nickname[0]}</Text>
                     </View>
-                    <Text style={styles.playerName}>{player.name}</Text>
+                    <Text style={styles.playerName}>{player.nickname}</Text>
                     {!atCap && <Text style={styles.addGlyph}>+</Text>}
                   </Pressable>
                 ))}

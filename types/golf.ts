@@ -4,8 +4,24 @@
 
 export type Player = {
   id: string;
-  name: string;
+  /**
+   * Local-only label, user-editable. Always shown on this device. Required.
+   * When a roster entry is linked to a real account, the nickname is *not*
+   * overwritten — the user's chosen label sticks. Round data shipped to
+   * other users uses `displayName` instead so they see the SSO-supplied
+   * name rather than someone else's local nickname.
+   */
+  nickname: string;
+  /**
+   * Cloud-shared label populated from SSO at link time. Set when this Player
+   * has been linked to a real user account; non-editable on this device.
+   */
+  displayName?: string;
+  /** Account handle once linked. Cosmetic on Player; canonical handle lives in Account / directory. */
+  handle?: string;
   color?: string;
+  /** Set when this roster entry is linked to a real user account. */
+  userId?: string;
 };
 
 export type Hole = {
@@ -40,6 +56,19 @@ export type Team = {
   playerIds: string[];
 };
 
+/**
+ * Per-participant claim status on a Round.
+ *
+ *   pending     — claim queued; the participant hasn't acted yet.
+ *   claimed     — the participant confirmed they were part of this round.
+ *   not-claimed — declined, expired, or otherwise resolved as unclaimed.
+ *
+ * The mockup decision (`Section 5` of identity-flow-mockups.html) collapses
+ * "rejected" and "never reviewed" into a single `not-claimed` surface so
+ * neither side sees argument-prone wording like "Mike rejected your round."
+ */
+export type ClaimStatus = 'pending' | 'claimed' | 'not-claimed';
+
 export type Round = {
   id: string;
   course: Course;
@@ -51,4 +80,12 @@ export type Round = {
   scores: RoundScore[];
   startedAt: string;
   completedAt?: string;
+  /**
+   * Per-participant claim map. Keyed by participant playerId in both stroke
+   * and scramble (a scramble claim is conceptually "yes, I was on this
+   * team"). Only includes entries for participants who were linked friends
+   * at the time the claim was created. Absent on rounds completed before
+   * this field was introduced — treat as "no claims tracked."
+   */
+  claims?: Record<string, ClaimStatus>;
 };

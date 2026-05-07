@@ -159,10 +159,10 @@ export default function PlayerConfigScreen() {
     return (
       <View key={id} style={styles.playerRow}>
         <View style={[styles.avatar, { backgroundColor: player.color || colors.primary }]}>
-          <Text style={styles.avatarText}>{player.name[0]}</Text>
+          <Text style={styles.avatarText}>{player.nickname[0]}</Text>
         </View>
         <View style={styles.playerInfo}>
-          <Text style={styles.playerName}>{player.name}</Text>
+          <Text style={styles.playerName}>{player.nickname}</Text>
           {isDefault && <Text style={styles.playerTag}>Always included</Text>}
         </View>
         {!isDefault && (
@@ -227,10 +227,10 @@ export default function PlayerConfigScreen() {
                   <View key={player.id} style={styles.playerRow}>
                     <View
                       style={[styles.avatar, { backgroundColor: player.color || colors.primary }]}>
-                      <Text style={styles.avatarText}>{player.name[0]}</Text>
+                      <Text style={styles.avatarText}>{player.nickname[0]}</Text>
                     </View>
                     <View style={styles.playerInfo}>
-                      <Text style={styles.playerName}>{player.name}</Text>
+                      <Text style={styles.playerName}>{player.nickname}</Text>
                       <Text style={styles.playerTag}>Recent</Text>
                     </View>
                     <Pressable onPress={() => quickAdd(player)} style={styles.addActionBtn}>

@@ -22,6 +22,7 @@ import { AccountProvider, useAccount } from '@/state/AccountContext';
 import { GolfRoundProvider, useGolfRound } from '@/state/GolfRoundContext';
 import { HeaderProvider } from '@/state/HeaderContext';
 import { PlayerProvider, usePlayers } from '@/state/PlayerContext';
+import { SocialProvider, useSocial } from '@/state/SocialContext';
 import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
 
 export {
@@ -56,7 +57,9 @@ export default function RootLayout() {
         <AccountProvider>
           <PlayerProvider>
             <GolfRoundProvider>
-              <RootLayoutNav />
+              <SocialProvider>
+                <RootLayoutNav />
+              </SocialProvider>
             </GolfRoundProvider>
           </PlayerProvider>
         </AccountProvider>
@@ -70,8 +73,10 @@ function RootLayoutNav() {
   const { hydrated: playerHydrated } = usePlayers();
   const { hydrated: roundHydrated } = useGolfRound();
   const { hydrated: accountHydrated } = useAccount();
+  const { hydrated: socialHydrated } = useSocial();
 
-  const allHydrated = themeHydrated && playerHydrated && roundHydrated && accountHydrated;
+  const allHydrated =
+    themeHydrated && playerHydrated && roundHydrated && accountHydrated && socialHydrated;
 
   useEffect(() => {
     if (allHydrated) {

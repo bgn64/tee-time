@@ -227,7 +227,7 @@ export default function ScoringScreen() {
                               styles.stackAvatar,
                               { backgroundColor: p.color || colors.primary },
                             ]}>
-                            <Text style={styles.stackAvatarText}>{p.name[0]}</Text>
+                            <Text style={styles.stackAvatarText}>{p.nickname[0]}</Text>
                           </View>
                         );
                       })}
@@ -287,9 +287,9 @@ export default function ScoringScreen() {
                         styles.playerAvatar,
                         { backgroundColor: player.color || colors.primary },
                       ]}>
-                      <Text style={styles.playerAvatarText}>{player.name[0]}</Text>
+                      <Text style={styles.playerAvatarText}>{player.nickname[0]}</Text>
                     </View>
-                    <Text style={styles.playerName}>{player.name}</Text>
+                    <Text style={styles.playerName}>{player.nickname}</Text>
                     {totalStr ? (
                       <View style={styles.totalBadge}>
                         <Text style={styles.totalBadgeText}>{totalStr}</Text>

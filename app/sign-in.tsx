@@ -61,7 +61,7 @@ export default function SignInScreen() {
   const [step, setStep] = useState<Step>('sso');
   const [provider, setProvider] = useState<AuthProvider | null>(null);
   const [handle, setHandle] = useState<string>(() => {
-    const name = defaultPlayerId ? getPlayer(defaultPlayerId)?.name : undefined;
+    const name = defaultPlayerId ? getPlayer(defaultPlayerId)?.nickname : undefined;
     return name ? suggestHandleFromName(name) : '';
   });
   const [submitting, setSubmitting] = useState(false);

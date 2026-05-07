@@ -18,10 +18,12 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { FriendStatusChip } from '@/components/FriendStatusChip';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
+import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Round } from '@/types/golf';
 
@@ -54,6 +56,7 @@ export default function RoundDetailScreen() {
   const { colors } = useTheme();
   const { completedRounds } = useGolfRound();
   const { account, postRoundPromptSuppressed, markPostRoundPromptDismissed } = useAccount();
+  const { getPlayer } = usePlayers();
   const [bannerDismissedLocal, setBannerDismissedLocal] = useState(false);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -138,6 +141,22 @@ export default function RoundDetailScreen() {
           {formatScore(totalRel)}
         </Text>
       </Text>
+
+      {round.claims && Object.keys(round.claims).length > 0 && (
+        <View style={styles.claimsStrip}>
+          <Text style={styles.claimsHead}>FRIEND CLAIMS</Text>
+          {Object.entries(round.claims).map(([participantId, status]) => {
+            const participant = getPlayer(participantId);
+            const label = participant?.nickname ?? 'Unknown';
+            return (
+              <View key={participantId} style={styles.claimRow}>
+                <Text style={styles.claimName}>{label}</Text>
+                <FriendStatusChip status={status} />
+              </View>
+            );
+          })}
+        </View>
+      )}
 
       <ReadOnlyScorecard round={round} />
     </ScrollView>
@@ -258,6 +277,32 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: '#ffffff',
       fontWeight: '800',
       fontSize: 12,
+    },
+
+    // Friend-claims strip
+    claimsStrip: {
+      backgroundColor: colors.cardBg,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 14,
+    },
+    claimsHead: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.7,
+      color: colors.textMuted,
+      marginBottom: 8,
+    },
+    claimRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 4,
+    },
+    claimName: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textTitle,
     },
   });
 }

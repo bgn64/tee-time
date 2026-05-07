@@ -22,6 +22,9 @@ export const STORAGE_KEYS = {
   THEME_NAME: 'tee-time:theme-name',
   ACCOUNT: 'tee-time:account',
   POST_ROUND_PROMPT_DISMISS_COUNT: 'tee-time:post-round-prompt-dismiss-count',
+  SOCIAL: 'tee-time:social',
+  AUTO_ACCEPT_OUTGOING: 'tee-time:dev:auto-accept-outgoing',
+  AUTO_CLAIM_PENDING: 'tee-time:dev:auto-claim-pending',
 } as const;
 
 /**

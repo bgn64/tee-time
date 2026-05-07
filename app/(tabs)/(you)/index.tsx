@@ -59,7 +59,7 @@ export default function YouScreen() {
   // player record. Avatar color also follows the SSO-supplied color so the
   // profile feels consistent with the all-set screen the user just saw.
   const me = defaultPlayerId ? getPlayer(defaultPlayerId) : undefined;
-  const displayName = account?.displayName ?? me?.name ?? 'You';
+  const displayName = account?.displayName ?? me?.nickname ?? 'You';
   const avatarColor = account?.avatarColor ?? me?.color ?? colors.primary;
   const avatarLetter = displayName[0]?.toUpperCase() ?? 'Y';
 

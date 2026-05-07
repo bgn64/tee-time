@@ -12,7 +12,8 @@ import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useSt
 
 import { recentCourses as seededRecentCourses } from '@/data/courses';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
-import { Course, Round, RoundScore, ScoringRule, Team } from '@/types/golf';
+import { usePlayers } from '@/state/PlayerContext';
+import { ClaimStatus, Course, Round, RoundScore, ScoringRule, Team } from '@/types/golf';
 
 type GolfRoundContextValue = {
   completedRounds: Round[];
@@ -38,6 +39,12 @@ type GolfRoundContextValue = {
   goToNextHole: () => void;
   completeCurrentRound: () => void;
   abandonCurrentRound: () => void;
+  /**
+   * Update a single per-participant claim entry on a completed round. Used
+   * by the bulk-claim sheet, the auto-claim stub, and (eventually) Mike's
+   * side claim/reject UI.
+   */
+  setRoundClaim: (roundId: string, participantId: string, status: ClaimStatus) => void;
   hydrated: boolean;
 };
 
@@ -62,6 +69,11 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const [completedRounds, setCompletedRounds] = useState<Round[]>([]);
   const [pendingSelectedCourseId, setPendingSelectedCourseId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
+
+  // Read-only roster snapshot used by completeCurrentRound to seed claim
+  // entries for linked-friend participants. PlayerProvider wraps this
+  // provider so the call is safe.
+  const { allPlayers: playerRoster, defaultPlayerId } = usePlayers();
 
   // Hydrate from storage on mount.
   useEffect(() => {
@@ -207,9 +219,24 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             throw new Error('Cannot complete a round when no current round exists.');
           }
 
-          const completedRound = {
+          // Seed pending claims for any participant who is currently linked
+          // to a real account (Player.userId is set). The owner of the round
+          // doesn't get a claim — their participation is self-evident.
+          // For scramble rounds the claim is keyed by playerId still, with
+          // semantics "yes, I was on this team."
+          const claims: Record<string, ClaimStatus> = {};
+          for (const playerId of round.playerIds) {
+            if (playerId === defaultPlayerId) continue;
+            const participant = playerRoster.find((p) => p.id === playerId);
+            if (participant?.userId) {
+              claims[playerId] = 'pending';
+            }
+          }
+
+          const completedRound: Round = {
             ...round,
             completedAt: new Date().toISOString(),
+            claims: Object.keys(claims).length > 0 ? claims : undefined,
           };
 
           setCompletedRounds((rounds) => [completedRound, ...rounds]);
@@ -220,8 +247,25 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         // Discards the in-flight round entirely; nothing is persisted to history.
         setCurrentRound(null);
       },
+      setRoundClaim: (roundId, participantId, status) => {
+        setCompletedRounds((rounds) =>
+          rounds.map((r) => {
+            if (r.id !== roundId) return r;
+            const nextClaims = { ...(r.claims ?? {}), [participantId]: status };
+            return { ...r, claims: nextClaims };
+          })
+        );
+      },
     }),
-    [completedRounds, courses, currentRound, pendingSelectedCourseId, hydrated]
+    [
+      completedRounds,
+      courses,
+      currentRound,
+      pendingSelectedCourseId,
+      hydrated,
+      playerRoster,
+      defaultPlayerId,
+    ]
   );
 
   return <GolfRoundContext.Provider value={value}>{children}</GolfRoundContext.Provider>;

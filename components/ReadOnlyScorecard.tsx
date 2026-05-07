@@ -44,7 +44,7 @@ export function ReadOnlyScorecard({ round }: Props) {
     return round.playerIds
       .map((pid) => {
         const p = getPlayer(pid);
-        return p ? { id: p.id, name: p.name, color: p.color || colors.primary } : null;
+        return p ? { id: p.id, name: p.nickname, color: p.color || colors.primary } : null;
       })
       .filter((s): s is Scorer => s !== null);
   }, [round, isScramble, getPlayer, colors.primary]);

@@ -172,7 +172,7 @@ export default function RoundsListScreen() {
                                   borderColor: colors.cardBg,
                                 },
                               ]}>
-                              <Text style={styles.avatarText}>{p.name[0]}</Text>
+                              <Text style={styles.avatarText}>{p.nickname[0]}</Text>
                             </View>
                           );
                         })}
