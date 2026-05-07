@@ -1,6 +1,6 @@
 /**
- * Home tab — stub per design (content TBD). Renders a centered placeholder
- * that matches the mock's `.stub` style.
+ * Feed tab — stub per Phase 1. Phase 3 turns this into the social feed
+ * (friends' completed rounds, achievements, etc.). For now: centered placeholder.
  */
 
 import { useMemo } from 'react';
@@ -9,18 +9,18 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 
-export default function HomeScreen() {
+export default function FeedScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
-    left: { kind: 'text', text: 'HOME' },
+    left: { kind: 'text', text: 'FEED' },
     right: { kind: 'profile' },
   });
 
   return (
     <View style={styles.container}>
-      <Text style={styles.stubText}>TODO — fill in Home</Text>
+      <Text style={styles.stubText}>TODO — fill in Feed</Text>
     </View>
   );
 }

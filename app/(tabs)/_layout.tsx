@@ -1,7 +1,9 @@
 /**
- * Tab navigation layout for the golf scoring app's four current sections:
- * Home (stub) / Score / Rounds / You. People will slot in once Phase 1 step 4
- * lands; the design target is the 5-tab layout in docs/tab-layout-mockups.html.
+ * Tab navigation layout for the golf scoring app's five sections:
+ * Feed (stub) · Rounds · Score · People · You.
+ *
+ * Visual order matches docs/tab-layout-mockups.html (with Score in the middle
+ * for thumb-zone access). Feed is a placeholder until Phase 3 social work lands.
  */
 
 import React from 'react';
@@ -40,10 +42,17 @@ export default function TabLayout() {
         },
       }}>
       <Tabs.Screen
-        name="(home)"
+        name="(feed)"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
+          title: 'Feed',
+          tabBarIcon: ({ color }) => <TabBarIcon name="newspaper-o" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="(rounds)"
+        options={{
+          title: 'Rounds',
+          tabBarIcon: ({ color }) => <TabBarIcon name="history" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -54,10 +63,10 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="(rounds)"
+        name="(people)"
         options={{
-          title: 'Rounds',
-          tabBarIcon: ({ color }) => <TabBarIcon name="history" color={color} />,
+          title: 'People',
+          tabBarIcon: ({ color }) => <TabBarIcon name="users" color={color} />,
         }}
       />
       <Tabs.Screen
