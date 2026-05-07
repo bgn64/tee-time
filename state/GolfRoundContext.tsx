@@ -1,10 +1,17 @@
 /**
- * Provides in-memory golf round state and actions for the prototype.
+ * Provides in-memory + AsyncStorage-persisted golf round state.
+ *
+ * Persisted: `courses`, `currentRound`, `completedRounds` — survive app restarts.
+ * Not persisted (transient): `pendingSelectedCourseId`.
+ *
+ * `hydrated` is exposed so the root layout can wait for storage reads before
+ * un-blocking the splash screen.
  */
 
-import { createContext, PropsWithChildren, useContext, useMemo, useState } from 'react';
+import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
 
 import { recentCourses as seededRecentCourses } from '@/data/courses';
+import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { Course, Round, RoundScore, ScoringRule, Team } from '@/types/golf';
 
 type GolfRoundContextValue = {
@@ -13,7 +20,7 @@ type GolfRoundContextValue = {
   currentRound: Round | null;
   // Transient hint set by new-course on save and consumed by Course Selection
   // on focus, so the freshly-created course can be pre-selected without
-  // threading params through router.back().
+  // threading params through router.back(). NOT persisted.
   pendingSelectedCourseId: string | null;
   setPendingSelectedCourseId: (id: string | null) => void;
   addCourse: (course: Course) => void;
@@ -31,6 +38,7 @@ type GolfRoundContextValue = {
   goToNextHole: () => void;
   completeCurrentRound: () => void;
   abandonCurrentRound: () => void;
+  hydrated: boolean;
 };
 
 const GolfRoundContext = createContext<GolfRoundContextValue | undefined>(undefined);
@@ -53,6 +61,43 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   const [completedRounds, setCompletedRounds] = useState<Round[]>([]);
   const [pendingSelectedCourseId, setPendingSelectedCourseId] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  // Hydrate from storage on mount.
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      loadJSON<Course[]>(STORAGE_KEYS.COURSES, seededRecentCourses),
+      loadJSON<Round | null>(STORAGE_KEYS.CURRENT_ROUND, null),
+      loadJSON<Round[]>(STORAGE_KEYS.COMPLETED_ROUNDS, []),
+    ]).then(([loadedCourses, loadedCurrent, loadedCompleted]) => {
+      if (cancelled) return;
+      setCourses(loadedCourses);
+      setCurrentRound(loadedCurrent);
+      setCompletedRounds(loadedCompleted);
+      setHydrated(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Per-key write effects (gated on hydration so we don't stomp stored data
+  // with the seed on first render).
+  useEffect(() => {
+    if (!hydrated) return;
+    saveJSON(STORAGE_KEYS.COURSES, courses);
+  }, [courses, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    saveJSON(STORAGE_KEYS.CURRENT_ROUND, currentRound);
+  }, [currentRound, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    saveJSON(STORAGE_KEYS.COMPLETED_ROUNDS, completedRounds);
+  }, [completedRounds, hydrated]);
 
   const value = useMemo<GolfRoundContextValue>(
     () => ({
@@ -61,6 +106,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       currentRound,
       pendingSelectedCourseId,
       setPendingSelectedCourseId,
+      hydrated,
       addCourse: (course) => {
         setCourses((prev) => [...prev, course]);
       },
@@ -175,7 +221,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         setCurrentRound(null);
       },
     }),
-    [completedRounds, courses, currentRound, pendingSelectedCourseId]
+    [completedRounds, courses, currentRound, pendingSelectedCourseId, hydrated]
   );
 
   return <GolfRoundContext.Provider value={value}>{children}</GolfRoundContext.Provider>;

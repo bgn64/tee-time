@@ -111,6 +111,19 @@ export default function CourseSelectionScreen() {
     }, [pendingSelectedCourseId, setPendingSelectedCourseId])
   );
 
+  // Resume an in-progress round from persisted state. If the user had a
+  // round going when the app last closed, AsyncStorage hydration repopulates
+  // currentRound on launch. Tapping the Score tab should drop them straight
+  // back into scoring instead of showing course selection.
+  const { currentRound } = useGolfRound();
+  useFocusEffect(
+    useCallback(() => {
+      if (currentRound) {
+        router.replace('/(tabs)/(score)/scoring');
+      }
+    }, [currentRound])
+  );
+
   // Decorate each course with last-played, then sort: most-recently played
   // first, courses never played fall to the bottom alphabetically. Done once
   // at the All level; subset filters reuse this ordering.

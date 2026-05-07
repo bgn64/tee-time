@@ -1,5 +1,12 @@
 /**
  * Root app layout that loads fonts, applies theming, and hosts app-wide providers.
+ *
+ * Splash screen is held until two conditions are met:
+ *   1. Fonts are loaded (gates whether the providers mount at all).
+ *   2. All persisted contexts have hydrated from AsyncStorage (gates content rendering).
+ *
+ * This prevents the seed-data flash where roster / courses / theme briefly
+ * render with defaults before storage hydration replaces them.
  */
 
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -11,9 +18,9 @@ import { View, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
 import { AppHeader } from '@/components/AppHeader';
-import { GolfRoundProvider } from '@/state/GolfRoundContext';
+import { GolfRoundProvider, useGolfRound } from '@/state/GolfRoundContext';
 import { HeaderProvider } from '@/state/HeaderContext';
-import { PlayerProvider } from '@/state/PlayerContext';
+import { PlayerProvider, usePlayers } from '@/state/PlayerContext';
 import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
 
 export {
@@ -38,12 +45,6 @@ export default function RootLayout() {
     if (error) throw error;
   }, [error]);
 
-  useEffect(() => {
-    if (loaded) {
-      SplashScreen.hideAsync();
-    }
-  }, [loaded]);
-
   if (!loaded) {
     return null;
   }
@@ -62,7 +63,24 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const { colors } = useTheme();
+  const { colors, hydrated: themeHydrated } = useTheme();
+  const { hydrated: playerHydrated } = usePlayers();
+  const { hydrated: roundHydrated } = useGolfRound();
+
+  const allHydrated = themeHydrated && playerHydrated && roundHydrated;
+
+  useEffect(() => {
+    if (allHydrated) {
+      SplashScreen.hideAsync();
+    }
+  }, [allHydrated]);
+
+  // Hold rendering until storage has been read so seeded values don't flash
+  // before being replaced by hydrated state.
+  if (!allHydrated) {
+    return null;
+  }
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <AppHeader />
