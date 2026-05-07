@@ -5,17 +5,27 @@
  * the round by id from `completedRounds`. The grid itself is rendered by the
  * shared `<ReadOnlyScorecard />` component, which is also used by the Score
  * tab's in-progress scorecard view.
+ *
+ * Phase 3 step 7: when the user is signed-out and the round was completed
+ * very recently (last 24h), a dismissible "Sign in to back up" banner is
+ * shown above the scorecard. After the user has dismissed it
+ * `POST_ROUND_PROMPT_SUPPRESS_THRESHOLD` times across all rounds, the banner
+ * stops appearing entirely. Local view state also hides the banner for the
+ * current view session so "Maybe later" feels responsive.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
+import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Round } from '@/types/golf';
+
+const POST_ROUND_PROMPT_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -43,6 +53,8 @@ export default function RoundDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const { completedRounds } = useGolfRound();
+  const { account, postRoundPromptSuppressed, markPostRoundPromptDismissed } = useAccount();
+  const [bannerDismissedLocal, setBannerDismissedLocal] = useState(false);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -68,8 +80,49 @@ export default function RoundDetailScreen() {
   const isScramble = round.scoringRule === 'scramble';
   const dateLabel = formatDate(round.completedAt ?? round.startedAt);
 
+  // Banner is shown only when:
+  //   · The user is signed out
+  //   · The user hasn't reached the dismiss threshold globally
+  //   · The user hasn't dismissed it on this view session
+  //   · The round actually completed within the last 24h (so opening an
+  //     old round detail months later doesn't surface it).
+  const completedRecently =
+    !!round.completedAt &&
+    Date.now() - new Date(round.completedAt).getTime() < POST_ROUND_PROMPT_WINDOW_MS;
+  const showSignInBanner =
+    !account && !postRoundPromptSuppressed && !bannerDismissedLocal && completedRecently;
+
+  const onDismissBanner = () => {
+    setBannerDismissedLocal(true);
+    markPostRoundPromptDismissed();
+  };
+
+  const onSignInFromBanner = () => {
+    router.push('/sign-in');
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {showSignInBanner && (
+        <View style={styles.banner}>
+          <Text style={styles.bannerHead}>✦  YOU JUST FINISHED A ROUND</Text>
+          <Text style={styles.bannerBody}>
+            Sign in to back up <Text style={styles.bannerBodyEm}>this round</Text> and your full
+            history. You can skip and keep playing locally — no pressure.
+          </Text>
+          <View style={styles.bannerActions}>
+            <Pressable style={[styles.bannerBtn, styles.bannerBtnSkip]} onPress={onDismissBanner}>
+              <Text style={styles.bannerBtnSkipText}>Maybe later</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.bannerBtn, styles.bannerBtnPrimary]}
+              onPress={onSignInFromBanner}>
+              <Text style={styles.bannerBtnPrimaryText}>Sign in</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
       <Text style={styles.title}>{round.course.name}</Text>
       {round.course.location ? (
         <Text style={styles.location}>{round.course.location}</Text>
@@ -150,6 +203,61 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textMuted,
       textAlign: 'center',
       maxWidth: 240,
+    },
+
+    // Post-round sign-in banner
+    banner: {
+      backgroundColor: '#fff8e7',
+      borderWidth: 1,
+      borderColor: '#f5e0b8',
+      borderRadius: 12,
+      padding: 14,
+      marginBottom: 16,
+    },
+    bannerHead: {
+      fontSize: 11,
+      color: colors.accent,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+      marginBottom: 6,
+    },
+    bannerBody: {
+      fontSize: 13,
+      color: '#6b5a3a',
+      lineHeight: 18,
+      marginBottom: 12,
+    },
+    bannerBodyEm: {
+      fontWeight: '800',
+      color: '#6b5a3a',
+    },
+    bannerActions: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    bannerBtn: {
+      flex: 1,
+      paddingVertical: 9,
+      borderRadius: 8,
+      alignItems: 'center',
+    },
+    bannerBtnSkip: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: '#e0d0a8',
+    },
+    bannerBtnSkipText: {
+      color: '#7c6b4f',
+      fontWeight: '800',
+      fontSize: 12,
+    },
+    bannerBtnPrimary: {
+      backgroundColor: colors.primary,
+    },
+    bannerBtnPrimaryText: {
+      color: '#ffffff',
+      fontWeight: '800',
+      fontSize: 12,
     },
   });
 }

@@ -7,8 +7,15 @@
  *     filtered to stroke rounds the default player participated in)
  *   · Theme card → /(tabs)/(you)/theme (existing 5-swatch picker)
  *
- * TODO in Phase 1: Notifications / Account / About each push a "Coming soon"
- * placeholder. The chrome is wired end-to-end so Phase 3 is just content fill-in.
+ * Phase 3 step 7 additions:
+ *   · Profile name / handle row reflects sign-in state. Signed-in users see
+ *     their account displayName + @handle (green); signed-out keeps the
+ *     existing "No account yet" italic text.
+ *   · The Account grid card morphs based on sign-in state. Signed-out:
+ *     "Sign in / Back up & connect" with an orange pulse dot + accented
+ *     border, taps into the /sign-in modal flow. Signed-in: shows the
+ *     handle as the subtitle and routes into /(tabs)/(you)/account for
+ *     account details + sign-out.
  */
 
 import { router } from 'expo-router';
@@ -16,6 +23,7 @@ import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { themeNames } from '@/constants/themes';
+import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
@@ -39,6 +47,7 @@ export default function YouScreen() {
   const { colors, themeName } = useTheme();
   const { completedRounds } = useGolfRound();
   const { defaultPlayerId, getPlayer } = usePlayers();
+  const { account } = useAccount();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -46,9 +55,12 @@ export default function YouScreen() {
     right: { kind: 'profile' },
   });
 
+  // Profile header: signed-in account values win over the local default
+  // player record. Avatar color also follows the SSO-supplied color so the
+  // profile feels consistent with the all-set screen the user just saw.
   const me = defaultPlayerId ? getPlayer(defaultPlayerId) : undefined;
-  const displayName = me?.name ?? 'You';
-  const avatarColor = me?.color ?? colors.primary;
+  const displayName = account?.displayName ?? me?.name ?? 'You';
+  const avatarColor = account?.avatarColor ?? me?.color ?? colors.primary;
   const avatarLetter = displayName[0]?.toUpperCase() ?? 'Y';
 
   // Stats: only stroke rounds where the default player participated.
@@ -94,7 +106,11 @@ export default function YouScreen() {
         </View>
         <View style={styles.profileInfo}>
           <Text style={styles.name}>{displayName}</Text>
-          <Text style={styles.handle}>No account yet</Text>
+          {account ? (
+            <Text style={styles.handleReal}>@{account.handle}</Text>
+          ) : (
+            <Text style={styles.handle}>No account yet</Text>
+          )}
         </View>
       </View>
 
@@ -147,12 +163,15 @@ export default function YouScreen() {
         />
         <GridCard
           styles={styles}
-          label="Account"
-          subtitle="—"
+          label={account ? 'Account' : 'Sign in'}
+          subtitle={account ? `@${account.handle}` : 'Back up & connect'}
           icon="👤"
-          iconBg={colors.primary}
-          todo
-          onPress={() => router.push('/(tabs)/(you)/account')}
+          iconBg={account ? colors.primary : colors.accent}
+          accented={!account}
+          pulse={!account}
+          onPress={() =>
+            account ? router.push('/(tabs)/(you)/account') : router.push('/sign-in')
+          }
         />
         <GridCard
           styles={styles}
@@ -175,17 +194,30 @@ type GridCardProps = {
   icon: string;
   iconBg: string;
   todo?: boolean;
+  accented?: boolean;
+  pulse?: boolean;
   onPress: () => void;
 };
 
-function GridCard({ styles, label, subtitle, icon, iconBg, todo, onPress }: GridCardProps) {
+function GridCard({
+  styles,
+  label,
+  subtitle,
+  icon,
+  iconBg,
+  todo,
+  accented,
+  pulse,
+  onPress,
+}: GridCardProps) {
   return (
-    <Pressable style={styles.gridCard} onPress={onPress}>
+    <Pressable style={[styles.gridCard, accented && styles.gridCardAccented]} onPress={onPress}>
       {todo && (
         <View style={styles.todoBadge}>
           <Text style={styles.todoBadgeText}>TODO</Text>
         </View>
       )}
+      {pulse && <View style={styles.pulseDot} />}
       <View style={[styles.gridIcon, { backgroundColor: iconBg }]}>
         <Text style={styles.gridIconText}>{icon}</Text>
       </View>
@@ -240,6 +272,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontStyle: 'italic',
       marginTop: 2,
     },
+    handleReal: {
+      fontSize: 12,
+      color: colors.primaryDark,
+      fontWeight: '700',
+      marginTop: 2,
+    },
     statsStrip: {
       flexDirection: 'row',
       backgroundColor: colors.cardBg,
@@ -287,6 +325,20 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       padding: 14,
       alignItems: 'center',
       position: 'relative',
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+    },
+    gridCardAccented: {
+      borderColor: colors.accent,
+    },
+    pulseDot: {
+      position: 'absolute',
+      top: 8,
+      right: 8,
+      width: 10,
+      height: 10,
+      borderRadius: 5,
+      backgroundColor: colors.accent,
     },
     todoBadge: {
       position: 'absolute',

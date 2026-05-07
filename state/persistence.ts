@@ -20,6 +20,8 @@ export const STORAGE_KEYS = {
   COMPLETED_ROUNDS: 'tee-time:completed-rounds',
   CURRENT_ROUND: 'tee-time:current-round',
   THEME_NAME: 'tee-time:theme-name',
+  ACCOUNT: 'tee-time:account',
+  POST_ROUND_PROMPT_DISMISS_COUNT: 'tee-time:post-round-prompt-dismiss-count',
 } as const;
 
 /**

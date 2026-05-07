@@ -18,6 +18,7 @@ import { View, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
 import { AppHeader } from '@/components/AppHeader';
+import { AccountProvider, useAccount } from '@/state/AccountContext';
 import { GolfRoundProvider, useGolfRound } from '@/state/GolfRoundContext';
 import { HeaderProvider } from '@/state/HeaderContext';
 import { PlayerProvider, usePlayers } from '@/state/PlayerContext';
@@ -52,11 +53,13 @@ export default function RootLayout() {
   return (
     <AppThemeProvider>
       <HeaderProvider>
-        <PlayerProvider>
-          <GolfRoundProvider>
-            <RootLayoutNav />
-          </GolfRoundProvider>
-        </PlayerProvider>
+        <AccountProvider>
+          <PlayerProvider>
+            <GolfRoundProvider>
+              <RootLayoutNav />
+            </GolfRoundProvider>
+          </PlayerProvider>
+        </AccountProvider>
       </HeaderProvider>
     </AppThemeProvider>
   );
@@ -66,8 +69,9 @@ function RootLayoutNav() {
   const { colors, hydrated: themeHydrated } = useTheme();
   const { hydrated: playerHydrated } = usePlayers();
   const { hydrated: roundHydrated } = useGolfRound();
+  const { hydrated: accountHydrated } = useAccount();
 
-  const allHydrated = themeHydrated && playerHydrated && roundHydrated;
+  const allHydrated = themeHydrated && playerHydrated && roundHydrated && accountHydrated;
 
   useEffect(() => {
     if (allHydrated) {
@@ -87,6 +91,7 @@ function RootLayoutNav() {
       <View style={styles.content}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="sign-in" />
         </Stack>
       </View>
     </View>
