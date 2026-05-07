@@ -104,7 +104,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
   const [hydrated, setHydrated] = useState(false);
 
   const { account } = useAccount();
-  const { allPlayers, addPlayer, linkPlayer, getPlayer } = usePlayers();
+  const { allPlayers, addPlayer, linkPlayer, getPlayer, defaultPlayerId } = usePlayers();
   const { completedRounds, setRoundClaim } = useGolfRound();
 
   // Hydrate all four social keys on mount.
@@ -312,7 +312,20 @@ export function SocialProvider({ children }: PropsWithChildren) {
       setFriends((prev) => (prev.includes(req.fromUserId) ? prev : [...prev, req.fromUserId]));
       setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
 
-      const sharedRounds = completedRounds.filter((r) => r.playerIds.includes(matchedPlayerId));
+      const sharedRounds = completedRounds.filter((r) => {
+        // Bulk-claim is "rounds the new friend scored that include me."
+        // In stub mode this set is always empty (no friend-owned rounds
+        // exist locally); when real social sync ships, friends' rounds
+        // will land in `completedRounds` with their `ownerId` set, and
+        // this filter starts producing meaningful results without further
+        // change.
+        const ownerId = r.ownerId ?? defaultPlayerId;
+        return (
+          ownerId === matchedPlayerId &&
+          defaultPlayerId !== null &&
+          r.playerIds.includes(defaultPlayerId)
+        );
+      });
 
       return {
         newFriendUserId: req.fromUserId,
@@ -320,7 +333,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
         sharedRounds,
       };
     },
-    [incomingRequests, getPlayer, linkPlayer, addPlayer, completedRounds]
+    [incomingRequests, getPlayer, linkPlayer, addPlayer, completedRounds, defaultPlayerId]
   );
 
   const declineIncomingRequest = useCallback((requestId: string) => {

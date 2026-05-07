@@ -81,6 +81,17 @@ export type Round = {
   startedAt: string;
   completedAt?: string;
   /**
+   * The roster Player.id of the user who scored this round. Today this is
+   * always the local default player; once real social sync ships, friends'
+   * rounds will appear in `completedRounds` too with their roster Player.id
+   * here. The bulk-claim sheet uses this field to find rounds a new friend
+   * scored that the local user participated in.
+   *
+   * Optional for backward compat: rounds completed before this field was
+   * introduced are treated as owned by the local default player.
+   */
+  ownerId?: string;
+  /**
    * Per-participant claim map. Keyed by participant playerId in both stroke
    * and scramble (a scramble claim is conceptually "yes, I was on this
    * team"). Only includes entries for participants who were linked friends

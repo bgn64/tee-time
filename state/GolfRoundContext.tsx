@@ -146,6 +146,10 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           currentHoleNumber: 1,
           scores: [],
           startedAt: new Date().toISOString(),
+          // The default player owns rounds they score. Once friends'
+          // rounds start syncing in (real Supabase), inbound rounds will
+          // arrive with their friend-owner ids preserved.
+          ownerId: defaultPlayerId ?? undefined,
         });
       },
       setHoleScore: (scorerId, holeNumber, relativeScore) => {
