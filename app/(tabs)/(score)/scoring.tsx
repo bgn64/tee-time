@@ -13,6 +13,7 @@ import { useFocusEffect, router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { ConfirmAbandonSheet } from '@/components/ConfirmAbandonSheet';
 import { RoundActionsSheet } from '@/components/RoundActionsSheet';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -66,6 +67,7 @@ export default function ScoringScreen() {
   } = useGolfRound();
 
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
 
   // Header chrome: SCORE label, ⋯ overflow trigger. Re-applied on focus.
   useScreenHeader({
@@ -125,17 +127,22 @@ export default function ScoringScreen() {
   }
 
   function handleFinishFromMenu() {
-    // TODO confirm: "Finish with N holes unscored?" prompt for early finish
-    // (per design doc behavior reference).
     completeCurrentRound();
     router.replace('/(tabs)/(score)');
   }
 
   function handleAbandonFromMenu() {
-    // TODO confirm: destructive "Discard this round? Scores will be lost"
-    // prompt before discarding (per design doc).
-    abandonCurrentRound();
-    router.replace('/(tabs)/(score)');
+    setAbandonConfirmVisible(true);
+  }
+
+  function handleAbandonConfirmed() {
+    setAbandonConfirmVisible(false);
+    // Defer navigation a tick so the modal's fade-out animation isn't
+    // clipped by the screen transition.
+    setTimeout(() => {
+      abandonCurrentRound();
+      router.replace('/(tabs)/(score)');
+    }, 0);
   }
 
   function handleViewScorecard() {
@@ -262,6 +269,12 @@ export default function ScoringScreen() {
         onViewScorecard={handleViewScorecard}
         onFinishRound={handleFinishFromMenu}
         onAbandonRound={handleAbandonFromMenu}
+      />
+
+      <ConfirmAbandonSheet
+        visible={abandonConfirmVisible}
+        onCancel={() => setAbandonConfirmVisible(false)}
+        onConfirm={handleAbandonConfirmed}
       />
     </View>
   );

@@ -2,8 +2,8 @@
  * Bottom action sheet shown when the user taps the ⋯ overflow on the
  * Scoring screen. Items: View scorecard / Finish round / Abandon round / Cancel.
  *
- * Abandon and early-finish are flagged with a TODO confirmation step in their
- * call sites — the design doc explicitly leaves the confirm UX as TODO.
+ * Abandon goes through ConfirmAbandonSheet for a destructive-confirm step.
+ * Finish (including early finish from this menu) commits immediately.
  */
 
 import { useMemo } from 'react';
