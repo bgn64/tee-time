@@ -1,5 +1,11 @@
 /**
- * Course creation screen. Pushed from New Round setup or (future) Courses tab.
+ * Course creation form. Pushed sub-screen of the Score tab. Header left =
+ * "‹ Course" back button. On save, the new course is added to the library
+ * and the screen pops back to Course Selection.
+ *
+ * TODO (per design doc): on save, pop back with the new course pre-selected
+ * on the Course Selection screen (requires lifting selection state above
+ * Course Selection or returning a route param).
  */
 
 import { router } from 'expo-router';
@@ -7,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useGolfRound } from '@/state/GolfRoundContext';
+import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Hole } from '@/types/golf';
 
@@ -14,6 +21,11 @@ export default function NewCourseScreen() {
   const { addCourse } = useGolfRound();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  useScreenHeader({
+    left: { kind: 'back', label: 'Course', onPress: () => router.back() },
+    right: { kind: 'profile' },
+  });
 
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');

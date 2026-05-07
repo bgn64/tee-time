@@ -1,5 +1,9 @@
 /**
  * Player configuration screen — add/remove players before starting a round.
+ * Sub-screen of the Score tab. Header left = "‹ Course" back button.
+ *
+ * Player count constraints (v1): 1–4. You is always present and non-removable.
+ * At cap (4), Add Player and Quick-add affordances are disabled.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
@@ -8,9 +12,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { PlayerBottomSheet } from '@/components/PlayerBottomSheet';
 import { useGolfRound } from '@/state/GolfRoundContext';
+import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Player } from '@/types/golf';
+
+const MAX_PLAYERS = 4;
 
 export default function PlayerConfigScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
@@ -18,6 +25,11 @@ export default function PlayerConfigScreen() {
   const { recentPlayers, markRecent } = usePlayers();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  useScreenHeader({
+    left: { kind: 'back', label: 'Course', onPress: () => router.back() },
+    right: { kind: 'profile' },
+  });
 
   const course = courses.find((c) => c.id === courseId);
 
@@ -27,7 +39,10 @@ export default function PlayerConfigScreen() {
   });
   const [showSheet, setShowSheet] = useState(false);
 
+  const atCap = roundPlayers.length >= MAX_PLAYERS;
+
   function addToRound(player: Player) {
+    if (atCap) return;
     if (roundPlayers.some((p) => p.id === player.id)) return;
     setRoundPlayers((prev) => [...prev, player]);
     markRecent(player.id);
@@ -40,7 +55,9 @@ export default function PlayerConfigScreen() {
   function handleStartRound() {
     if (!courseId || roundPlayers.length === 0) return;
     startRound(courseId, roundPlayers);
-    router.replace('./scoring');
+    // Locked round: replace the Score tab stack so Scoring becomes the root
+    // and there's no back-stack to pop into Player Config.
+    router.replace('/(tabs)/(score)/scoring');
   }
 
   // Recent players not already in the round
@@ -51,12 +68,9 @@ export default function PlayerConfigScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        {course && (
-          <Text style={styles.courseContext}>{course.name}</Text>
-        )}
+        {course && <Text style={styles.courseContext}>{course.name}</Text>}
         <Text style={styles.title}>Who's playing?</Text>
 
-        {/* In this round */}
         <Text style={styles.sectionTitle}>In this round</Text>
         {roundPlayers.map((player) => (
           <View key={player.id} style={styles.playerRow}>
@@ -75,14 +89,18 @@ export default function PlayerConfigScreen() {
           </View>
         ))}
 
-        <Pressable style={styles.addButton} onPress={() => setShowSheet(true)}>
-          <Text style={styles.addButtonText}>+ Add Player</Text>
+        <Pressable
+          style={[styles.addButton, atCap && styles.addButtonDisabled]}
+          onPress={() => !atCap && setShowSheet(true)}
+          disabled={atCap}>
+          <Text style={[styles.addButtonText, atCap && styles.addButtonTextDisabled]}>
+            + Add Player
+          </Text>
         </Pressable>
 
-        {/* Recent players — full rows */}
-        {availableRecents.length > 0 && (
+        {availableRecents.length > 0 && !atCap && (
           <>
-            <Text style={styles.sectionTitle}>Quick add from recents</Text>
+            <Text style={styles.sectionTitle}>Quick add</Text>
             {availableRecents.map((player) => (
               <View key={player.id} style={styles.playerRow}>
                 <View
@@ -91,7 +109,7 @@ export default function PlayerConfigScreen() {
                 </View>
                 <View style={styles.playerInfo}>
                   <Text style={styles.playerName}>{player.name}</Text>
-                  <Text style={styles.playerTag}>Last played recently</Text>
+                  <Text style={styles.playerTag}>Recent</Text>
                 </View>
                 <Pressable onPress={() => addToRound(player)} style={styles.addActionBtn}>
                   <Text style={styles.addActionBtnText}>+</Text>
@@ -119,6 +137,7 @@ export default function PlayerConfigScreen() {
           setShowSheet(false);
         }}
         excludeIds={roundPlayers.map((p) => p.id)}
+        atCap={atCap}
       />
     </View>
   );
@@ -131,128 +150,101 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.background,
     },
     content: {
-      padding: 24,
+      padding: 20,
       paddingBottom: 100,
     },
     courseContext: {
-      fontSize: 13,
+      fontSize: 12,
       color: colors.textMuted,
-      fontWeight: '600',
+      fontWeight: '700',
       marginBottom: 4,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
     title: {
-      fontSize: 26,
+      fontSize: 22,
       fontWeight: '800',
       color: colors.textTitle,
       marginBottom: 4,
     },
     sectionTitle: {
-      fontSize: 13,
+      fontSize: 11,
       fontWeight: '700',
       color: colors.textMuted,
       textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginTop: 24,
-      marginBottom: 12,
+      letterSpacing: 1,
+      marginTop: 18,
+      marginBottom: 8,
     },
     playerRow: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.cardBg,
-      borderRadius: 12,
+      borderRadius: 10,
       borderWidth: 1,
       borderColor: colors.border,
-      padding: 12,
-      marginBottom: 8,
+      padding: 10,
+      marginBottom: 6,
     },
     avatar: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
+      width: 32,
+      height: 32,
+      borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
     },
     avatarText: {
       color: '#ffffff',
-      fontSize: 15,
+      fontSize: 13,
       fontWeight: '800',
     },
-    playerInfo: {
-      flex: 1,
-      marginLeft: 12,
-    },
-    playerName: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: colors.textTitle,
-    },
-    playerTag: {
-      fontSize: 12,
-      color: colors.textMuted,
-      marginTop: 2,
-    },
+    playerInfo: { flex: 1, marginLeft: 10 },
+    playerName: { fontSize: 14, fontWeight: '700', color: colors.textTitle },
+    playerTag: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
     removeBtn: {
       width: 28,
       height: 28,
-      borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    removeBtnText: {
-      fontSize: 20,
-      fontWeight: '400',
-      color: colors.textMuted,
-    },
+    removeBtnText: { fontSize: 20, fontWeight: '400', color: colors.textMuted },
     addActionBtn: {
       width: 28,
       height: 28,
-      borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    addActionBtnText: {
-      fontSize: 20,
-      fontWeight: '700',
-      color: colors.primary,
-    },
+    addActionBtnText: { fontSize: 20, fontWeight: '700', color: colors.primary },
     addButton: {
       alignItems: 'center',
-      borderColor: colors.primary,
-      borderRadius: 12,
+      borderColor: colors.border,
+      borderRadius: 10,
       borderStyle: 'dashed',
       borderWidth: 1.5,
-      padding: 14,
+      padding: 12,
       marginTop: 4,
     },
-    addButtonText: {
-      color: colors.primary,
-      fontSize: 15,
-      fontWeight: '700',
-    },
+    addButtonDisabled: { opacity: 0.4 },
+    addButtonText: { color: colors.textMuted, fontSize: 13, fontWeight: '700' },
+    addButtonTextDisabled: { color: colors.textMuted },
     footer: {
       position: 'absolute',
       bottom: 0,
       left: 0,
       right: 0,
       backgroundColor: colors.background,
-      padding: 20,
-      paddingBottom: 34,
+      padding: 16,
+      paddingBottom: 28,
       borderTopWidth: 1,
       borderTopColor: colors.border,
     },
     startButton: {
       alignItems: 'center',
       backgroundColor: colors.primary,
-      borderRadius: 14,
-      paddingVertical: 16,
+      borderRadius: 22,
+      paddingVertical: 14,
     },
-    disabledButton: {
-      opacity: 0.4,
-    },
-    startButtonText: {
-      color: '#ffffff',
-      fontSize: 17,
-      fontWeight: '800',
-    },
+    disabledButton: { opacity: 0.4 },
+    startButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
   });
 }

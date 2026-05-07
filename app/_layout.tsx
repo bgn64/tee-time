@@ -10,8 +10,9 @@ import { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
-import { TopBanner } from '@/components/TopBanner';
+import { AppHeader } from '@/components/AppHeader';
 import { GolfRoundProvider } from '@/state/GolfRoundContext';
+import { HeaderProvider } from '@/state/HeaderContext';
 import { PlayerProvider } from '@/state/PlayerContext';
 import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
 
@@ -49,11 +50,13 @@ export default function RootLayout() {
 
   return (
     <AppThemeProvider>
-      <PlayerProvider>
-        <GolfRoundProvider>
-          <RootLayoutNav />
-        </GolfRoundProvider>
-      </PlayerProvider>
+      <HeaderProvider>
+        <PlayerProvider>
+          <GolfRoundProvider>
+            <RootLayoutNav />
+          </GolfRoundProvider>
+        </PlayerProvider>
+      </HeaderProvider>
     </AppThemeProvider>
   );
 }
@@ -62,11 +65,10 @@ function RootLayoutNav() {
   const { colors } = useTheme();
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
-      <TopBanner />
+      <AppHeader />
       <View style={styles.content}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="new-course" options={{ headerShown: true, title: 'New Course' }} />
         </Stack>
       </View>
     </View>

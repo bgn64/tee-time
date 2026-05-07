@@ -16,9 +16,11 @@ type Props = {
   onClose: () => void;
   onSelectPlayer: (player: Player) => void;
   excludeIds: string[];
+  /** When true the roster is full; the sheet hides its add/create affordances. */
+  atCap?: boolean;
 };
 
-export function PlayerBottomSheet({ visible, onClose, onSelectPlayer, excludeIds }: Props) {
+export function PlayerBottomSheet({ visible, onClose, onSelectPlayer, excludeIds, atCap }: Props) {
   const { allPlayers, addPlayer } = usePlayers();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -82,11 +84,13 @@ export function PlayerBottomSheet({ visible, onClose, onSelectPlayer, excludeIds
                 {filteredPlayers.map((player) => (
                   <Pressable
                     key={player.id}
-                    style={styles.playerRow}
+                    style={[styles.playerRow, atCap && styles.disabledRow]}
                     onPress={() => {
+                      if (atCap) return;
                       onSelectPlayer(player);
                       resetState();
-                    }}>
+                    }}
+                    disabled={atCap}>
                     <View
                       style={[
                         styles.avatar,
@@ -95,16 +99,21 @@ export function PlayerBottomSheet({ visible, onClose, onSelectPlayer, excludeIds
                       <Text style={styles.avatarText}>{player.name[0]}</Text>
                     </View>
                     <Text style={styles.playerName}>{player.name}</Text>
+                    {!atCap && <Text style={styles.addGlyph}>+</Text>}
                   </Pressable>
                 ))}
                 {filteredPlayers.length === 0 && (
-                  <Text style={styles.emptyText}>No players found.</Text>
+                  <Text style={styles.emptyText}>
+                    {atCap ? 'Roster is full (max 4 players).' : 'No players found.'}
+                  </Text>
                 )}
               </ScrollView>
 
-              <Pressable style={styles.createBtn} onPress={() => setCreating(true)}>
-                <Text style={styles.createBtnText}>+ Create New Player</Text>
-              </Pressable>
+              {!atCap && (
+                <Pressable style={styles.createBtn} onPress={() => setCreating(true)}>
+                  <Text style={styles.createBtnText}>+ Create New Player</Text>
+                </Pressable>
+              )}
             </>
           ) : (
             <View style={styles.createForm}>
@@ -205,6 +214,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 4,
       borderBottomWidth: 1,
       borderBottomColor: colors.border,
+    },
+    disabledRow: {
+      opacity: 0.4,
+    },
+    addGlyph: {
+      marginLeft: 'auto',
+      color: colors.primary,
+      fontSize: 22,
+      fontWeight: '700',
+      paddingHorizontal: 8,
     },
     avatar: {
       width: 34,

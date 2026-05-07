@@ -1,17 +1,24 @@
 /**
- * Scoring screen with adaptive layout for 1-4 players.
- * - 1 player: expanded card, 64px chips
- * - 2 players: both expanded, 44px chips
- * - 3-4 players: accordion (one expanded at a time), 46px chips
+ * Scoring screen — root of the Score tab once a round is active (Model B
+ * "locked round"). Adaptive layout for 1–4 players:
+ *   1 player : single expanded card, large chips
+ *   2 players: both expanded, medium chips
+ *   3–4     : accordion (one expanded), auto-advance to next unscored player
+ *
+ * Header chrome: left = "SCORE" (no back button), right = ⋯ overflow menu.
+ * Hardware back is intercepted on Android so the locked round can't be exited
+ * via gesture; round-level exits go through the ⋯ sheet.
  */
 
-import { router } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { RoundActionsSheet } from '@/components/RoundActionsSheet';
 import { useGolfRound } from '@/state/GolfRoundContext';
+import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
-import { Player, Round } from '@/types/golf';
+import { Round } from '@/types/golf';
 
 const SCORE_OPTIONS = [-2, -1, 0, 1, 2];
 
@@ -43,7 +50,8 @@ function getPlayerTotalRelative(round: Round, playerId: string): string {
     holesScored++;
   }
   if (holesScored === 0) return '';
-  const prefix = total > 0 ? '+' : total === 0 ? '' : '';
+  if (total === 0) return `E thru ${holesScored}`;
+  const prefix = total > 0 ? '+' : '';
   return `${prefix}${total} thru ${holesScored}`;
 }
 
@@ -55,11 +63,29 @@ export default function ScoringScreen() {
     goToNextHole,
     goToPreviousHole,
     completeCurrentRound,
+    abandonCurrentRound,
   } = useGolfRound();
+
+  const [actionsOpen, setActionsOpen] = useState(false);
+
+  // Header chrome: SCORE label, ⋯ overflow trigger. Re-applied on focus.
+  useScreenHeader({
+    left: { kind: 'text', text: 'SCORE' },
+    right: { kind: 'menu', onPress: () => setActionsOpen(true) },
+  });
+
+  // Block Android hardware back while the locked round is on screen — round
+  // exits must go through the ⋯ sheet.
+  useFocusEffect(
+    useCallback(() => {
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+      return () => sub.remove();
+    }, [])
+  );
 
   const playerCount = currentRound?.players.length ?? 0;
   const useAccordion = playerCount >= 3;
-  const chipSize = playerCount === 1 ? 64 : playerCount === 2 ? 44 : 46;
+  const chipSize = playerCount === 1 ? 60 : playerCount === 2 ? 44 : 42;
 
   const [expandedPlayerId, setExpandedPlayerId] = useState<string | null>(
     currentRound?.players[0]?.id ?? null
@@ -73,10 +99,16 @@ export default function ScoringScreen() {
   const handleScore = useCallback(
     (playerId: string, relative: number) => {
       if (!currentRound) return;
+
+      // Per design: only auto-advance on the FIRST score for this player on
+      // this hole. Overwrites keep the user where they are so they can review.
+      const wasAlreadyScored = currentRound.scores.some(
+        (s) => s.playerId === playerId && s.holeNumber === currentRound.currentHoleNumber
+      );
+
       setHoleScore(playerId, currentRound.currentHoleNumber, relative);
 
-      // Auto-advance accordion to next unscored player
-      if (useAccordion) {
+      if (useAccordion && !wasAlreadyScored) {
         const currentIdx = currentRound.players.findIndex((p) => p.id === playerId);
         const nextUnscored = currentRound.players.find((p, i) => {
           if (i <= currentIdx) return false;
@@ -94,7 +126,8 @@ export default function ScoringScreen() {
   );
 
   if (!currentRound) {
-    router.replace('./');
+    // Defensive: bounce back to tab root if the round disappeared.
+    router.replace('/(tabs)/(score)');
     return null;
   }
 
@@ -105,23 +138,46 @@ export default function ScoringScreen() {
 
   const isLastHole = currentHole.number === currentRound.course.holes.length;
 
+  const allPlayersScoredThisHole = currentRound.players.every((p) =>
+    currentRound.scores.some(
+      (s) => s.playerId === p.id && s.holeNumber === currentHole.number
+    )
+  );
+
   function handleNext() {
+    if (!allPlayersScoredThisHole) return;
     if (isLastHole) {
       completeCurrentRound();
-      router.replace('./');
+      router.replace('/(tabs)/(score)');
     } else {
       goToNextHole();
-      // Reset accordion to first unscored on new hole
       if (useAccordion) {
         setExpandedPlayerId(currentRound!.players[0]?.id ?? null);
       }
     }
   }
 
+  function handleFinishFromMenu() {
+    // TODO confirm: "Finish with N holes unscored?" prompt for early finish
+    // (per design doc behavior reference).
+    completeCurrentRound();
+    router.replace('/(tabs)/(score)');
+  }
+
+  function handleAbandonFromMenu() {
+    // TODO confirm: destructive "Discard this round? Scores will be lost"
+    // prompt before discarding (per design doc).
+    abandonCurrentRound();
+    router.replace('/(tabs)/(score)');
+  }
+
+  function handleViewScorecard() {
+    router.push('/(tabs)/(score)/scorecard');
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Progress dots */}
         <View style={styles.dotsRow}>
           {currentRound.course.holes.map((hole) => {
             const allScored = currentRound.players.every((p) =>
@@ -143,19 +199,22 @@ export default function ScoringScreen() {
           })}
         </View>
 
-        {/* Centered hole info */}
-        <View style={styles.holeInfo}>
+        <View style={styles.holeHead}>
           <View style={styles.holeBadge}>
             <Text style={styles.holeBadgeText}>{currentHole.number}</Text>
           </View>
-          <Text style={styles.holeTitle}>Hole {currentHole.number}</Text>
-          <Text style={styles.holeMeta}>
-            Par {currentHole.par}
-            {currentHole.yardage ? ` · ${currentHole.yardage} yards` : ''}
-          </Text>
+          <View style={styles.holeHeadText}>
+            <Text style={styles.holeTitle}>
+              Hole {currentHole.number}
+              {isLastHole ? ' — Final' : ''}
+            </Text>
+            <Text style={styles.holeMeta}>
+              Par {currentHole.par}
+              {currentHole.yardage ? ` · ${currentHole.yardage} yards` : ''}
+            </Text>
+          </View>
         </View>
 
-        {/* Player cards */}
         {currentRound.players.map((player) => {
           const score = currentRound.scores.find(
             (s) => s.playerId === player.id && s.holeNumber === currentHole.number
@@ -165,7 +224,9 @@ export default function ScoringScreen() {
           const isExpanded = !useAccordion || expandedPlayerId === player.id;
 
           return (
-            <View key={player.id} style={[styles.playerCard, isExpanded && styles.playerCardExpanded]}>
+            <View
+              key={player.id}
+              style={[styles.playerCard, isExpanded && styles.playerCardExpanded]}>
               <Pressable
                 style={styles.playerHeader}
                 onPress={() => useAccordion && setExpandedPlayerId(player.id)}>
@@ -174,16 +235,15 @@ export default function ScoringScreen() {
                   <Text style={styles.playerAvatarText}>{player.name[0]}</Text>
                 </View>
                 <Text style={styles.playerName}>{player.name}</Text>
-                {score && (
-                  <View style={styles.scoredBadge}>
-                    <Text style={styles.scoredBadgeText}>{score.strokes} ✓</Text>
-                  </View>
-                )}
                 {totalStr ? (
                   <View style={styles.totalBadge}>
                     <Text style={styles.totalBadgeText}>{totalStr}</Text>
                   </View>
-                ) : null}
+                ) : (
+                  <View style={[styles.totalBadge, styles.totalBadgeEmpty]}>
+                    <Text style={styles.totalBadgeEmptyText}>—</Text>
+                  </View>
+                )}
                 {useAccordion && (
                   <Text style={styles.chevron}>{isExpanded ? '▼' : '▶'}</Text>
                 )}
@@ -203,32 +263,12 @@ export default function ScoringScreen() {
                             {formatScore(rel)}
                           </Text>
                         </View>
-                        <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
+                        {playerCount === 1 && (
+                          <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
+                        )}
                       </Pressable>
                     );
                   })}
-                  <Pressable
-                    onPress={() => handleScore(player.id, 3)}
-                    style={styles.chipWrapper}>
-                    <View
-                      style={[
-                        styles.chip,
-                        relativeScore !== null &&
-                          !SCORE_OPTIONS.includes(relativeScore) &&
-                          styles.chipSelected,
-                      ]}>
-                      <Text
-                        style={[
-                          styles.chipText,
-                          relativeScore !== null &&
-                            !SCORE_OPTIONS.includes(relativeScore) &&
-                            styles.chipTextSelected,
-                        ]}>
-                        ...
-                      </Text>
-                    </View>
-                    <Text style={styles.chipLabel}>Other</Text>
-                  </Pressable>
                 </View>
               )}
             </View>
@@ -236,24 +276,38 @@ export default function ScoringScreen() {
         })}
       </ScrollView>
 
-      {/* Navigation row */}
       <View style={styles.navRow}>
         <Pressable
           style={[styles.navBtn, currentHole.number === 1 && styles.navBtnDisabled]}
           onPress={goToPreviousHole}
           disabled={currentHole.number === 1}>
-          <Text style={[styles.navBtnText, currentHole.number === 1 && styles.navBtnTextDisabled]}>
+          <Text
+            style={[styles.navBtnText, currentHole.number === 1 && styles.navBtnTextDisabled]}>
             ← Back
           </Text>
         </Pressable>
         <Pressable
-          style={[styles.navBtn, styles.navBtnNext, isLastHole && styles.navBtnFinish]}
-          onPress={handleNext}>
+          style={[
+            styles.navBtn,
+            styles.navBtnNext,
+            isLastHole && styles.navBtnFinish,
+            !allPlayersScoredThisHole && styles.navBtnDisabled,
+          ]}
+          onPress={handleNext}
+          disabled={!allPlayersScoredThisHole}>
           <Text style={styles.navBtnNextText}>
-            {isLastHole ? 'Finish Round' : 'Next →'}
+            {isLastHole ? '🏁 Finish Round' : 'Next →'}
           </Text>
         </Pressable>
       </View>
+
+      <RoundActionsSheet
+        visible={actionsOpen}
+        onClose={() => setActionsOpen(false)}
+        onViewScorecard={handleViewScorecard}
+        onFinishRound={handleFinishFromMenu}
+        onAbandonRound={handleAbandonFromMenu}
+      />
     </View>
   );
 }
@@ -269,67 +323,59 @@ function makeStyles(
       backgroundColor: colors.background,
     },
     content: {
-      padding: 20,
-      paddingTop: 56,
+      padding: 16,
       paddingBottom: 100,
     },
     dotsRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'center',
-      gap: 5,
-      marginBottom: 20,
+      gap: 2,
+      marginBottom: 12,
     },
     dot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
+      flex: 1,
+      height: 3,
+      borderRadius: 2,
       backgroundColor: colors.border,
     },
-    dotScored: {
-      backgroundColor: colors.primary,
-    },
-    dotCurrent: {
-      backgroundColor: colors.accent,
-      width: 20,
-      height: 8,
-      borderRadius: 4,
-    },
-    holeInfo: {
+    dotScored: { backgroundColor: colors.primary },
+    dotCurrent: { backgroundColor: colors.accent },
+    holeHead: {
+      flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 24,
+      gap: 10,
+      marginBottom: 14,
     },
     holeBadge: {
-      width: 56,
-      height: 56,
-      borderRadius: 28,
-      backgroundColor: colors.primary,
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.accent,
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 8,
     },
     holeBadgeText: {
       color: '#ffffff',
-      fontSize: 26,
+      fontSize: 16,
       fontWeight: '800',
     },
+    holeHeadText: { flex: 1 },
     holeTitle: {
-      fontSize: 18,
+      fontSize: 15,
       fontWeight: '800',
       color: colors.textTitle,
     },
     holeMeta: {
-      fontSize: 14,
+      fontSize: 12,
       color: colors.textMuted,
-      marginTop: 3,
+      marginTop: 2,
     },
     playerCard: {
       backgroundColor: colors.cardBg,
-      borderRadius: 14,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
-      marginBottom: useAccordion ? 8 : 12,
-      padding: useAccordion ? 10 : 14,
+      marginBottom: useAccordion ? 6 : 10,
+      padding: useAccordion ? 10 : 12,
     },
     playerCardExpanded: {
       borderColor: colors.accent,
@@ -338,37 +384,25 @@ function makeStyles(
     playerHeader: {
       flexDirection: 'row',
       alignItems: 'center',
+      gap: 8,
     },
     playerAvatar: {
-      width: useAccordion ? 30 : 34,
-      height: useAccordion ? 30 : 34,
-      borderRadius: useAccordion ? 15 : 17,
+      width: 30,
+      height: 30,
+      borderRadius: 15,
       alignItems: 'center',
       justifyContent: 'center',
     },
     playerAvatarText: {
       color: '#ffffff',
-      fontSize: useAccordion ? 13 : 14,
+      fontSize: 13,
       fontWeight: '800',
     },
     playerName: {
       flex: 1,
-      fontSize: useAccordion ? 15 : 16,
+      fontSize: 14,
       fontWeight: '700',
       color: colors.textTitle,
-      marginLeft: 10,
-    },
-    scoredBadge: {
-      backgroundColor: colors.chipBg,
-      borderRadius: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      marginRight: 6,
-    },
-    scoredBadgeText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.primary,
     },
     totalBadge: {
       backgroundColor: colors.chipBg,
@@ -376,44 +410,45 @@ function makeStyles(
       paddingHorizontal: 8,
       paddingVertical: 3,
     },
+    totalBadgeEmpty: {
+      backgroundColor: colors.border,
+    },
     totalBadgeText: {
-      fontSize: 12,
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
+    totalBadgeEmptyText: {
+      fontSize: 11,
       fontWeight: '700',
       color: colors.textMuted,
     },
     chevron: {
-      fontSize: 12,
+      fontSize: 10,
       color: colors.textMuted,
-      marginLeft: 8,
+      marginLeft: 4,
     },
     chipsContainer: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      justifyContent: 'center',
-      gap: useAccordion ? 8 : 10,
-      marginTop: 14,
+      gap: 6,
+      marginTop: 10,
     },
     chipWrapper: {
-      alignItems: 'center',
+      flex: 1,
+      alignItems: 'stretch',
     },
     chip: {
-      width: chipSize,
       height: chipSize,
-      borderRadius: chipSize / 2,
+      borderRadius: chipSize > 50 ? 14 : 10,
       backgroundColor: colors.chipBg,
       alignItems: 'center',
       justifyContent: 'center',
     },
     chipSelected: {
-      backgroundColor: colors.chipSelectedBg,
-      shadowColor: colors.chipSelectedBg,
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.3,
-      shadowRadius: 6,
-      elevation: 3,
+      backgroundColor: colors.accent,
     },
     chipText: {
-      fontSize: chipSize > 50 ? 18 : 15,
+      fontSize: chipSize > 50 ? 18 : 14,
       fontWeight: '800',
       color: colors.chipText,
     },
@@ -421,9 +456,11 @@ function makeStyles(
       color: colors.chipSelectedText,
     },
     chipLabel: {
-      fontSize: 10,
+      fontSize: 9,
       color: colors.textMuted,
-      marginTop: 3,
+      marginTop: 4,
+      textAlign: 'center',
+      fontWeight: '600',
     },
     navRow: {
       position: 'absolute',
@@ -431,39 +468,36 @@ function makeStyles(
       left: 0,
       right: 0,
       flexDirection: 'row',
-      gap: 12,
+      gap: 8,
       backgroundColor: colors.background,
-      padding: 20,
-      paddingBottom: 34,
+      padding: 14,
+      paddingBottom: 24,
       borderTopWidth: 1,
       borderTopColor: colors.border,
     },
     navBtn: {
       flex: 1,
       alignItems: 'center',
-      borderRadius: 20,
+      borderRadius: 16,
       backgroundColor: colors.chipBg,
-      paddingVertical: 14,
+      paddingVertical: 12,
     },
-    navBtnDisabled: {
-      opacity: 0.35,
-    },
+    navBtnDisabled: { opacity: 0.4 },
     navBtnText: {
-      fontSize: 15,
+      fontSize: 13,
       fontWeight: '700',
       color: colors.textMuted,
     },
-    navBtnTextDisabled: {
-      color: colors.border,
-    },
+    navBtnTextDisabled: { color: colors.textMuted },
     navBtnNext: {
       backgroundColor: colors.primary,
     },
     navBtnFinish: {
       backgroundColor: colors.accent,
+      flex: 2,
     },
     navBtnNextText: {
-      fontSize: 16,
+      fontSize: 14,
       fontWeight: '800',
       color: '#ffffff',
     },

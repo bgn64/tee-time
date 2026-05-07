@@ -18,6 +18,7 @@ type GolfRoundContextValue = {
   goToPreviousHole: () => void;
   goToNextHole: () => void;
   completeCurrentRound: () => void;
+  abandonCurrentRound: () => void;
 };
 
 const GolfRoundContext = createContext<GolfRoundContextValue | undefined>(undefined);
@@ -143,6 +144,10 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           setCompletedRounds((rounds) => [completedRound, ...rounds]);
           return null;
         });
+      },
+      abandonCurrentRound: () => {
+        // Discards the in-flight round entirely; nothing is persisted to history.
+        setCurrentRound(null);
       },
     }),
     [completedRounds, courses, currentRound]

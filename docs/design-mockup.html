@@ -1,1137 +1,1194 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tee Time – UI Design Reference</title>
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: #1a1a1a;
-      padding: 40px 20px;
-      color: #fff;
-    }
-    h1 { text-align: center; font-size: 28px; margin-bottom: 8px; }
-    .subtitle { text-align: center; color: #999; margin-bottom: 48px; font-size: 15px; line-height: 1.5; max-width: 700px; margin-left: auto; margin-right: auto; }
-    .flow-section { max-width: 1600px; margin: 0 auto 80px; }
-    .flow-section h2 { font-size: 20px; margin-bottom: 6px; color: #fff; }
-    .flow-section p.desc { color: #aaa; margin-bottom: 24px; line-height: 1.5; max-width: 700px; font-size: 14px; }
-    .flow-arrow { color: #555; font-size: 32px; display: flex; align-items: center; justify-content: center; padding: 0 8px; align-self: center; }
-    .phone-row { display: flex; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
-    .phone-col { display: flex; flex-direction: column; align-items: center; }
-    .phone-frame {
-      width: 375px;
-      min-height: 720px;
-      border-radius: 40px;
-      overflow: hidden;
-      box-shadow: 0 12px 48px rgba(0,0,0,0.4);
-      position: relative;
-      flex-shrink: 0;
-    }
-    .phone-label {
-      text-align: center;
-      margin-top: 12px;
-      font-size: 12px;
-      color: #777;
-      font-weight: 600;
-      max-width: 375px;
-      line-height: 1.4;
-    }
-    .step-badge {
-      display: inline-block;
-      background: #333;
-      color: #ccc;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 4px 12px;
-      border-radius: 6px;
-      margin-bottom: 10px;
-      letter-spacing: 0.5px;
-    }
-    .step-badge.active { background: #ff8f00; color: #fff; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tee Time – UI Design Reference</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         background: #1a1a1a; color: #fff; padding: 32px 20px; }
+  h1 { text-align: center; font-size: 28px; margin-bottom: 6px; }
+  .sub { text-align: center; color: #999; margin-bottom: 28px; font-size: 14px; max-width: 760px; margin-left:auto; margin-right:auto; line-height:1.55; }
+  .callout {
+    max-width: 760px; margin: 0 auto 36px; padding: 14px 18px;
+    background: #2a2a2a; border-left: 3px solid #ff8f00; border-radius: 6px;
+    font-size: 13px; color: #ccc; line-height: 1.55;
+  }
+  .callout b { color: #ff8f00; }
+  .callout.todo { border-left-color: #fbbf24; }
+  .callout.todo b { color: #fbbf24; }
+  h2 { font-size: 20px; color: #ff8f00; margin: 40px 0 6px; max-width: 1400px; margin-left:auto; margin-right:auto; }
+  h3 { font-size: 16px; color: #fff; margin: 18px 0 6px; max-width: 1400px; margin-left:auto; margin-right:auto; }
+  .section-desc { font-size: 13px; color: #aaa; margin-bottom: 18px; max-width: 1400px; margin-left:auto; margin-right:auto; line-height:1.55; }
+  .row { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap; align-items: flex-start; max-width: 1400px; margin: 0 auto; }
+  .col { display: flex; flex-direction: column; align-items: center; }
+  .label { font-size: 11px; color: #777; margin-top: 10px; text-align: center; max-width: 280px; line-height: 1.4; font-weight: 600; }
+  .arrow { font-size: 28px; color: #555; align-self: center; padding-top: 260px; }
 
-    /* ===== Design B tokens ===== */
-    :root {
-      --bg: #fefcf8;
-      --green: #7cb342;
-      --green-dark: #558b2f;
-      --orange: #ff8f00;
-      --brown: #7c6b4f;
-      --tan: #f5f0e8;
-      --text: #2d2d2d;
-      --text-title: #2d5016;
-    }
-    .phone-frame { background: var(--bg); }
-    .screen { padding: 52px 22px 28px; min-height: 720px; color: var(--text); }
+  /* ===== Phone tokens (default theme: Earthy Green) ===== */
+  :root { --bg:#fefcf8; --green:#7cb342; --green-dark:#558b2f; --orange:#ff8f00;
+          --brown:#7c6b4f; --tan:#f5f0e8; --text:#2d2d2d; --text-title:#2d5016; }
+  .phone {
+    width: 280px; height: 580px; background: var(--bg);
+    border-radius: 32px; overflow: hidden; position: relative;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4); color: var(--text);
+    display: flex; flex-direction: column;
+  }
 
-    /* Typography */
-    .greeting { font-size: 15px; color: var(--brown); margin-bottom: 4px; font-weight: 500; }
-    .title { font-size: 24px; font-weight: 800; color: var(--text-title); margin-bottom: 16px; }
-    .section-label { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #aaa; font-weight: 700; margin-bottom: 10px; margin-top: 20px; }
+  /* Persistent header banner */
+  .header {
+    height: 52px; background: #fff; border-bottom: 1px solid #eee;
+    display: flex; align-items: center; padding: 0 14px; flex-shrink: 0;
+    position: relative;
+  }
+  .header .left-slot {
+    font-size: 12px; color: var(--brown); font-weight: 700; letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 2px;
+  }
+  .header .left-slot.back { color: var(--green-dark); cursor: pointer; letter-spacing: 0; font-size: 13px; }
+  .header .left-slot.back .chev { font-size: 18px; line-height: 1; margin-right: 2px; }
+  .header .logo {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-size: 15px; font-weight: 800; color: var(--text-title); letter-spacing: 0.5px;
+  }
+  .header .right { margin-left: auto; width: 24px; height: 24px; border-radius: 50%; background: #eee;
+                   display:flex; align-items:center; justify-content:center; }
+  .header .right.menu { background: transparent; font-size: 22px; color: var(--brown); letter-spacing: -1px; font-weight: 800; }
 
-    /* Buttons */
-    .btn-primary {
-      display: block; width: 100%; padding: 16px;
-      background: linear-gradient(135deg, var(--green), var(--green-dark));
-      color: #fff; border: none; border-radius: 24px;
-      font-size: 16px; font-weight: 800; text-align: center;
-      margin-top: 20px; box-shadow: 0 4px 12px rgba(124,179,66,0.3);
-    }
-    .btn-add-course {
-      display: block; width: 100%; padding: 14px;
-      background: var(--tan); color: var(--brown); border: none;
-      border-radius: 16px; font-size: 14px; font-weight: 700; text-align: center; margin-top: 12px;
-    }
+  .body { flex: 1; padding: 14px; overflow: hidden; position: relative; }
+  .title { font-size: 17px; font-weight: 800; color: var(--text-title); margin-bottom: 10px; margin-top: 4px; }
+  .section-label { font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: #aaa; font-weight: 700; margin: 12px 0 6px; }
 
-    /* Course cards */
-    .course-card {
-      background: #fff; border-radius: 20px; padding: 18px;
-      margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-      border-left: 4px solid var(--green);
-    }
-    .course-card.selected { border-left-color: var(--orange); background: #fffbf0; }
-    .course-name { font-size: 16px; font-weight: 700; color: var(--text); }
-    .course-meta { font-size: 13px; color: #8a8a6d; margin-top: 3px; }
+  .card {
+    background: #fff; border-radius: 12px; padding: 10px 12px;
+    margin-bottom: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    border-left: 3px solid var(--green); font-size: 12px;
+  }
+  .card.sel { border-left-color: var(--orange); background: #fffbf0; }
+  .card-name { font-weight: 700; font-size: 12.5px; }
+  .card-meta { color: #888; font-size: 10.5px; margin-top: 2px; }
 
-    /* Player rows */
-    .player-row {
-      display: flex; align-items: center; gap: 12px;
-      background: #fff; border-radius: 14px; padding: 13px 16px;
-      margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-    }
-    .player-avatar {
-      width: 36px; height: 36px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 14px; font-weight: 800; color: #fff; flex-shrink: 0;
-    }
-    .player-info { flex: 1; }
-    .player-name { font-size: 15px; font-weight: 700; color: var(--text); }
-    .player-tag { font-size: 12px; color: #aaa; margin-top: 1px; }
-    .player-action { font-size: 18px; font-weight: 700; cursor: pointer; }
+  .player-row {
+    display:flex; align-items:center; gap:10px;
+    background:#fff; border-radius:10px; padding:8px 10px;
+    margin-bottom:5px; box-shadow:0 1px 4px rgba(0,0,0,0.04);
+  }
+  .avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center;
+            justify-content:center; font-size:11px; font-weight:800; color:#fff; flex-shrink:0; }
+  .p-info { flex:1; }
+  .p-name { font-size: 12px; font-weight: 700; }
+  .p-tag { font-size: 10px; color: #aaa; margin-top: 1px; }
+  .p-action { font-size: 14px; font-weight: 700; }
 
-    /* Add player dashed button */
-    .add-player-btn {
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      padding: 13px; border: 2px dashed #ddd; border-radius: 14px;
-      color: var(--brown); font-size: 14px; font-weight: 700; margin-bottom: 8px;
-    }
+  .add-btn {
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    padding:9px; border:2px dashed #ddd; border-radius:10px;
+    color:var(--brown); font-size:11px; font-weight:700; margin-bottom:5px;
+  }
 
-    /* Bottom sheet */
-    .bottom-sheet-overlay {
-      position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0,0,0,0.3); display: flex; align-items: flex-end;
-    }
-    .bottom-sheet {
-      background: var(--bg); border-radius: 24px 24px 0 0;
-      padding: 20px 22px 32px; width: 100%;
-    }
-    .sheet-handle { width: 36px; height: 4px; background: #ddd; border-radius: 2px; margin: 0 auto 16px; }
-    .search-bar {
-      display: flex; align-items: center; gap: 10px;
-      background: #fff; border-radius: 14px; padding: 12px 16px;
-      border: 1.5px solid #e8e4dc; margin-bottom: 12px;
-    }
-    .search-icon { font-size: 16px; color: #ccc; }
-    .search-text { flex: 1; font-size: 15px; color: #333; }
-    .create-new-row {
-      display: flex; align-items: center; gap: 12px;
-      background: #fff; border-radius: 14px; padding: 13px 16px;
-      margin-top: 8px; border: 1.5px dashed var(--green);
-    }
-    .create-icon {
-      width: 36px; height: 36px; border-radius: 50%; background: #e8f5e9;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 18px; color: var(--green); font-weight: 800;
-    }
+  .btn {
+    display:block; width:100%; padding:11px; border-radius:18px; text-align:center;
+    background: linear-gradient(135deg, var(--green), var(--green-dark));
+    color: #fff; font-weight: 800; font-size: 13px; margin-top: 12px;
+  }
+  .btn-sec {
+    display:block; width:100%; padding:9px; border-radius:14px; text-align:center;
+    background: var(--tan); color: var(--brown); font-weight: 700; font-size: 11.5px; margin-top: 8px;
+  }
 
-    /* Scoring - hole */
-    .hole-progress { display: flex; gap: 4px; margin-bottom: 16px; flex-wrap: wrap; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: #e0ddd4; }
-    .dot.scored { background: var(--green); }
-    .dot.current { background: var(--orange); width: 20px; border-radius: 4px; }
-    .hole-badge-sm {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 48px; height: 48px; border-radius: 50%;
-      background: linear-gradient(135deg, var(--green), var(--green-dark));
-      color: #fff; font-size: 22px; font-weight: 800;
-    }
-    .hole-detail { font-size: 13px; color: var(--brown); margin-top: 4px; }
+  /* Scoring */
+  .hole-progress { display:flex; gap:2px; margin-bottom:10px; }
+  .dot { flex:1; height:3px; background:#e0e0e0; border-radius:2px; }
+  .dot.current { background: var(--orange); }
+  .dot.done { background: var(--green); }
+  .hole-head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+  .hole-badge { width:32px; height:32px; border-radius:50%; background:var(--orange); color:#fff;
+                display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; }
+  .hole-title { font-size:13px; font-weight:800; color:var(--text-title); }
+  .hole-sub { font-size:10.5px; color:var(--brown); }
 
-    /* Scoring - accordion */
-    .accordion-player {
-      background: #fff; border-radius: 14px; padding: 14px 16px;
-      margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-    }
-    .accordion-header { display: flex; align-items: center; gap: 10px; }
-    .accordion-avatar {
-      width: 30px; height: 30px; border-radius: 50%;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 800; color: #fff; flex-shrink: 0;
-    }
-    .accordion-name { flex: 1; font-size: 14px; font-weight: 700; color: var(--text); }
-    .accordion-score-badge {
-      font-size: 12px; font-weight: 800; padding: 4px 10px; border-radius: 8px;
-    }
-    .accordion-score-badge.scored { color: var(--green); background: #e8f5e9; }
-    .accordion-score-badge.empty { color: #bbb; background: #f5f5f5; }
-    .accordion-score-badge.overall { color: var(--brown); background: var(--tan); font-size: 11px; }
-    .accordion-chevron { font-size: 12px; color: #ccc; margin-left: 4px; }
-    .accordion-body { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f0ece4; }
-    .accordion-chips { display: flex; gap: 8px; flex-wrap: wrap; }
-    .acc-chip {
-      width: 46px; height: 46px; border-radius: 50%; background: var(--tan);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 15px; font-weight: 800; color: #555;
-    }
-    .acc-chip.active { background: var(--orange); color: #fff; box-shadow: 0 2px 6px rgba(255,143,0,0.3); }
-    .chip-label { font-size: 9px; color: #aaa; text-align: center; margin-top: 2px; }
+  .acc {
+    background:#fff; border-radius:10px; margin-bottom:5px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.04); overflow:hidden;
+  }
+  .acc.expanded { border: 1.5px solid var(--orange); }
+  .acc-header { display:flex; align-items:center; gap:8px; padding:8px 10px; }
+  .acc-name { flex:1; font-size:12px; font-weight:700; }
+  .acc-score { font-size:10.5px; padding:2px 7px; border-radius:8px; background:#f5f0e8; color:var(--brown); font-weight:700; }
+  .acc-score.empty { background:#f5f5f5; color:#bbb; }
+  .acc-score.under { background: #e8f5e9; color: var(--green-dark); }
+  .acc-score.over { background: #fff3e0; color: var(--orange); }
+  .acc-chev { font-size:10px; color:#bbb; }
+  .acc-body { padding: 4px 10px 10px; }
+  .chips { display:flex; gap:4px; }
+  .chip { flex:1; padding:7px 0; text-align:center; background:#f5f0e8; border-radius:8px;
+          font-size:11px; font-weight:700; color:var(--brown); }
+  .chip.active { background: var(--orange); color: #fff; }
 
-    /* Nav */
-    .nav-row { display: flex; justify-content: space-between; margin-top: 24px; gap: 12px; }
-    .nav-btn {
-      flex: 1; padding: 14px; border-radius: 20px; background: var(--tan);
-      text-align: center; font-weight: 700; font-size: 15px; color: var(--brown); border: none;
-    }
-    .nav-btn.next { background: linear-gradient(135deg, var(--green), var(--green-dark)); color: #fff; }
+  /* Larger chips for 1-2 player layout */
+  .chips-lg { display:flex; gap:8px; justify-content:space-between; }
+  .chip-lg { flex:1; padding: 10px 0; text-align: center; background:#f5f0e8; border-radius: 12px;
+             font-size: 14px; font-weight: 800; color:#555; }
+  .chip-lg.active { background: var(--orange); color: #fff; }
+  .chip-lg-label { font-size: 9px; color:#aaa; text-align:center; margin-top: 3px; font-weight: 600; }
 
-    /* Back row */
-    .back-row { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; }
-    .back-arrow { font-size: 18px; color: var(--green); font-weight: 700; }
-    .back-text { font-size: 14px; color: var(--green); font-weight: 600; }
+  .nav-row { display:flex; gap:8px; margin-top:10px; }
+  .nav-btn { flex:1; padding:10px; text-align:center; border-radius:14px;
+             background:#f5f0e8; color:var(--brown); font-size:12px; font-weight:700; }
+  .nav-btn.next { background: linear-gradient(135deg, var(--green), var(--green-dark)); color:#fff; }
+  .nav-btn.finish { background: linear-gradient(135deg, var(--orange), #f57c00); color:#fff;
+                    box-shadow: 0 4px 12px rgba(255,143,0,0.35); flex: 2; }
 
-    /* New course form */
-    .form-field { margin-top: 16px; }
-    .form-label { font-size: 13px; font-weight: 700; color: #555; margin-bottom: 6px; }
-    .form-input {
-      width: 100%; padding: 12px 14px; border: 1.5px solid #e8e4dc;
-      border-radius: 12px; font-size: 15px; background: #fff; color: #333;
-    }
-    .par-grid { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
-    .par-cell { text-align: center; }
-    .par-cell-label { font-size: 10px; color: #aaa; font-weight: 700; margin-bottom: 3px; }
-    .par-cell-input {
-      width: 40px; height: 36px; border-radius: 8px; border: 1.5px solid #e8e4dc;
-      text-align: center; font-size: 14px; font-weight: 700; background: #fff;
-    }
+  /* Tab bar */
+  .tabbar {
+    height: 56px; background: #fff; border-top: 1px solid #eee;
+    display: flex; flex-shrink: 0;
+  }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 2px; font-size: 9.5px; color: #aaa; font-weight: 700; }
+  .tab .icon { font-size: 17px; }
+  .tab.active { color: var(--orange); }
 
-    /* Divider */
-    .section-divider { height: 1px; background: #eee; margin: 16px 0; }
-  </style>
+  .stub { display:flex; align-items:center; justify-content:center;
+          height: 100%; color: #bbb; font-size: 13px; font-style: italic; padding: 20px; text-align:center; }
+
+  /* Bottom sheet */
+  .scrim { position:absolute; inset:0; background: rgba(0,0,0,0.45); z-index:5; }
+  .sheet {
+    position:absolute; left:0; right:0; bottom:0; background: var(--bg);
+    border-radius: 20px 20px 0 0; padding: 14px; z-index:6;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.2);
+  }
+  .sheet-handle { width:40px; height:4px; background:#ddd; border-radius:2px; margin: 0 auto 12px; }
+  .sheet-title { font-size: 14px; font-weight: 800; color: var(--text-title); margin-bottom: 8px; }
+  .search {
+    background:#fff; border-radius:12px; padding:9px 12px; font-size:12px;
+    color:#aaa; margin-bottom: 10px; border:1px solid #eee;
+  }
+
+  /* Action sheet items */
+  .action-sheet-item {
+    padding: 14px 12px; font-size: 14px; font-weight: 700;
+    color: var(--text); text-align: center; border-bottom: 1px solid #f0ece4;
+  }
+  .action-sheet-item:last-child { border-bottom: none; }
+  .action-sheet-item.danger { color: #d32f2f; }
+  .action-sheet-cancel {
+    margin-top: 8px; background: #fff; border-radius: 14px; padding: 14px;
+    text-align: center; font-size: 14px; font-weight: 800; color: var(--text);
+  }
+
+  /* Behavior reference table */
+  .ref-table-wrap { max-width: 1100px; margin: 0 auto 28px; }
+  .ref-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+    background: #232323; border-radius: 10px; overflow: hidden;
+  }
+  .ref-table th, .ref-table td {
+    padding: 10px 12px; text-align: left; border-bottom: 1px solid #333; vertical-align: top;
+  }
+  .ref-table th { background: #2d2d2d; color: #ff8f00; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+  .ref-table td { color: #ddd; line-height: 1.55; }
+  .ref-table td.elem { color: #fff; font-weight: 700; white-space: nowrap; }
+  .ref-table td code { background: #1a1a1a; padding: 1px 6px; border-radius: 4px; font-size: 12px; color: #a3e635; }
+  .ref-table tr:last-child td { border-bottom: none; }
+  .ref-section-row td { background: #1f1f1f !important; color: #ff8f00 !important; font-weight: 800; font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; }
+
+  /* Idea cards (empty states) */
+  .idea-grid { max-width: 1100px; margin: 0 auto 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+  .idea-card { background: #2a2a2a; border-radius: 12px; padding: 16px 18px; }
+  .idea-card h4 { font-size: 14px; margin-bottom: 6px; color: #fbbf24; }
+  .idea-card p { font-size: 12.5px; color: #bbb; line-height: 1.55; }
+
+  /* Color themes */
+  .theme-grid { max-width: 1100px; margin: 0 auto 20px; display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .theme-card { border-radius: 14px; padding: 16px; width: 180px; text-align: center; }
+  .theme-swatches { display: flex; gap: 6px; justify-content: center; margin-bottom: 10px; }
+  .theme-swatch { width: 22px; height: 22px; border-radius: 50%; }
+  .theme-name { font-size: 13px; font-weight: 700; }
+  .theme-tag { font-size: 11px; margin-top: 2px; }
+
+  .token-table-wrap { max-width: 1100px; margin: 0 auto 28px; background: #2a2a2a; border-radius: 12px; padding: 18px; }
+  .token-table { width: 100%; border-collapse: collapse; font-family: monospace; font-size: 12px; color: #ccc; }
+  .token-table th, .token-table td { padding: 6px 8px; text-align: left; border-bottom: 1px solid #333; }
+  .token-table th { color: #fff; }
+
+  /* Nav map */
+  .nav-map {
+    max-width: 800px; margin: 0 auto 28px;
+    background: #232323; border-radius: 12px; padding: 22px;
+    font-family: monospace; font-size: 13px; line-height: 1.85; color: #ccc;
+  }
+  .nav-map .tab-h { color: #7cb342; font-weight: 700; }
+  .nav-map .screen-h { color: #ff8f00; }
+  .nav-map .sheet-h { color: #42a5f5; }
+  .nav-map .note { color: #888; font-style: italic; }
+</style>
 </head>
 <body>
 
 <h1>Tee Time – UI Design Reference</h1>
-<p class="subtitle">The full user journey: Home → Course Selection → Player Config → Scoring. Includes sub-flows for creating courses and adding players.</p>
+<p class="sub">The full app: three persistent tabs (Home, Score, You) with a fixed header banner and bottom tab bar. The Score tab owns the round flow — course selection → player setup → scoring — and locks the round once it begins.</p>
 
-<!-- ==================== FLOW 1: HOME → ROUND SETUP ==================== -->
-<div class="flow-section">
-  <h2>Flow 1: Starting a Round</h2>
-  <p class="desc">Home screen (no active round) → Select course → Configure players → Begin scoring</p>
+<div class="callout">
+  <b>Design principles.</b><br>
+  &bull; <b>Compartmentalized navigation.</b> Header banner and tab bar are always visible. No flow takes over the entire screen.<br>
+  &bull; <b>Locked round (Model B).</b> Once <i>Start Round</i> is tapped, the course and player roster are frozen for that round's lifetime. Scoring becomes the Score tab's effective root and has no back navigation. Round-level actions (Finish / Abandon / Scorecard) live in the header's <b>⋯</b> overflow menu.<br>
+  &bull; <b>Tab-switch state preservation.</b> Switching to Home or You mid-round preserves all state — including in-progress score entries. Returning to Score lands the user on the exact screen they left.<br>
+  &bull; <b>Future flexibility is additive.</b> The locked model is a deliberate v1 choice. Mutations (e.g., add player mid-round, change course) can be layered on later as discrete features without restructuring the data model.<br>
+  &bull; <b>Player count constraints (v1).</b> Min 1 (You is always included and non-removable), max 4. Once 4 players are present, the <i>+ Add Player</i> button and Quick-add <i>+</i> icons are disabled; the Add Player sheet hides its add affordances. Duplicate adds are prevented.<br>
+  &bull; <b>Modal sheets are exceptions to persistent chrome.</b> The Add Player sheet and the round-actions sheet are modal: while open, the tab bar is visually present but non-interactive (taps on it are absorbed by the scrim). Dismissing the sheet restores tab interactivity. This keeps modal commits atomic.
+</div>
 
-  <div class="phone-row">
-    <!-- Screen 1: Home -->
-    <div class="phone-col">
-      <div class="step-badge active">SCREEN 1</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div class="greeting">Good morning ☀️</div>
-          <div class="title">Let's hit the course</div>
+<!-- ============================== TABS ============================== -->
+<h2>Tabs at a glance</h2>
+<p class="section-desc">Three tabs. <b>Home</b> is the default landing tab. The header's left slot shows the active tab name on a tab's root screen, or a back button on sub-screens (see Score flow below). The "tee time" logo is centered. The header's right slot holds the profile dot by default; on the Scoring screen it becomes the <b>⋯</b> overflow menu.</p>
+<div class="row">
 
-          <div class="course-card selected">
-            <div class="course-name">Pine Ridge Golf Club</div>
-            <div class="course-meta">Seattle, WA · 18 holes · Par 72</div>
-          </div>
-          <div class="course-card">
-            <div class="course-name">Cedar Hills</div>
-            <div class="course-meta">Bellevue, WA · 18 holes · Par 72</div>
-          </div>
-          <div class="course-card">
-            <div class="course-name">Harbor Links</div>
-            <div class="course-meta">Tacoma, WA · 18 holes · Par 72</div>
-          </div>
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">HOME</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body"><div class="stub">TODO — fill in Home</div></div>
+      <div class="tabbar">
+        <div class="tab active"><div class="icon">🏠</div>Home</div>
+        <div class="tab"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Home (default landing tab — content TBD)</div>
+  </div>
 
-          <div class="btn-add-course">+ Create New Course</div>
-          <div class="btn-primary">Next →</div>
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Let's hit the course</div>
+        <div class="card sel">
+          <div class="card-name">Pine Ridge Golf Club</div>
+          <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+        </div>
+        <div class="card">
+          <div class="card-name">Cedar Hills</div>
+          <div class="card-meta">Bellevue, WA · 18 holes · Par 72</div>
+        </div>
+        <div class="card">
+          <div class="card-name">Harbor Links</div>
+          <div class="card-meta">Tacoma, WA · 18 holes · Par 72</div>
+        </div>
+        <div class="btn-sec">+ Create New Course</div>
+        <div class="btn">Next →</div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Score (entry — course selection, no active round)</div>
+  </div>
+
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">YOU</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body"><div class="stub">TODO — fill in You</div></div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab"><div class="icon">⛳</div>Score</div>
+        <div class="tab active"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">You (profile / stats — content TBD)</div>
+  </div>
+
+</div>
+
+<!-- ============================== SCORE FLOW ============================== -->
+<h2>Score — full flow</h2>
+<p class="section-desc">Setup screens (Course, Players) use back buttons in the header's left slot — the green screen title sits at the same y-position throughout, no sinking. Once <b>Start Round</b> is tapped, scoring becomes the tab's root: no back button, the round is locked, and the right slot becomes the <b>⋯</b> overflow menu. Tab switches preserve all state.</p>
+
+<div class="row">
+
+  <!-- 1. Course selection -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Let's hit the course</div>
+        <div class="card sel">
+          <div class="card-name">Pine Ridge Golf Club</div>
+          <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+        </div>
+        <div class="card">
+          <div class="card-name">Cedar Hills</div>
+          <div class="card-meta">Bellevue, WA · 18 holes · Par 72</div>
+        </div>
+        <div class="card">
+          <div class="card-name">Harbor Links</div>
+          <div class="card-meta">Tacoma, WA · 18 holes · Par 72</div>
+        </div>
+        <div class="btn-sec">+ Create New Course</div>
+        <div class="btn">Next →</div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">1. Course selection (tab root — left slot = "SCORE")</div>
+  </div>
+
+  <div class="arrow">→</div>
+
+  <!-- 2. Player config -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot back"><span class="chev">‹</span> Course</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Who's playing?</div>
+
+        <div class="section-label">In this round</div>
+        <div class="player-row">
+          <div class="avatar" style="background:#7cb342;">Y</div>
+          <div class="p-info"><div class="p-name">You</div><div class="p-tag">Always included</div></div>
+        </div>
+        <div class="player-row">
+          <div class="avatar" style="background:#42a5f5;">M</div>
+          <div class="p-info"><div class="p-name">Mike</div></div>
+          <div class="p-action" style="color:#ccc;">×</div>
+        </div>
+        <div class="add-btn">+ Add Player</div>
+
+        <div class="section-label">Quick add</div>
+        <div class="player-row">
+          <div class="avatar" style="background:#ab47bc;">S</div>
+          <div class="p-info"><div class="p-name">Sarah</div><div class="p-tag">2 days ago</div></div>
+          <div class="p-action" style="color:var(--green);">+</div>
+        </div>
+
+        <div class="btn">⛳ Start Round</div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">2. Player config (sub-screen — back to Course; title stays at top)</div>
+  </div>
+
+  <div class="arrow">→</div>
+
+  <!-- 2b. Add player bottom sheet -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot back"><span class="chev">‹</span> Course</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body" style="filter:brightness(0.7);">
+        <div class="title">Who's playing?</div>
+        <div class="player-row">
+          <div class="avatar" style="background:#7cb342;">Y</div>
+          <div class="p-info"><div class="p-name">You</div></div>
         </div>
       </div>
-      <div class="phone-label">Home / Course Selection<br>Select a course, then tap Next to configure players</div>
-    </div>
-
-    <div class="flow-arrow">→</div>
-
-    <!-- Screen 2: Player Config -->
-    <div class="phone-col">
-      <div class="step-badge active">SCREEN 2</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div class="back-row">
-            <div class="back-arrow">‹</div>
-            <div class="back-text">Course</div>
-          </div>
-          <div style="font-size:13px; color:var(--brown); margin-bottom:4px;">Pine Ridge Golf Club</div>
-          <div class="title">Who's playing?</div>
-
-          <div class="section-label">In this round</div>
-          <div class="player-row">
-            <div class="player-avatar" style="background:#7cb342;">Y</div>
-            <div class="player-info">
-              <div class="player-name">You</div>
-              <div class="player-tag">Always included</div>
-            </div>
-          </div>
-          <div class="player-row">
-            <div class="player-avatar" style="background:#42a5f5;">M</div>
-            <div class="player-info">
-              <div class="player-name">Mike</div>
-            </div>
-            <div class="player-action" style="color:#ccc;">×</div>
-          </div>
-          <div class="add-player-btn">+ Add Player</div>
-
-          <div class="section-label">Quick add from recents</div>
-          <div class="player-row">
-            <div class="player-avatar" style="background:#ab47bc;">S</div>
-            <div class="player-info">
-              <div class="player-name">Sarah</div>
-              <div class="player-tag">Last played 2 days ago</div>
-            </div>
-            <div class="player-action" style="color:var(--green);">+</div>
-          </div>
-          <div class="player-row">
-            <div class="player-avatar" style="background:#ff8f00;">D</div>
-            <div class="player-info">
-              <div class="player-name">Dave</div>
-              <div class="player-tag">Last played 5 days ago</div>
-            </div>
-            <div class="player-action" style="color:var(--green);">+</div>
-          </div>
-
-          <div class="btn-primary" style="margin-top:28px;">⛳ Start Round</div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <div class="sheet-handle"></div>
+        <div class="sheet-title">Add player</div>
+        <div class="search">🔍  Search by name…</div>
+        <div class="player-row">
+          <div class="avatar" style="background:#ab47bc;">S</div>
+          <div class="p-info"><div class="p-name">Sarah</div><div class="p-tag">2 days ago</div></div>
+          <div class="p-action" style="color:var(--green);">+</div>
         </div>
+        <div class="player-row">
+          <div class="avatar" style="background:#ff8f00;">D</div>
+          <div class="p-info"><div class="p-name">Dave</div><div class="p-tag">5 days ago</div></div>
+          <div class="p-action" style="color:var(--green);">+</div>
+        </div>
+        <div class="btn-sec">+ Create new player</div>
       </div>
-      <div class="phone-label">Player Configuration<br>"+ Add Player" opens bottom sheet. Recents are one-tap shortcuts.</div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
     </div>
+    <div class="label">2b. Add player (bottom sheet over player config)</div>
+  </div>
 
-    <div class="flow-arrow">→</div>
+  <div class="arrow">→</div>
 
-    <!-- Screen 3: Scoring -->
-    <div class="phone-col">
-      <div class="step-badge active">SCREEN 3</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div class="hole-progress">
-            <div class="dot current"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-          </div>
+  <!-- 3. Scoring - hole 1 -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right menu">⋯</div>
+      </div>
+      <div class="body">
+        <div class="hole-progress">
+          <div class="dot current"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
 
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
-            <div class="hole-badge-sm">1</div>
-            <div>
-              <div style="font-size:16px; font-weight:800; color:var(--text-title);">Hole 1</div>
-              <div class="hole-detail">Par 4 · 390 yards</div>
-            </div>
-          </div>
-
-          <!-- Expanded player -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#7cb342;">Y</div>
-              <div class="accordion-name">You</div>
-              <div class="accordion-score-badge overall">E thru 0</div>
-              <div class="accordion-chevron">▼</div>
-            </div>
-            <div class="accordion-body">
-              <div class="accordion-chips">
-                <div><div class="acc-chip">-2</div><div class="chip-label">Eagle</div></div>
-                <div><div class="acc-chip">-1</div><div class="chip-label">Birdie</div></div>
-                <div><div class="acc-chip active">E</div><div class="chip-label">Par</div></div>
-                <div><div class="acc-chip">+1</div><div class="chip-label">Bogey</div></div>
-                <div><div class="acc-chip">+2</div><div class="chip-label">Dbl</div></div>
-                <div><div class="acc-chip">…</div><div class="chip-label">Other</div></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Collapsed players -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#42a5f5;">M</div>
-              <div class="accordion-name">Mike</div>
-              <div class="accordion-score-badge empty">—</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#ab47bc;">S</div>
-              <div class="accordion-name">Sarah</div>
-              <div class="accordion-score-badge empty">—</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#ff8f00;">D</div>
-              <div class="accordion-name">Dave</div>
-              <div class="accordion-score-badge empty">—</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-
-          <div class="nav-row">
-            <div class="nav-btn" style="opacity:0.4;">← Back</div>
-            <div class="nav-btn next">Next →</div>
+        <div class="hole-head">
+          <div class="hole-badge">1</div>
+          <div>
+            <div class="hole-title">Hole 1</div>
+            <div class="hole-sub">Par 4 · 390 yards</div>
           </div>
         </div>
+
+        <div class="acc expanded">
+          <div class="acc-header">
+            <div class="avatar" style="background:#7cb342;">Y</div>
+            <div class="acc-name">You</div>
+            <div class="acc-score">E thru 0</div>
+            <div class="acc-chev">▼</div>
+          </div>
+          <div class="acc-body">
+            <div class="chips">
+              <div class="chip">-2</div>
+              <div class="chip">-1</div>
+              <div class="chip active">E</div>
+              <div class="chip">+1</div>
+              <div class="chip">+2</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:#42a5f5;">M</div>
+            <div class="acc-name">Mike</div>
+            <div class="acc-score empty">—</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:#ab47bc;">S</div>
+            <div class="acc-name">Sarah</div>
+            <div class="acc-score empty">—</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+
+        <div class="nav-row">
+          <div class="nav-btn" style="opacity:0.4;">← Back</div>
+          <div class="nav-btn next">Next →</div>
+        </div>
       </div>
-      <div class="phone-label">Scoring (Hole 1)<br>Accordion — one expanded, others show score summary. Auto-advances to next unscored player.</div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
     </div>
+    <div class="label">3. Scoring — Hole 1 (locked round: no header back; ⋯ menu replaces profile dot)</div>
+  </div>
+
+  <div class="arrow">→</div>
+
+  <!-- 4. Scoring - hole 18 -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right menu">⋯</div>
+      </div>
+      <div class="body">
+        <div class="hole-progress">
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot done"></div><div class="dot current"></div>
+        </div>
+
+        <div class="hole-head">
+          <div class="hole-badge">18</div>
+          <div>
+            <div class="hole-title">Hole 18 — Final</div>
+            <div class="hole-sub">Par 5 · 510 yards</div>
+          </div>
+        </div>
+
+        <div class="acc expanded">
+          <div class="acc-header">
+            <div class="avatar" style="background:#7cb342;">Y</div>
+            <div class="acc-name">You</div>
+            <div class="acc-score under">-2 thru 17</div>
+            <div class="acc-chev">▼</div>
+          </div>
+          <div class="acc-body">
+            <div class="chips">
+              <div class="chip">-2</div>
+              <div class="chip active">-1</div>
+              <div class="chip">E</div>
+              <div class="chip">+1</div>
+              <div class="chip">+2</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:#42a5f5;">M</div>
+            <div class="acc-name">Mike</div>
+            <div class="acc-score over">+5 thru 17</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:#ab47bc;">S</div>
+            <div class="acc-name">Sarah</div>
+            <div class="acc-score">E thru 17</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+
+        <div class="nav-row">
+          <div class="nav-btn">← Back</div>
+          <div class="nav-btn finish">🏁 Finish Round</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">4. Scoring — Hole 18 (Next is replaced with "🏁 Finish Round"; running totals shown). Tapping Finish returns the user to Course Selection so a new round can be started.</div>
+  </div>
+
+</div>
+
+<!-- ============================== OVERFLOW MENU ============================== -->
+<h2>Overflow menu (⋯) — bottom action sheet</h2>
+<p class="section-desc">Tapping the <b>⋯</b> button on the Scoring header opens a bottom action sheet with round-level actions. Big tap targets, scrim behind, explicit Cancel, consistent with the Add Player sheet pattern. <b>Abandon round</b> is destructive (red) and should trigger a confirmation step before discarding the round.</p>
+
+<div class="row">
+
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right menu">⋯</div>
+      </div>
+      <div class="body" style="filter: brightness(0.7);">
+        <div class="hole-progress">
+          <div class="dot current"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="hole-head">
+          <div class="hole-badge">1</div>
+          <div>
+            <div class="hole-title">Hole 1</div>
+            <div class="hole-sub">Par 4 · 390 yards</div>
+          </div>
+        </div>
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:#7cb342;">Y</div>
+            <div class="acc-name">You</div>
+            <div class="acc-score">E thru 0</div>
+          </div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet" style="background: transparent; box-shadow: none; padding: 0 12px 12px;">
+        <div style="background:#fff; border-radius:14px; overflow:hidden;">
+          <div class="action-sheet-item">📋 View scorecard</div>
+          <div class="action-sheet-item">🏁 Finish round</div>
+          <div class="action-sheet-item danger">⚠️ Abandon round</div>
+        </div>
+        <div class="action-sheet-cancel">Cancel</div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">⋯ menu open. Items: View scorecard / Finish round / Abandon round (destructive) / Cancel.</div>
+  </div>
+
+</div>
+
+<!-- ============================== NEW COURSE PLACEHOLDER ============================== -->
+<h2>New Course form (placeholder)</h2>
+<p class="section-desc">Reachable from the <b>+ Create New Course</b> button on Course Selection. Pushed sub-screen using the standard back-button-in-header pattern. <b>Form contents are TODO</b> — at minimum we'll need course name, location, hole count, and per-hole par. On save, the new course is added to the user's library and the screen pops back to Course Selection with the new course pre-selected.</p>
+
+<div class="row">
+
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot back"><span class="chev">‹</span> Course</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">New course</div>
+        <div class="stub" style="height: auto; padding: 60px 0;">
+          TODO — define form fields<br>(name, location, holes, par)
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">New course form (TODO — fields to be defined)</div>
+  </div>
+
+</div>
+
+<!-- ============================== ADAPTIVE SCORING ============================== -->
+<h2>Adaptive scoring layout (1–4 players)</h2>
+<p class="section-desc">The Scoring screen adapts to the number of players. Fewer players = larger chips, no accordion. Three or more players = compact accordion with one expanded at a time and auto-advance. The persistent header and tab bar are always present — these mocks show the body content only.</p>
+
+<div class="ref-table-wrap">
+  <table class="ref-table">
+    <thead>
+      <tr>
+        <th>Players</th>
+        <th>Layout</th>
+        <th>Chip size</th>
+        <th>Behavior</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="elem">1</td><td>Single expanded card, no accordion</td><td>Large (~50px)</td><td>Always expanded. Generous whitespace; remaining vertical space can host extras (mini-scorecard, stats — see Empty States section).</td></tr>
+      <tr><td class="elem">2</td><td>Both cards expanded, no accordion</td><td>Medium (~44px)</td><td>Both visible and scoreable simultaneously without collapsing.</td></tr>
+      <tr><td class="elem">3</td><td>Accordion — one expanded</td><td>Standard (~42px)</td><td>Auto-advances to next unscored player after a chip tap. Tap any header to expand manually.</td></tr>
+      <tr><td class="elem">4</td><td>Accordion — one expanded</td><td>Standard (~42px)</td><td>Same as 3. All four rows fit on screen above the tab bar without scrolling.</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="row">
+
+  <!-- 1 player -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right menu">⋯</div>
+      </div>
+      <div class="body">
+        <div class="hole-progress">
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot current"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="hole-head">
+          <div class="hole-badge">7</div>
+          <div>
+            <div class="hole-title">Hole 7</div>
+            <div class="hole-sub">Par 3 · 158 yards</div>
+          </div>
+        </div>
+        <div style="background:#fff; border-radius:14px; padding:14px; box-shadow:0 2px 6px rgba(0,0,0,0.05);">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+            <div class="avatar" style="background:var(--green);">Y</div>
+            <div style="flex:1; font-size:13px; font-weight:700;">You</div>
+            <div class="acc-score">+2 thru 6</div>
+          </div>
+          <div class="chips-lg">
+            <div><div class="chip-lg">-2</div><div class="chip-lg-label">Eagle</div></div>
+            <div><div class="chip-lg">-1</div><div class="chip-lg-label">Birdie</div></div>
+            <div><div class="chip-lg active">E</div><div class="chip-lg-label">Par</div></div>
+            <div><div class="chip-lg">+1</div><div class="chip-lg-label">Bogey</div></div>
+            <div><div class="chip-lg">+2</div><div class="chip-lg-label">Dbl</div></div>
+          </div>
+        </div>
+        <div class="nav-row">
+          <div class="nav-btn">← Back</div>
+          <div class="nav-btn next">Next →</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">1 player — single expanded card, large chips</div>
+  </div>
+
+  <!-- 2 players -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right menu">⋯</div>
+      </div>
+      <div class="body">
+        <div class="hole-progress">
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot current"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="hole-head">
+          <div class="hole-badge">7</div>
+          <div>
+            <div class="hole-title">Hole 7</div>
+            <div class="hole-sub">Par 3 · 158 yards</div>
+          </div>
+        </div>
+        <div style="background:#fff; border-radius:12px; padding:10px 12px; margin-bottom:6px; box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <div class="avatar" style="background:var(--green);">Y</div>
+            <div style="flex:1; font-size:12px; font-weight:700;">You</div>
+            <div class="acc-score">+2 thru 6</div>
+          </div>
+          <div class="chips">
+            <div class="chip">-2</div>
+            <div class="chip">-1</div>
+            <div class="chip active">E</div>
+            <div class="chip">+1</div>
+            <div class="chip">+2</div>
+          </div>
+        </div>
+        <div style="background:#fff; border-radius:12px; padding:10px 12px; margin-bottom:6px; box-shadow:0 1px 4px rgba(0,0,0,0.05);">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+            <div class="avatar" style="background:#42a5f5;">M</div>
+            <div style="flex:1; font-size:12px; font-weight:700;">Mike</div>
+            <div class="acc-score">E thru 6</div>
+          </div>
+          <div class="chips">
+            <div class="chip">-2</div>
+            <div class="chip">-1</div>
+            <div class="chip">E</div>
+            <div class="chip">+1</div>
+            <div class="chip">+2</div>
+          </div>
+        </div>
+        <div class="nav-row">
+          <div class="nav-btn">← Back</div>
+          <div class="nav-btn next">Next →</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">2 players — both expanded, no accordion</div>
+  </div>
+
+  <!-- 3 players -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right menu">⋯</div>
+      </div>
+      <div class="body">
+        <div class="hole-progress">
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot current"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="hole-head">
+          <div class="hole-badge">7</div>
+          <div>
+            <div class="hole-title">Hole 7</div>
+            <div class="hole-sub">Par 3 · 158 yards</div>
+          </div>
+        </div>
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:var(--green);">Y</div>
+            <div class="acc-name">You</div>
+            <div class="acc-score under">+2 ✓</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+        <div class="acc expanded">
+          <div class="acc-header">
+            <div class="avatar" style="background:#42a5f5;">M</div>
+            <div class="acc-name">Mike</div>
+            <div class="acc-score">E thru 6</div>
+            <div class="acc-chev">▼</div>
+          </div>
+          <div class="acc-body">
+            <div class="chips">
+              <div class="chip">-2</div>
+              <div class="chip">-1</div>
+              <div class="chip">E</div>
+              <div class="chip">+1</div>
+              <div class="chip">+2</div>
+            </div>
+          </div>
+        </div>
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:#ab47bc;">S</div>
+            <div class="acc-name">Sarah</div>
+            <div class="acc-score empty">—</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+        <div class="nav-row">
+          <div class="nav-btn">← Back</div>
+          <div class="nav-btn next">Next →</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">3 players — accordion, one expanded, auto-advance</div>
+  </div>
+
+  <!-- 4 players -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right menu">⋯</div>
+      </div>
+      <div class="body">
+        <div class="hole-progress">
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot done"></div><div class="dot done"></div><div class="dot done"></div>
+          <div class="dot current"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
+          <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+        </div>
+        <div class="hole-head">
+          <div class="hole-badge">7</div>
+          <div>
+            <div class="hole-title">Hole 7</div>
+            <div class="hole-sub">Par 3 · 158 yards</div>
+          </div>
+        </div>
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:var(--green);">Y</div>
+            <div class="acc-name">You</div>
+            <div class="acc-score under">+2 ✓</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+        <div class="acc expanded">
+          <div class="acc-header">
+            <div class="avatar" style="background:#42a5f5;">M</div>
+            <div class="acc-name">Mike</div>
+            <div class="acc-score">E thru 6</div>
+            <div class="acc-chev">▼</div>
+          </div>
+          <div class="acc-body">
+            <div class="chips">
+              <div class="chip">-2</div>
+              <div class="chip">-1</div>
+              <div class="chip">E</div>
+              <div class="chip">+1</div>
+              <div class="chip">+2</div>
+            </div>
+          </div>
+        </div>
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:#ab47bc;">S</div>
+            <div class="acc-name">Sarah</div>
+            <div class="acc-score empty">—</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+        <div class="acc">
+          <div class="acc-header">
+            <div class="avatar" style="background:#ff8f00;">D</div>
+            <div class="acc-name">Dave</div>
+            <div class="acc-score empty">—</div>
+            <div class="acc-chev">▶</div>
+          </div>
+        </div>
+        <div class="nav-row">
+          <div class="nav-btn">← Back</div>
+          <div class="nav-btn next">Next →</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">4 players — accordion fits without scroll</div>
+  </div>
+
+</div>
+
+<!-- ============================== EMPTY STATES ============================== -->
+<h2>Empty space ideas (1–2 players)</h2>
+<p class="section-desc">With 1–2 players the scoring screen has unused vertical space below the player cards. These are conceptual ideas for what could fill that space meaningfully. None are implemented yet — pick one (or none) for v1 and revisit later.</p>
+
+<div class="idea-grid">
+  <div class="idea-card">
+    <h4>💡 Idea 1: Inline mini-scorecard</h4>
+    <p>Condensed scorecard grid below the accordion — hole numbers across the top, scores filled in as the round progresses. At-a-glance context without leaving the scoring screen.</p>
+  </div>
+  <div class="idea-card">
+    <h4>💡 Idea 2: Round stats / running summary</h4>
+    <p>Live stats: total vs. par, fairways hit, putts (if tracked later), best/worst hole so far. A small dashboard that grows richer over the round.</p>
+  </div>
+  <div class="idea-card">
+    <h4>💡 Idea 3: Larger hole illustration</h4>
+    <p>Expand the hole header — bigger badge, more hole info (yardage, handicap index), maybe a simple par indicator. Lets the scoring area breathe.</p>
+  </div>
+  <div class="idea-card">
+    <h4>💡 Idea 4: Adaptive chip size</h4>
+    <p>Already covered in the adaptive scoring layouts above: when fewer players are present, chips grow and the card has more padding for a more relaxed feel.</p>
   </div>
 </div>
 
-<!-- ==================== FLOW 2: ADD PLAYER (BOTTOM SHEET) ==================== -->
-<div class="flow-section">
-  <h2>Flow 2: Adding a Player (Bottom Sheet)</h2>
-  <p class="desc">Triggered by tapping "+ Add Player" on the player config screen. Search filters existing players; "Create" option is always available.</p>
+<!-- ============================== COLOR THEMES ============================== -->
+<h2>Color themes (user-selectable)</h2>
+<p class="section-desc">The app supports multiple color themes, switchable from the You tab (or settings). All themes use the same semantic token structure so switching is instant. Implement via a <code style="background:#1a1a1a;padding:1px 6px;border-radius:4px;color:#a3e635;">ThemeProvider</code> context wrapping the app; components consume colors through a <code style="background:#1a1a1a;padding:1px 6px;border-radius:4px;color:#a3e635;">useTheme()</code> hook with no hardcoded hex values. Persist the preference (e.g., AsyncStorage).</p>
 
-  <div class="phone-row">
-    <!-- Sheet: empty state -->
-    <div class="phone-col">
-      <div class="step-badge">JUST OPENED</div>
-      <div class="phone-frame" style="position:relative;">
-        <div class="screen" style="filter:brightness(0.65);">
-          <div style="font-size:13px; color:var(--brown); margin-bottom:4px;">Pine Ridge Golf Club</div>
-          <div class="title">Who's playing?</div>
-          <div class="section-label">In this round</div>
-          <div class="player-row">
-            <div class="player-avatar" style="background:#7cb342;">Y</div>
-            <div class="player-info"><div class="player-name">You</div></div>
-          </div>
-        </div>
-        <div class="bottom-sheet-overlay">
-          <div class="bottom-sheet">
-            <div class="sheet-handle"></div>
-            <div style="font-size:17px; font-weight:800; color:var(--text-title); margin-bottom:14px;">Add a player</div>
-            <div class="search-bar">
-              <div class="search-icon">🔍</div>
-              <div class="search-text" style="color:#bbb;">Search or create...</div>
-            </div>
-            <div style="font-size:12px; color:#aaa; text-align:center; padding:16px 0;">Type a name to search existing players<br>or create someone new</div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">Sheet opens with empty search.<br>Keyboard appears automatically.</div>
+<div class="theme-grid">
+  <div class="theme-card" style="background:#fefcf8; color:#2d2d2d;">
+    <div class="theme-swatches">
+      <div class="theme-swatch" style="background:#7cb342;"></div>
+      <div class="theme-swatch" style="background:#558b2f;"></div>
+      <div class="theme-swatch" style="background:#ff8f00;"></div>
+      <div class="theme-swatch" style="background:#7c6b4f;"></div>
     </div>
-
-    <!-- Sheet: with results -->
-    <div class="phone-col">
-      <div class="step-badge">TYPING</div>
-      <div class="phone-frame" style="position:relative;">
-        <div class="screen" style="filter:brightness(0.65);">
-          <div style="font-size:13px; color:var(--brown); margin-bottom:4px;">Pine Ridge Golf Club</div>
-          <div class="title">Who's playing?</div>
-          <div class="section-label">In this round</div>
-          <div class="player-row">
-            <div class="player-avatar" style="background:#7cb342;">Y</div>
-            <div class="player-info"><div class="player-name">You</div></div>
-          </div>
-        </div>
-        <div class="bottom-sheet-overlay">
-          <div class="bottom-sheet">
-            <div class="sheet-handle"></div>
-            <div style="font-size:17px; font-weight:800; color:var(--text-title); margin-bottom:14px;">Add a player</div>
-            <div class="search-bar" style="border-color:var(--green);">
-              <div class="search-icon">🔍</div>
-              <div class="search-text">Da</div>
-            </div>
-            <div class="player-row">
-              <div class="player-avatar" style="background:#ff8f00;">D</div>
-              <div class="player-info">
-                <div class="player-name">Dave</div>
-                <div class="player-tag">3 rounds together</div>
-              </div>
-              <div class="player-action" style="color:var(--green);">+</div>
-            </div>
-            <div class="player-row">
-              <div class="player-avatar" style="background:#78909c;">D</div>
-              <div class="player-info">
-                <div class="player-name">Dan</div>
-                <div class="player-tag">1 round together</div>
-              </div>
-              <div class="player-action" style="color:var(--green);">+</div>
-            </div>
-            <div class="create-new-row">
-              <div class="create-icon">+</div>
-              <div class="player-info">
-                <div class="player-name" style="color:var(--green);">Create "Da"</div>
-                <div class="player-tag">Saved for future rounds</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">Results filter as you type.<br>Tap "+" to add to round, or "Create" for a new player.</div>
+    <div class="theme-name" style="color:#2d5016;">Earthy Green</div>
+    <div class="theme-tag" style="color:#8a8a6d;">Default · Warm &amp; Natural</div>
+  </div>
+  <div class="theme-card" style="background:#f8fcfd; color:#164e63;">
+    <div class="theme-swatches">
+      <div class="theme-swatch" style="background:#0891b2;"></div>
+      <div class="theme-swatch" style="background:#0e7490;"></div>
+      <div class="theme-swatch" style="background:#f97066;"></div>
+      <div class="theme-swatch" style="background:#5e8a94;"></div>
     </div>
-
-    <!-- Sheet: no match -->
-    <div class="phone-col">
-      <div class="step-badge">NO MATCH</div>
-      <div class="phone-frame" style="position:relative;">
-        <div class="screen" style="filter:brightness(0.65);">
-          <div style="font-size:13px; color:var(--brown); margin-bottom:4px;">Pine Ridge Golf Club</div>
-          <div class="title">Who's playing?</div>
-          <div class="section-label">In this round</div>
-          <div class="player-row">
-            <div class="player-avatar" style="background:#7cb342;">Y</div>
-            <div class="player-info"><div class="player-name">You</div></div>
-          </div>
-        </div>
-        <div class="bottom-sheet-overlay">
-          <div class="bottom-sheet">
-            <div class="sheet-handle"></div>
-            <div style="font-size:17px; font-weight:800; color:var(--text-title); margin-bottom:14px;">Add a player</div>
-            <div class="search-bar" style="border-color:var(--green);">
-              <div class="search-icon">🔍</div>
-              <div class="search-text">Kevin</div>
-            </div>
-            <div style="font-size:13px; color:#aaa; text-align:center; padding:12px 0;">No one named "Kevin" yet</div>
-            <div class="create-new-row">
-              <div class="create-icon">+</div>
-              <div class="player-info">
-                <div class="player-name" style="color:var(--green);">Create "Kevin"</div>
-                <div class="player-tag">They'll be saved for next time</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">No match — "Create" is prominent.<br>Single tap creates + adds to round + dismisses sheet.</div>
+    <div class="theme-name" style="color:#164e63;">Ocean Blue</div>
+    <div class="theme-tag" style="color:#7c9aa3;">Cool &amp; Modern</div>
+  </div>
+  <div class="theme-card" style="background:#0f1419; color:#e7e9ea;">
+    <div class="theme-swatches">
+      <div class="theme-swatch" style="background:#a3e635;"></div>
+      <div class="theme-swatch" style="background:#65a30d;"></div>
+      <div class="theme-swatch" style="background:#fbbf24;"></div>
+      <div class="theme-swatch" style="background:#8899a6;"></div>
     </div>
+    <div class="theme-name" style="color:#e7e9ea;">Dark + Lime</div>
+    <div class="theme-tag" style="color:#8899a6;">OLED · Sporty</div>
+  </div>
+  <div class="theme-card" style="background:#faf8ff; color:#3b1f6e;">
+    <div class="theme-swatches">
+      <div class="theme-swatch" style="background:#a78bfa;"></div>
+      <div class="theme-swatch" style="background:#7c3aed;"></div>
+      <div class="theme-swatch" style="background:#fb923c;"></div>
+      <div class="theme-swatch" style="background:#8b7aac;"></div>
+    </div>
+    <div class="theme-name" style="color:#3b1f6e;">Lavender</div>
+    <div class="theme-tag" style="color:#8b7aac;">Calm &amp; Distinctive</div>
+  </div>
+  <div class="theme-card" style="background:#f8fafc; color:#1e293b;">
+    <div class="theme-swatches">
+      <div class="theme-swatch" style="background:#1e3a5f;"></div>
+      <div class="theme-swatch" style="background:#0f172a;"></div>
+      <div class="theme-swatch" style="background:#f59e0b;"></div>
+      <div class="theme-swatch" style="background:#64748b;"></div>
+    </div>
+    <div class="theme-name" style="color:#1e293b;">Navy &amp; Gold</div>
+    <div class="theme-tag" style="color:#64748b;">Premium · Classic</div>
   </div>
 </div>
 
-<!-- ==================== FLOW 3: CREATE COURSE (PUSHED) ==================== -->
-<div class="flow-section">
-  <h2>Flow 3: Creating a New Course (Pushed Screen)</h2>
-  <p class="desc">Triggered by tapping "+ Create New Course" on the home/course selection screen. Pushes onto the navigation stack. On save, pops back and auto-selects the new course.</p>
-
-  <div class="phone-row">
-    <div class="phone-col">
-      <div class="step-badge">PUSHED SCREEN</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div class="back-row">
-            <div class="back-arrow">‹</div>
-            <div class="back-text">Back</div>
-          </div>
-          <div class="title">Create a course</div>
-
-          <div class="form-field">
-            <div class="form-label">Course Name</div>
-            <div class="form-input">Meadow Creek</div>
-          </div>
-
-          <div class="form-field">
-            <div class="form-label">Location</div>
-            <div class="form-input">Redmond, WA</div>
-          </div>
-
-          <div class="form-field">
-            <div class="form-label">Number of Holes</div>
-            <div class="form-input">9</div>
-          </div>
-
-          <div class="form-field">
-            <div class="form-label">Par per Hole</div>
-            <div class="par-grid">
-              <div class="par-cell"><div class="par-cell-label">1</div><div class="par-cell-input">4</div></div>
-              <div class="par-cell"><div class="par-cell-label">2</div><div class="par-cell-input">3</div></div>
-              <div class="par-cell"><div class="par-cell-label">3</div><div class="par-cell-input">5</div></div>
-              <div class="par-cell"><div class="par-cell-label">4</div><div class="par-cell-input">4</div></div>
-              <div class="par-cell"><div class="par-cell-label">5</div><div class="par-cell-input">4</div></div>
-              <div class="par-cell"><div class="par-cell-label">6</div><div class="par-cell-input">3</div></div>
-              <div class="par-cell"><div class="par-cell-label">7</div><div class="par-cell-input">5</div></div>
-              <div class="par-cell"><div class="par-cell-label">8</div><div class="par-cell-input">4</div></div>
-              <div class="par-cell"><div class="par-cell-label">9</div><div class="par-cell-input">4</div></div>
-            </div>
-          </div>
-
-          <div class="btn-primary" style="margin-top:28px;">Save Course</div>
-        </div>
-      </div>
-      <div class="phone-label">Course creation form.<br>Saves and pops back. New course is auto-selected.</div>
-    </div>
-  </div>
+<div class="token-table-wrap">
+  <div style="font-size:14px; color:#fff; margin-bottom:10px; font-weight:700;">Token mapping per theme</div>
+  <table class="token-table">
+    <thead>
+      <tr>
+        <th>Token</th>
+        <th style="color:#7cb342;">Earthy</th>
+        <th style="color:#0891b2;">Ocean</th>
+        <th style="color:#a3e635;">Dark</th>
+        <th style="color:#a78bfa;">Lavender</th>
+        <th style="color:#f59e0b;">Navy</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>background</td><td>#fefcf8</td><td>#f8fcfd</td><td>#0f1419</td><td>#faf8ff</td><td>#f8fafc</td></tr>
+      <tr><td>primary</td><td>#7cb342</td><td>#0891b2</td><td>#a3e635</td><td>#a78bfa</td><td>#1e3a5f</td></tr>
+      <tr><td>primaryDark</td><td>#558b2f</td><td>#0e7490</td><td>#65a30d</td><td>#7c3aed</td><td>#0f172a</td></tr>
+      <tr><td>accent</td><td>#ff8f00</td><td>#f97066</td><td>#fbbf24</td><td>#fb923c</td><td>#f59e0b</td></tr>
+      <tr><td>textTitle</td><td>#2d5016</td><td>#164e63</td><td>#e7e9ea</td><td>#3b1f6e</td><td>#1e293b</td></tr>
+      <tr><td>textMuted</td><td>#7c6b4f</td><td>#5e8a94</td><td>#8899a6</td><td>#8b7aac</td><td>#64748b</td></tr>
+      <tr><td>cardBg</td><td>#ffffff</td><td>#ffffff</td><td>#1c2732</td><td>#ffffff</td><td>#ffffff</td></tr>
+      <tr><td>chipBg</td><td>#f5f0e8</td><td>#ecfeff</td><td>#2d3a45</td><td>#f3f0ff</td><td>#f1f5f9</td></tr>
+    </tbody>
+  </table>
 </div>
 
-<!-- ==================== FLOW 4: SCORING MID-ROUND ==================== -->
-<div class="flow-section">
-  <h2>Flow 4: Scoring Mid-Round (4 Players)</h2>
-  <p class="desc">Demonstrating the accordion in different states: after scoring a few holes, with one player expanded and others showing their cumulative score.</p>
+<!-- ============================== NAV MAP ============================== -->
+<h2>Navigation map</h2>
+<p class="section-desc">Tab-level structure. Each tab maintains its own navigation stack. Switching tabs preserves the stack and all in-flight state, including an active round. The Score tab has two distinct root states depending on whether a round is active.</p>
 
-  <div class="phone-row">
-    <!-- Mid-round: Hole 7 -->
-    <div class="phone-col">
-      <div class="step-badge">HOLE 7 — MIKE'S TURN</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div class="hole-progress">
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot current"></div>
-            <div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-          </div>
-
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
-            <div class="hole-badge-sm">7</div>
-            <div>
-              <div style="font-size:16px; font-weight:800; color:var(--text-title);">Hole 7</div>
-              <div class="hole-detail">Par 3 · 158 yards</div>
-            </div>
-          </div>
-
-          <!-- You: scored -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#7cb342;">Y</div>
-              <div class="accordion-name">You</div>
-              <div class="accordion-score-badge scored">3 ✓</div>
-              <div class="accordion-score-badge overall">+2 thru 7</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-
-          <!-- Mike: expanded (scoring) -->
-          <div class="accordion-player" style="border: 1.5px solid var(--orange);">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#42a5f5;">M</div>
-              <div class="accordion-name">Mike</div>
-              <div class="accordion-score-badge overall">E thru 6</div>
-              <div class="accordion-chevron">▼</div>
-            </div>
-            <div class="accordion-body">
-              <div class="accordion-chips">
-                <div><div class="acc-chip">-2</div><div class="chip-label">Eagle</div></div>
-                <div><div class="acc-chip">-1</div><div class="chip-label">Birdie</div></div>
-                <div><div class="acc-chip">E</div><div class="chip-label">Par</div></div>
-                <div><div class="acc-chip">+1</div><div class="chip-label">Bogey</div></div>
-                <div><div class="acc-chip">+2</div><div class="chip-label">Dbl</div></div>
-                <div><div class="acc-chip">…</div><div class="chip-label">Other</div></div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Sarah: waiting -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#ab47bc;">S</div>
-              <div class="accordion-name">Sarah</div>
-              <div class="accordion-score-badge empty">—</div>
-              <div class="accordion-score-badge overall">+4 thru 6</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-
-          <!-- Dave: waiting -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#ff8f00;">D</div>
-              <div class="accordion-name">Dave</div>
-              <div class="accordion-score-badge empty">—</div>
-              <div class="accordion-score-badge overall">-1 thru 6</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-
-          <div class="nav-row">
-            <div class="nav-btn">← Back</div>
-            <div class="nav-btn next">Next →</div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">Mid-round scoring. You already scored (3, shown with ✓). Mike is expanded (auto-advanced). Sarah and Dave waiting. Overall scores visible on collapsed rows.</div>
-    </div>
-
-    <!-- All scored for this hole -->
-    <div class="phone-col">
-      <div class="step-badge">HOLE 7 — ALL SCORED</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div class="hole-progress">
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot current"></div>
-            <div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-          </div>
-
-          <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
-            <div class="hole-badge-sm">7</div>
-            <div>
-              <div style="font-size:16px; font-weight:800; color:var(--text-title);">Hole 7</div>
-              <div class="hole-detail">Par 3 · 158 yards</div>
-            </div>
-          </div>
-
-          <!-- All collapsed, all scored -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#7cb342;">Y</div>
-              <div class="accordion-name">You</div>
-              <div class="accordion-score-badge scored">3 ✓</div>
-              <div class="accordion-score-badge overall">+2 thru 7</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#42a5f5;">M</div>
-              <div class="accordion-name">Mike</div>
-              <div class="accordion-score-badge scored">4 ✓</div>
-              <div class="accordion-score-badge overall">+1 thru 7</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#ab47bc;">S</div>
-              <div class="accordion-name">Sarah</div>
-              <div class="accordion-score-badge scored">3 ✓</div>
-              <div class="accordion-score-badge overall">+4 thru 7</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#ff8f00;">D</div>
-              <div class="accordion-name">Dave</div>
-              <div class="accordion-score-badge scored">2 ✓</div>
-              <div class="accordion-score-badge overall">-2 thru 7</div>
-              <div class="accordion-chevron">▶</div>
-            </div>
-          </div>
-
-          <div style="text-align:center; margin-top:16px; font-size:13px; color:var(--brown);">All players scored! Tap Next to continue.</div>
-
-          <div class="nav-row">
-            <div class="nav-btn">← Back</div>
-            <div class="nav-btn next">Next →</div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">All players scored for this hole.<br>Compact summary. "Next" advances to hole 8. Tap any row to edit their score.</div>
-    </div>
-  </div>
+<div class="nav-map">
+<span class="tab-h">Tab: Home</span><br>
+&nbsp;&nbsp;└── <span class="screen-h">Home</span> <span class="note">(TODO — content TBD)</span><br>
+<br>
+<span class="tab-h">Tab: Score</span><br>
+&nbsp;&nbsp;├── No active round → <span class="screen-h">Course Selection</span> (root)<br>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── + Create New Course → push <span class="screen-h">New Course form</span> (pops on save with new course pre-selected)<br>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── Next → push <span class="screen-h">Player Config</span><br>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── + Add Player → present <span class="sheet-h">Add Player bottom sheet</span><br>
+&nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── ⛳ Start Round → <b>commits round</b>; replaces stack with ↓<br>
+&nbsp;&nbsp;└── Active round → <span class="screen-h">Scoring</span> (root, locked — no header back)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── ⋯ → present <span class="sheet-h">Round actions sheet</span> (Scorecard / Finish / Abandon)<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── ← Back / Next → → navigate within already-played holes<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── 🏁 Finish Round (Hole 18 only) → end round; return to <span class="screen-h">Course Selection</span><br>
+<br>
+<span class="tab-h">Tab: You</span><br>
+&nbsp;&nbsp;└── <span class="screen-h">You</span> <span class="note">(TODO — content TBD)</span><br>
+<br>
+<span class="note">Tab switches preserve all stack state and in-flight scoring data.</span>
 </div>
 
-<!-- ==================== NAVIGATION MAP ==================== -->
-<div class="flow-section">
-  <h2>Navigation Structure</h2>
-  <div style="background:#2a2a2a; border-radius:16px; padding:32px; max-width:700px; font-family:monospace; font-size:13px; line-height:2; color:#ccc;">
-    <span style="color:#7cb342;">Tab: Scorecard</span><br>
-    &nbsp;&nbsp;├── No round → <span style="color:#ff8f00;">Course Selection (Home)</span><br>
-    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── push → <span style="color:#ff8f00;">New Course</span> (form, pops back on save)<br>
-    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── Next → push → <span style="color:#ff8f00;">Player Config</span><br>
-    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├── + Add Player → <span style="color:#42a5f5;">Bottom Sheet</span> (search/create)<br>
-    &nbsp;&nbsp;│&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── Start Round → replaces stack with ↓<br>
-    &nbsp;&nbsp;└── Active round → <span style="color:#ff8f00;">Scoring</span> (accordion per player)<br>
-    <br>
-    <span style="color:#7cb342;">Tab: Rounds</span> (unchanged for now)<br>
-    &nbsp;&nbsp;└── Round history / current round summary
-  </div>
+<!-- ============================== BEHAVIOR REFERENCE ============================== -->
+<h2>Behavior reference</h2>
+<p class="section-desc">Per screen, every interactive element with its trigger, action, and effect on underlying state. Items marked <span style="color:#fbbf24;">TODO</span> need a decision before implementation.</p>
+
+<div class="ref-table-wrap">
+  <table class="ref-table">
+    <thead>
+      <tr>
+        <th>Element</th>
+        <th>Trigger</th>
+        <th>Action / state effect</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <tr class="ref-section-row"><td colspan="3">Persistent chrome (header + tab bar)</td></tr>
+      <tr><td class="elem">Tab bar — Home</td><td>Tap</td><td>Switch to Home tab. Score tab's stack and in-flight state preserved untouched.</td></tr>
+      <tr><td class="elem">Tab bar — Score</td><td>Tap</td><td>Switch to Score tab. Lands on whichever screen the user last left (Course Selection, Player Config, or Scoring if a round is active).</td></tr>
+      <tr><td class="elem">Tab bar — You</td><td>Tap</td><td>Switch to You tab.</td></tr>
+      <tr><td class="elem">Header — left slot (tab name)</td><td>—</td><td>Static label. Non-interactive. Shows on tab root screens only.</td></tr>
+      <tr><td class="elem">Header — left slot (back button)</td><td>Tap</td><td>Pops the current sub-screen off the tab's stack. State of the sub-screen is discarded if the user hadn't committed (e.g., draft course form). State accumulated on prior screens (e.g., player picks) is preserved.</td></tr>
+      <tr><td class="elem">Header — center logo</td><td>—</td><td>Decorative. No tap action.</td></tr>
+      <tr><td class="elem">Header — right (profile dot)</td><td>Tap</td><td><span style="color:#fbbf24;">TODO</span> — opens profile/settings (sheet or push, TBD).</td></tr>
+      <tr><td class="elem">Header — right (⋯ menu)</td><td>Tap</td><td>Opens the round actions bottom sheet. Visible only on the Scoring screen.</td></tr>
+
+      <tr class="ref-section-row"><td colspan="3">Course Selection (Score tab root, no active round)</td></tr>
+      <tr><td class="elem">Course card</td><td>Tap</td><td>Marks card as selected (orange left border + tinted bg). Only one card can be selected at a time. Enables the Next button. <b>Initial state:</b> no card pre-selected; Next is disabled until the user picks one. The pre-selected Pine Ridge in the mock is illustrative only. <span style="color:#fbbf24;">TODO</span> — empty-library state (no saved courses) is undesigned.</td></tr>
+      <tr><td class="elem">+ Create New Course</td><td>Tap</td><td>Pushes the New Course form onto the Score stack. Returns to Course Selection on save with the new course pre-selected.</td></tr>
+      <tr><td class="elem">Next →</td><td>Tap</td><td>Pushes Player Config onto the stack. Carries the selected course id forward. <b>No commit yet</b> — no round is created at this point.</td></tr>
+
+      <tr class="ref-section-row"><td colspan="3">Player Config (sub-screen of Score)</td></tr>
+      <tr><td class="elem">‹ Course (header)</td><td>Tap</td><td>Pops back to Course Selection. The selected course is preserved; player picks made on this screen are discarded.</td></tr>
+      <tr><td class="elem">Player row × icon</td><td>Tap</td><td>Removes that player from the in-progress round draft (You is non-removable). Only available for added players, not Quick-add suggestions.</td></tr>
+      <tr><td class="elem">+ Add Player</td><td>Tap</td><td>Presents the Add Player bottom sheet over the current screen. <b>Disabled when the roster already contains 4 players.</b></td></tr>
+      <tr><td class="elem">Quick add — + icon</td><td>Tap</td><td>Adds the suggested player to the round draft and removes them from the Quick add list. <b>Disabled / hidden when the roster contains 4 players.</b></td></tr>
+      <tr><td class="elem">⛳ Start Round</td><td>Tap</td><td><b>Commits the round.</b> Persists the round entity (course + players + empty score grid). Replaces the Score tab's stack with the Scoring screen at Hole 1. After this point, the round is locked: course and players cannot be changed. Requires 1–4 players (You alone is allowed).</td></tr>
+
+      <tr class="ref-section-row"><td colspan="3">Add Player bottom sheet</td></tr>
+      <tr><td class="elem">Search field</td><td>Type</td><td>Filters the list of existing players by name (substring match). No network call required for v1.</td></tr>
+      <tr><td class="elem">Player row + icon</td><td>Tap</td><td>Adds the player to the round draft and dismisses the sheet (single-add per open). Already-added players are filtered out of the list. If adding this player would exceed the 4-player max, the row's add icon is disabled.</td></tr>
+      <tr><td class="elem">+ Create new player</td><td>Tap</td><td><span style="color:#fbbf24;">TODO</span> — opens a player creation sub-flow (push or stacked sheet, TBD). On save, adds to the round draft and dismisses.</td></tr>
+      <tr><td class="elem">Tap scrim / swipe down</td><td>Gesture</td><td>Dismisses the sheet without changes.</td></tr>
+
+      <tr class="ref-section-row"><td colspan="3">Scoring (Score tab root, active round)</td></tr>
+      <tr><td class="elem">Score chip (-2…+2) — first entry</td><td>Tap</td><td>Records the score for the currently expanded player at the current hole. Updates that player's running total. With 3+ players, auto-advances the accordion to the next unscored player. With 1–2 players, no accordion change.</td></tr>
+      <tr><td class="elem">Score chip — when player already scored on this hole</td><td>Tap (different chip)</td><td>Overwrites the existing score. Running totals recompute immediately, including totals on every later hole already scored. No auto-advance on overwrite — the user stays on the player they're editing.</td></tr>
+      <tr><td class="elem">Score chip — when player already scored on this hole</td><td>Tap (same chip)</td><td>No-op in v1. <span style="color:#fbbf24;">TODO</span> — consider supporting tap-to-clear later.</td></tr>
+      <tr><td class="elem">Accordion — terminal state for hole</td><td>—</td><td>After the last unscored player is scored, the accordion keeps that player expanded and enables Next. No auto-navigation between holes.</td></tr>
+      <tr><td class="elem">Accordion header</td><td>Tap</td><td>Expands that player; collapses any other expanded player. (No-op for 1–2 player layouts where all are always expanded.)</td></tr>
+      <tr><td class="elem">← Back (in-screen)</td><td>Tap</td><td>Navigates to the previous hole. Disabled on Hole 1. Does <b>not</b> exit the round — Model B locks scoring as the tab root. Past-hole scores remain editable; edits propagate to running totals.</td></tr>
+      <tr><td class="elem">Next → (in-screen)</td><td>Tap</td><td>Navigates to the next hole. <b>Active only when all players have a score for the current hole.</b> Replaced by 🏁 Finish Round on Hole 18.</td></tr>
+      <tr><td class="elem">🏁 Finish Round (Hole 18)</td><td>Tap</td><td>Marks the round as complete. Persists final state. Returns the user to Course Selection. <b>Same activation rule as Next:</b> all players must have a score on Hole 18. <span style="color:#fbbf24;">TODO</span> — eventually this should show a post-round summary screen first.</td></tr>
+      <tr><td class="elem">⋯ (header)</td><td>Tap</td><td>Opens the round actions bottom sheet.</td></tr>
+
+      <tr class="ref-section-row"><td colspan="3">Round actions bottom sheet</td></tr>
+      <tr><td class="elem">📋 View scorecard</td><td>Tap</td><td><span style="color:#fbbf24;">TODO</span> — opens a full scorecard view (all 18 holes, all players). Sheet or push, TBD. Read-only in v1; editing happens via the Back/Next hole navigation.</td></tr>
+      <tr><td class="elem">🏁 Finish round (early finish)</td><td>Tap</td><td>Distinct from the Hole 18 button: this allows finishing <b>before</b> Hole 18 or with missing scores (e.g., played 9). <span style="color:#fbbf24;">TODO</span> — must trigger a confirmation prompt if any holes are missing scores ("Finish with N holes unscored?"). On confirm: persists round as complete-but-partial (missing holes stored as null) and returns to Course Selection.</td></tr>
+      <tr><td class="elem">⚠️ Abandon round</td><td>Tap</td><td>Destructive. <span style="color:#fbbf24;">TODO</span> — must trigger a confirmation prompt ("Discard this round? Scores will be lost"). On confirm: discards round entirely (not persisted to history), returns to Course Selection.</td></tr>
+      <tr><td class="elem">Cancel / scrim</td><td>Tap</td><td>Dismisses the sheet without action.</td></tr>
+
+      <tr class="ref-section-row"><td colspan="3">New Course form (sub-screen of Score)</td></tr>
+      <tr><td class="elem">Form fields</td><td>—</td><td><span style="color:#fbbf24;">TODO</span> — define fields (likely: name, location, hole count, per-hole par).</td></tr>
+      <tr><td class="elem">Save</td><td>Tap</td><td>Validates and persists the new course. Pops back to Course Selection with the new course pre-selected.</td></tr>
+      <tr><td class="elem">‹ Course (header)</td><td>Tap</td><td>Discards form input and pops back.</td></tr>
+
+    </tbody>
+  </table>
 </div>
 
-<!-- ==================== ADAPTIVE SCORING LAYOUT ==================== -->
-<div class="flow-section">
-  <h2>Adaptive Scoring Layout (1-4 Players)</h2>
-  <p class="desc">The scoring UI adapts based on player count. Fewer players = larger chips, no accordion needed. More players = compact accordion with auto-expand. The threshold for accordion behavior is 3+ players. Hole info and progress bar are always centered.</p>
-
-  <div style="background:#2a2a2a; border-radius:16px; padding:24px; max-width:750px; margin-bottom:32px;">
-    <table style="width:100%; border-collapse:collapse; font-size:13px; line-height:1.6; color:#ccc;">
-      <thead>
-        <tr style="border-bottom:2px solid #444; text-align:left;">
-          <th style="padding:8px 12px; color:#fff;">Players</th>
-          <th style="padding:8px 12px; color:#fff;">Layout</th>
-          <th style="padding:8px 12px; color:#fff;">Chip Size</th>
-          <th style="padding:8px 12px; color:#fff;">Behavior</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr style="border-bottom:1px solid #333;">
-          <td style="padding:8px 12px; font-weight:700;">1</td>
-          <td style="padding:8px 12px;">No accordion - single expanded card</td>
-          <td style="padding:8px 12px;">Large (64px)</td>
-          <td style="padding:8px 12px;">Always expanded. Spacious layout.</td>
-        </tr>
-        <tr style="border-bottom:1px solid #333;">
-          <td style="padding:8px 12px; font-weight:700;">2</td>
-          <td style="padding:8px 12px;">No accordion - both cards expanded</td>
-          <td style="padding:8px 12px;">Medium (44px)</td>
-          <td style="padding:8px 12px;">Both visible and scoreable without collapsing.</td>
-        </tr>
-        <tr style="border-bottom:1px solid #333;">
-          <td style="padding:8px 12px; font-weight:700;">3</td>
-          <td style="padding:8px 12px;">Accordion - one expanded at a time</td>
-          <td style="padding:8px 12px;">Standard (46px)</td>
-          <td style="padding:8px 12px;">Auto-advances to next unscored. Tap to expand any.</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px; font-weight:700;">4</td>
-          <td style="padding:8px 12px;">Accordion - one expanded at a time</td>
-          <td style="padding:8px 12px;">Standard (46px)</td>
-          <td style="padding:8px 12px;">Same as 3. All fit on screen without scrolling.</td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="phone-row">
-    <!-- 1 PLAYER -->
-    <div class="phone-col">
-      <div class="step-badge active">1 PLAYER</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;">
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot current"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-          </div>
-          <div style="text-align:center; margin-bottom:24px;">
-            <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;margin:0 auto 8px;">7</div>
-            <div style="font-size:18px;font-weight:800;color:var(--text-title);">Hole 7</div>
-            <div style="font-size:14px;color:var(--brown);margin-top:4px;">Par 3 &middot; 158 yards</div>
-          </div>
-          <div style="background:#fff;border-radius:18px;padding:20px;box-shadow:0 2px 8px rgba(0,0,0,0.06);">
-            <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-              <div class="player-avatar" style="background:var(--green);">Y</div>
-              <div style="flex:1;font-size:16px;font-weight:700;color:var(--text);">You</div>
-              <div style="font-size:13px;font-weight:800;color:var(--brown);background:var(--tan);padding:5px 12px;border-radius:8px;">+2 thru 6</div>
-            </div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;">
-              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">-2</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Eagle</div></div>
-              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">-1</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Birdie</div></div>
-              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#fff;box-shadow:0 3px 10px rgba(255,143,0,0.3);">E</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Par</div></div>
-              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">+1</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Bogey</div></div>
-              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">+2</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Dbl</div></div>
-              <div style="text-align:center;"><div style="width:64px;height:64px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:800;color:#555;">...</div><div style="font-size:10px;color:#aaa;margin-top:4px;">Other</div></div>
-            </div>
-          </div>
-          <div class="nav-row">
-            <div class="nav-btn">&#8592; Back</div>
-            <div class="nav-btn next">Next &#8594;</div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">No accordion. Large centered hole badge. Big 64px chips. Spacious and easy to tap.</div>
-    </div>
-
-    <!-- 2 PLAYERS -->
-    <div class="phone-col">
-      <div class="step-badge active">2 PLAYERS</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;">
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot current"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-          </div>
-          <div style="text-align:center; margin-bottom:14px;">
-            <div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;margin:0 auto 4px;">7</div>
-            <div style="font-size:15px;font-weight:800;color:var(--text-title);">Hole 7</div>
-            <div style="font-size:12px;color:var(--brown);margin-top:2px;">Par 3 &middot; 158 yards</div>
-          </div>
-          <!-- Player 1 -->
-          <div style="background:#fff;border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-              <div style="width:28px;height:28px;border-radius:50%;background:var(--green);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">Y</div>
-              <div style="flex:1;font-size:14px;font-weight:700;color:var(--text);">You</div>
-              <div style="font-size:11px;font-weight:800;color:var(--brown);background:var(--tan);padding:3px 8px;border-radius:7px;">+2 thru 6</div>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-2</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Eagle</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-1</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Birdie</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;box-shadow:0 2px 8px rgba(255,143,0,0.3);">E</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Par</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+1</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Bogey</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+2</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Dbl</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">...</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Other</div></div>
-            </div>
-          </div>
-          <!-- Player 2 -->
-          <div style="background:#fff;border-radius:14px;padding:12px;margin-bottom:8px;box-shadow:0 2px 6px rgba(0,0,0,0.05);">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-              <div style="width:28px;height:28px;border-radius:50%;background:#42a5f5;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;">M</div>
-              <div style="flex:1;font-size:14px;font-weight:700;color:var(--text);">Mike</div>
-              <div style="font-size:11px;font-weight:800;color:var(--brown);background:var(--tan);padding:3px 8px;border-radius:7px;">E thru 6</div>
-            </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-2</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Eagle</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">-1</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Birdie</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">E</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Par</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+1</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Bogey</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">+2</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Dbl</div></div>
-              <div style="text-align:center;"><div style="width:44px;height:44px;border-radius:50%;background:var(--tan);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#555;">...</div><div style="font-size:9px;color:#aaa;margin-top:2px;">Other</div></div>
-            </div>
-          </div>
-          <div class="nav-row">
-            <div class="nav-btn">&#8592; Back</div>
-            <div class="nav-btn next">Next &#8594;</div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">No accordion. Both players expanded with 44px chips. Compact padding keeps it in frame.</div>
-    </div>
-
-    <!-- 3 PLAYERS -->
-    <div class="phone-col">
-      <div class="step-badge active">3 PLAYERS</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;">
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot current"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-          </div>
-          <div style="text-align:center; margin-bottom:18px;">
-            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin:0 auto 6px;">7</div>
-            <div style="font-size:16px;font-weight:800;color:var(--text-title);">Hole 7</div>
-            <div style="font-size:13px;color:var(--brown);margin-top:3px;">Par 3 &middot; 158 yards</div>
-          </div>
-          <!-- Player 1: scored, collapsed -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:var(--green);">Y</div>
-              <div class="accordion-name">You</div>
-              <div class="accordion-score-badge scored">3 &#10003;</div>
-              <div class="accordion-score-badge overall">+2 thru 7</div>
-              <div class="accordion-chevron">&#9654;</div>
-            </div>
-          </div>
-          <!-- Player 2: expanded -->
-          <div class="accordion-player" style="border:1.5px solid var(--orange);">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#42a5f5;">M</div>
-              <div class="accordion-name">Mike</div>
-              <div class="accordion-score-badge overall">E thru 6</div>
-              <div class="accordion-chevron">&#9660;</div>
-            </div>
-            <div class="accordion-body">
-              <div class="accordion-chips">
-                <div><div class="acc-chip">-2</div><div class="chip-label">Eagle</div></div>
-                <div><div class="acc-chip">-1</div><div class="chip-label">Birdie</div></div>
-                <div><div class="acc-chip">E</div><div class="chip-label">Par</div></div>
-                <div><div class="acc-chip">+1</div><div class="chip-label">Bogey</div></div>
-                <div><div class="acc-chip">+2</div><div class="chip-label">Dbl</div></div>
-                <div><div class="acc-chip">...</div><div class="chip-label">Other</div></div>
-              </div>
-            </div>
-          </div>
-          <!-- Player 3: collapsed -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#ab47bc;">S</div>
-              <div class="accordion-name">Sarah</div>
-              <div class="accordion-score-badge empty">&mdash;</div>
-              <div class="accordion-score-badge overall">+4 thru 6</div>
-              <div class="accordion-chevron">&#9654;</div>
-            </div>
-          </div>
-          <div class="nav-row">
-            <div class="nav-btn">&#8592; Back</div>
-            <div class="nav-btn next">Next &#8594;</div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">Accordion at 3 players. One expanded, 46px chips. Auto-advances after scoring.</div>
-    </div>
-
-    <!-- 4 PLAYERS -->
-    <div class="phone-col">
-      <div class="step-badge active">4 PLAYERS</div>
-      <div class="phone-frame">
-        <div class="screen">
-          <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;justify-content:center;">
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot scored"></div><div class="dot scored"></div><div class="dot scored"></div>
-            <div class="dot current"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div>
-            <div class="dot"></div><div class="dot"></div><div class="dot"></div>
-          </div>
-          <div style="text-align:center; margin-bottom:18px;">
-            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--green-dark));color:#fff;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;margin:0 auto 6px;">7</div>
-            <div style="font-size:16px;font-weight:800;color:var(--text-title);">Hole 7</div>
-            <div style="font-size:13px;color:var(--brown);margin-top:3px;">Par 3 &middot; 158 yards</div>
-          </div>
-          <!-- Player 1: scored -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:var(--green);">Y</div>
-              <div class="accordion-name">You</div>
-              <div class="accordion-score-badge scored">3 &#10003;</div>
-              <div class="accordion-score-badge overall">+2 thru 7</div>
-              <div class="accordion-chevron">&#9654;</div>
-            </div>
-          </div>
-          <!-- Player 2: expanded -->
-          <div class="accordion-player" style="border:1.5px solid var(--orange);">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#42a5f5;">M</div>
-              <div class="accordion-name">Mike</div>
-              <div class="accordion-score-badge overall">E thru 6</div>
-              <div class="accordion-chevron">&#9660;</div>
-            </div>
-            <div class="accordion-body">
-              <div class="accordion-chips">
-                <div><div class="acc-chip">-2</div><div class="chip-label">Eagle</div></div>
-                <div><div class="acc-chip">-1</div><div class="chip-label">Birdie</div></div>
-                <div><div class="acc-chip">E</div><div class="chip-label">Par</div></div>
-                <div><div class="acc-chip">+1</div><div class="chip-label">Bogey</div></div>
-                <div><div class="acc-chip">+2</div><div class="chip-label">Dbl</div></div>
-                <div><div class="acc-chip">...</div><div class="chip-label">Other</div></div>
-              </div>
-            </div>
-          </div>
-          <!-- Player 3: collapsed -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:#ab47bc;">S</div>
-              <div class="accordion-name">Sarah</div>
-              <div class="accordion-score-badge empty">&mdash;</div>
-              <div class="accordion-score-badge overall">+4 thru 6</div>
-              <div class="accordion-chevron">&#9654;</div>
-            </div>
-          </div>
-          <!-- Player 4: collapsed -->
-          <div class="accordion-player">
-            <div class="accordion-header">
-              <div class="accordion-avatar" style="background:var(--orange);">D</div>
-              <div class="accordion-name">Dave</div>
-              <div class="accordion-score-badge empty">&mdash;</div>
-              <div class="accordion-score-badge overall">-1 thru 6</div>
-              <div class="accordion-chevron">&#9654;</div>
-            </div>
-          </div>
-          <div class="nav-row">
-            <div class="nav-btn">&#8592; Back</div>
-            <div class="nav-btn next">Next &#8594;</div>
-          </div>
-        </div>
-      </div>
-      <div class="phone-label">4 players - same accordion. All fit without scrolling. Collapsed rows show score summaries.</div>
-    </div>
-  </div>
-</div>
-
-<!-- ==================== THEME SYSTEM ==================== -->
-<div class="flow-section">
-  <h2>Color Themes (User-Selectable)</h2>
-  <p class="desc">The app supports multiple color themes, togglable from a settings/preferences area. All themes use the same semantic token structure so switching is instant. Themes are implemented via a ThemeProvider context wrapping the app.</p>
-
-  <div style="background:#2a2a2a; border-radius:16px; padding:24px; max-width:800px; margin-bottom:32px;">
-    <div style="font-size:14px; color:#ccc; margin-bottom:16px; font-weight:600;">Implementation Notes:</div>
-    <ul style="font-size:13px; color:#aaa; line-height:2; padding-left:20px;">
-      <li>Each theme defines: <code style="color:#a3e635;">background, primary, primaryDark, accent, textTitle, textBody, textMuted, cardBg, chipBg, chipText</code></li>
-      <li>Components consume colors via <code style="color:#a3e635;">useTheme()</code> hook - no hardcoded hex values</li>
-      <li>Styles are generated with <code style="color:#a3e635;">useMemo</code> keyed on the current theme</li>
-      <li>Theme preference persisted with AsyncStorage</li>
-      <li>Switching is instant (no reload needed)</li>
-    </ul>
-  </div>
-
-  <div style="display:flex; gap:16px; flex-wrap:wrap; max-width:900px; margin-bottom:32px;">
-    <div style="background:#fefcf8; border-radius:16px; padding:20px; width:160px; text-align:center;">
-      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:#7cb342;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#558b2f;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#ff8f00;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#7c6b4f;"></div>
-      </div>
-      <div style="font-size:13px;font-weight:700;color:#2d5016;">Earthy Green</div>
-      <div style="font-size:11px;color:#8a8a6d;margin-top:2px;">Default &middot; Warm &amp; Natural</div>
-    </div>
-    <div style="background:#f8fcfd; border-radius:16px; padding:20px; width:160px; text-align:center;">
-      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:#0891b2;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#0e7490;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#f97066;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#5e8a94;"></div>
-      </div>
-      <div style="font-size:13px;font-weight:700;color:#164e63;">Ocean Blue</div>
-      <div style="font-size:11px;color:#7c9aa3;margin-top:2px;">Cool &amp; Modern</div>
-    </div>
-    <div style="background:#0f1419; border-radius:16px; padding:20px; width:160px; text-align:center;">
-      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:#a3e635;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#65a30d;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#fbbf24;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#8899a6;"></div>
-      </div>
-      <div style="font-size:13px;font-weight:700;color:#e7e9ea;">Dark + Lime</div>
-      <div style="font-size:11px;color:#8899a6;margin-top:2px;">OLED &middot; Sporty</div>
-    </div>
-    <div style="background:#faf8ff; border-radius:16px; padding:20px; width:160px; text-align:center;">
-      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:#a78bfa;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#7c3aed;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#fb923c;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#8b7aac;"></div>
-      </div>
-      <div style="font-size:13px;font-weight:700;color:#3b1f6e;">Lavender</div>
-      <div style="font-size:11px;color:#8b7aac;margin-top:2px;">Calm &amp; Distinctive</div>
-    </div>
-    <div style="background:#f8fafc; border-radius:16px; padding:20px; width:160px; text-align:center;">
-      <div style="display:flex; gap:6px; justify-content:center; margin-bottom:10px;">
-        <div style="width:24px;height:24px;border-radius:50%;background:#1e3a5f;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#0f172a;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#f59e0b;"></div>
-        <div style="width:24px;height:24px;border-radius:50%;background:#64748b;"></div>
-      </div>
-      <div style="font-size:13px;font-weight:700;color:#1e293b;">Navy &amp; Gold</div>
-      <div style="font-size:11px;color:#64748b;margin-top:2px;">Premium &middot; Classic</div>
-    </div>
-  </div>
-
-  <div style="background:#2a2a2a; border-radius:16px; padding:24px; max-width:800px;">
-    <div style="font-size:14px; color:#ccc; margin-bottom:12px; font-weight:600;">Token Mapping per Theme:</div>
-    <table style="width:100%; border-collapse:collapse; font-size:12px; color:#ccc; font-family:monospace;">
-      <thead>
-        <tr style="border-bottom:1px solid #444;">
-          <th style="padding:6px 8px;text-align:left;color:#fff;">Token</th>
-          <th style="padding:6px 8px;text-align:left;color:#7cb342;">Earthy</th>
-          <th style="padding:6px 8px;text-align:left;color:#0891b2;">Ocean</th>
-          <th style="padding:6px 8px;text-align:left;color:#a3e635;">Dark</th>
-          <th style="padding:6px 8px;text-align:left;color:#a78bfa;">Lavender</th>
-          <th style="padding:6px 8px;text-align:left;color:#f59e0b;">Navy</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">background</td><td style="padding:5px 8px;">#fefcf8</td><td style="padding:5px 8px;">#f8fcfd</td><td style="padding:5px 8px;">#0f1419</td><td style="padding:5px 8px;">#faf8ff</td><td style="padding:5px 8px;">#f8fafc</td></tr>
-        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">primary</td><td style="padding:5px 8px;">#7cb342</td><td style="padding:5px 8px;">#0891b2</td><td style="padding:5px 8px;">#a3e635</td><td style="padding:5px 8px;">#a78bfa</td><td style="padding:5px 8px;">#1e3a5f</td></tr>
-        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">primaryDark</td><td style="padding:5px 8px;">#558b2f</td><td style="padding:5px 8px;">#0e7490</td><td style="padding:5px 8px;">#65a30d</td><td style="padding:5px 8px;">#7c3aed</td><td style="padding:5px 8px;">#0f172a</td></tr>
-        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">accent</td><td style="padding:5px 8px;">#ff8f00</td><td style="padding:5px 8px;">#f97066</td><td style="padding:5px 8px;">#fbbf24</td><td style="padding:5px 8px;">#fb923c</td><td style="padding:5px 8px;">#f59e0b</td></tr>
-        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">textTitle</td><td style="padding:5px 8px;">#2d5016</td><td style="padding:5px 8px;">#164e63</td><td style="padding:5px 8px;">#e7e9ea</td><td style="padding:5px 8px;">#3b1f6e</td><td style="padding:5px 8px;">#1e293b</td></tr>
-        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">textMuted</td><td style="padding:5px 8px;">#7c6b4f</td><td style="padding:5px 8px;">#5e8a94</td><td style="padding:5px 8px;">#8899a6</td><td style="padding:5px 8px;">#8b7aac</td><td style="padding:5px 8px;">#64748b</td></tr>
-        <tr style="border-bottom:1px solid #333;"><td style="padding:5px 8px;">cardBg</td><td style="padding:5px 8px;">#ffffff</td><td style="padding:5px 8px;">#ffffff</td><td style="padding:5px 8px;">#1c2732</td><td style="padding:5px 8px;">#ffffff</td><td style="padding:5px 8px;">#ffffff</td></tr>
-        <tr><td style="padding:5px 8px;">chipBg</td><td style="padding:5px 8px;">#f5f0e8</td><td style="padding:5px 8px;">#ecfeff</td><td style="padding:5px 8px;">#2d3a45</td><td style="padding:5px 8px;">#f3f0ff</td><td style="padding:5px 8px;">#f1f5f9</td></tr>
-      </tbody>
-    </table>
-  </div>
+<!-- ============================== TODOs ============================== -->
+<h2>Open TODOs</h2>
+<div class="callout todo">
+  <b>Items still requiring design decisions before implementation:</b><br>
+  &bull; <b>Home tab content</b> — what does the user see on the default landing tab?<br>
+  &bull; <b>You tab content</b> — profile, stats, theme picker, settings?<br>
+  &bull; <b>New Course form fields</b> — minimum: name, location, hole count, per-hole par. Tee selection / handicap index / yardage per hole?<br>
+  &bull; <b>"Other" score support</b> — current chips only cover ±2. Need an affordance for triples, eagles, hole-in-one, snowman, etc. (likely an "Other" chip opening a numeric picker).<br>
+  &bull; <b>Post-finish summary screen</b> — currently Finish Round dumps the user back to Course Selection. Should show a summary (final scores, vs. par, highlights) before returning.<br>
+  &bull; <b>Profile/settings dot interaction</b> — what happens when the user taps the right-slot avatar on Home / You / Course Selection?<br>
+  &bull; <b>Abandon Round confirmation</b> — destructive action needs a confirm step (alert / sheet / inline).<br>
+  &bull; <b>Create new player flow</b> — from inside the Add Player sheet, how is a brand-new player created?<br>
+  &bull; <b>Active-round indicator</b> — visual cue on the Score tab icon when a round is in progress (e.g., orange dot)?
 </div>
 
 </body>
