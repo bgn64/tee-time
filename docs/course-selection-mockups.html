@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tee Time – Course Selection design options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+         background: #1a1a1a; color: #fff; padding: 32px 20px; }
+  h1 { text-align: center; font-size: 28px; margin-bottom: 6px; }
+  .sub { text-align: center; color: #999; margin-bottom: 28px; font-size: 14px;
+         max-width: 760px; margin-left:auto; margin-right:auto; line-height:1.55; }
+  .callout {
+    max-width: 760px; margin: 0 auto 36px; padding: 14px 18px;
+    background: #2a2a2a; border-left: 3px solid #ff8f00; border-radius: 6px;
+    font-size: 13px; color: #ccc; line-height: 1.55;
+  }
+  .callout b { color: #ff8f00; }
+  h2 { font-size: 20px; color: #ff8f00; margin: 40px 0 6px;
+       max-width: 1400px; margin-left:auto; margin-right:auto; }
+  .section-desc { font-size: 13px; color: #aaa; margin-bottom: 18px;
+                  max-width: 1400px; margin-left:auto; margin-right:auto; line-height:1.55; }
+  .row { display: flex; gap: 18px; justify-content: center; flex-wrap: wrap;
+         align-items: flex-start; max-width: 1400px; margin: 0 auto 28px; }
+  .col { display: flex; flex-direction: column; align-items: center; }
+  .label { font-size: 11px; color: #777; margin-top: 10px; text-align: center;
+           max-width: 280px; line-height: 1.4; font-weight: 600; }
+  .pros-cons { max-width: 760px; margin: 0 auto 28px; padding: 14px 18px;
+               background: #232323; border-radius: 8px; font-size: 13px; color: #ccc;
+               line-height: 1.6; }
+  .pros-cons .good { color: #a3e635; font-weight: 700; }
+  .pros-cons .bad  { color: #fbbf24; font-weight: 700; }
+
+  /* ===== Phone tokens (Earthy Green) ===== */
+  :root { --bg:#fefcf8; --green:#7cb342; --green-dark:#558b2f; --orange:#ff8f00;
+          --brown:#7c6b4f; --tan:#f5f0e8; --text:#2d2d2d; --text-title:#2d5016; }
+  .phone {
+    width: 280px; height: 580px; background: var(--bg);
+    border-radius: 32px; overflow: hidden; position: relative;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4); color: var(--text);
+    display: flex; flex-direction: column;
+  }
+  .header {
+    height: 52px; background: #fff; border-bottom: 1px solid #eee;
+    display: flex; align-items: center; padding: 0 14px; flex-shrink: 0;
+    position: relative;
+  }
+  .header .left-slot {
+    font-size: 12px; color: var(--brown); font-weight: 700; letter-spacing: 0.5px;
+  }
+  .header .logo {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-size: 15px; font-weight: 800; color: var(--text-title); letter-spacing: 0.5px;
+  }
+  .header .right { margin-left: auto; width: 24px; height: 24px; border-radius: 50%;
+                   background: #eee; }
+  .body { flex: 1; padding: 14px; overflow: hidden; position: relative;
+          display: flex; flex-direction: column; }
+  .title { font-size: 16px; font-weight: 800; color: var(--text-title);
+           margin-bottom: 8px; margin-top: 2px; }
+
+  /* Search */
+  .search {
+    background:#fff; border-radius:12px; padding:9px 12px; font-size:12px;
+    color:#aaa; margin-bottom: 10px; border:1px solid #eee;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .search.active { color: var(--text); border-color: var(--green); }
+  .search-icon { font-size: 12px; color: #bbb; }
+  .search-clear { margin-left: auto; font-size: 13px; color: #bbb; font-weight: 700; }
+
+  /* Segmented tabs (All / Recents / Custom) */
+  .tabs {
+    display: flex; gap: 3px; padding: 3px;
+    background: var(--tan); border-radius: 10px;
+    margin-bottom: 10px;
+  }
+  .tabs-tab {
+    flex: 1; text-align: center; padding: 6px 0;
+    border-radius: 8px; font-size: 11px; font-weight: 700;
+    color: var(--brown);
+  }
+  .tabs-tab.active {
+    background: #fff; color: var(--text-title);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.07);
+  }
+  .tabs-tab .count {
+    font-size: 9.5px; opacity: 0.7; font-weight: 600; margin-left: 3px;
+  }
+  .tabs-tab.active .count { color: var(--green-dark); opacity: 0.85; }
+
+  /* Course cards */
+  .list { flex: 1; overflow: hidden; }
+  .card {
+    background: #fff; border-radius: 12px; padding: 9px 11px;
+    margin-bottom: 6px; box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+    border-left: 3px solid var(--green); font-size: 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .card.sel { border-left-color: var(--orange); background: #fffbf0; }
+  .card-body { flex: 1; }
+  .card-name { font-weight: 700; font-size: 12.5px; color: var(--text); }
+  .card-meta { color: #888; font-size: 10.5px; margin-top: 2px; }
+  .card-recent { color: var(--green-dark); font-size: 10px; margin-top: 2px; font-weight: 600; }
+  .source-badge {
+    font-size: 9px; font-weight: 700; padding: 2px 6px; border-radius: 6px;
+    background: var(--tan); color: var(--brown); text-transform: uppercase;
+    letter-spacing: 0.5px; flex-shrink: 0;
+  }
+  .source-badge.custom { background: #ffe9d6; color: #b46100; }
+
+  /* Section headers (used in single-list variant) */
+  .section-label { font-size: 9.5px; letter-spacing: 1px; text-transform: uppercase;
+                   color: #999; font-weight: 700; margin: 8px 0 6px; }
+  .section-label:first-child { margin-top: 2px; }
+
+  /* Empty / no-results states */
+  .empty {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; color: #999;
+    padding: 20px; gap: 6px;
+  }
+  .empty-icon { font-size: 32px; opacity: 0.5; }
+  .empty-title { font-size: 12.5px; font-weight: 700; color: var(--brown); }
+  .empty-body { font-size: 11px; color: #999; line-height: 1.5; max-width: 200px; }
+
+  /* Create CTA — sticky default and prominent no-results variants */
+  .create-row { margin-top: auto; padding-top: 8px; }
+  .create-default {
+    background: #fff; border: 2px dashed var(--green); border-radius: 12px;
+    padding: 11px; text-align: center; font-size: 12px; font-weight: 700;
+    color: var(--green-dark);
+  }
+  .create-prominent {
+    background: linear-gradient(135deg, var(--green), var(--green-dark));
+    color: #fff; padding: 13px 12px; border-radius: 14px; text-align: center;
+    font-size: 13px; font-weight: 800;
+    box-shadow: 0 4px 12px rgba(124,179,66,0.3);
+  }
+  .create-prominent .sub-text { font-size: 10px; font-weight: 600;
+                                opacity: 0.92; margin-top: 3px; }
+  .no-match-hint {
+    text-align: center; font-size: 11px; color: #999;
+    padding: 14px 8px 6px; line-height: 1.5;
+  }
+
+  /* Tabbar */
+  .tabbar {
+    height: 56px; background: #fff; border-top: 1px solid #eee;
+    display: flex; flex-shrink: 0;
+  }
+  .tab { flex: 1; display: flex; flex-direction: column; align-items: center;
+         justify-content: center; gap: 2px; font-size: 9.5px; color: #aaa; font-weight: 700; }
+  .tab .icon { font-size: 17px; }
+  .tab.active { color: var(--orange); }
+
+  /* Recommendation block */
+  .reco {
+    max-width: 760px; margin: 32px auto 16px; padding: 18px 22px;
+    background: #2a2a2a; border-left: 3px solid #a3e635; border-radius: 8px;
+    font-size: 13px; color: #ddd; line-height: 1.6;
+  }
+  .reco b { color: #a3e635; }
+  .reco h3 { color: #a3e635; font-size: 15px; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Course Selection — design options</h1>
+<p class="sub">Three layout variants for the Course Selection screen on the Score tab. All three keep the locked-in tab structure (All / Recents / Custom). They differ in <b>how search interacts with the tabs</b> — the central UX question we left open.</p>
+
+<div class="callout">
+  <b>What's the same across all variants:</b><br>
+  &bull; Three tabs: <b>All</b> (catalog + customs merged), <b>Recents</b> (subset, sorted by last played), <b>Custom</b> (user-created courses only).<br>
+  &bull; A search input above the tabs that filters the visible list.<br>
+  &bull; A <b>+ Create new course</b> affordance that's always reachable, and that becomes prominent when search returns no matches. Tapping it opens the New Course form (pre-filled with the search query, when relevant). On save, the new course is added to Custom, the user lands back here on the All tab, and the new course is pre-selected.<br>
+  &bull; Course cards: green left border default, orange when selected. Custom courses carry a small <b>CUSTOM</b> badge so they're identifiable wherever they appear.<br>
+  &bull; "Selected" state still drives the bottom <b>Next →</b> button (omitted from these mockups for clarity — focus is on the list region).
+</div>
+
+<!-- ============================================================== -->
+<h2>Option 1 — Search filters the active tab only</h2>
+<p class="section-desc">The simplest interaction model: the user picks a tab, then searches within it. Tab counts and structure stay stable while typing. Trade-off: if the user is on the wrong tab, their query "won't find" a course they know exists — they have to switch tabs and retype (or just retype).</p>
+
+<div class="row">
+
+  <!-- 1A: All tab, default -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search"><span class="search-icon">🔍</span>Search courses</div>
+        <div class="tabs">
+          <div class="tabs-tab active">All</div>
+          <div class="tabs-tab">Recents</div>
+          <div class="tabs-tab">Custom</div>
+        </div>
+        <div class="list">
+          <div class="card sel">
+            <div class="card-body">
+              <div class="card-name">Pine Ridge Golf Club</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Cedar Hills</div>
+              <div class="card-meta">Bellevue, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Harbor Links</div>
+              <div class="card-meta">Tacoma, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Olympic National</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Backyard Par-3</div>
+              <div class="card-meta">Bellevue, WA · 9 holes · Par 27</div>
+            </div>
+            <span class="source-badge custom">Custom</span>
+          </div>
+        </div>
+        <div class="create-row">
+          <div class="create-default">+ Create new course</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">All tab, default. Pre-existing selection (Pine Ridge) shown for clarity. CUSTOM badge identifies user-created courses inline.</div>
+  </div>
+
+  <!-- 1B: All tab, searching with results -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search active"><span class="search-icon">🔍</span>pine<span class="search-clear">×</span></div>
+        <div class="tabs">
+          <div class="tabs-tab active">All</div>
+          <div class="tabs-tab">Recents</div>
+          <div class="tabs-tab">Custom</div>
+        </div>
+        <div class="list">
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Pine Ridge Golf Club</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Pinecrest Hills</div>
+              <div class="card-meta">Issaquah, WA · 18 holes · Par 71</div>
+            </div>
+          </div>
+        </div>
+        <div class="create-row">
+          <div class="create-default">+ Create new course</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Search "pine" filters within All. Tabs stay visible. Create stays muted at the bottom.</div>
+  </div>
+
+  <!-- 1C: All tab, searching no results -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search active"><span class="search-icon">🔍</span>blackrock<span class="search-clear">×</span></div>
+        <div class="tabs">
+          <div class="tabs-tab active">All</div>
+          <div class="tabs-tab">Recents</div>
+          <div class="tabs-tab">Custom</div>
+        </div>
+        <div class="no-match-hint">No courses match <b>"blackrock"</b>.<br>Add it to your custom courses?</div>
+        <div class="create-row">
+          <div class="create-prominent">
+            + Create "Blackrock"
+            <div class="sub-text">Adds to your custom courses</div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Search "blackrock" returns nothing. Create CTA promotes itself: pre-fills name with the query.</div>
+  </div>
+
+  <!-- 1D: Custom tab, empty -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search"><span class="search-icon">🔍</span>Search courses</div>
+        <div class="tabs">
+          <div class="tabs-tab">All</div>
+          <div class="tabs-tab">Recents</div>
+          <div class="tabs-tab active">Custom</div>
+        </div>
+        <div class="empty">
+          <div class="empty-icon">⛳</div>
+          <div class="empty-title">No custom courses yet</div>
+          <div class="empty-body">Courses you create will live here, separate from the global catalog.</div>
+        </div>
+        <div class="create-row">
+          <div class="create-prominent">
+            + Create new course
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Custom tab, day-1 user with no creations. Empty state earns the prominent Create CTA.</div>
+  </div>
+
+</div>
+
+<div class="pros-cons">
+  <span class="good">Strengths:</span> simple mental model. Tab structure never changes. Cheapest to build and reason about. The user's stated approach.<br>
+  <span class="bad">Watch-outs:</span> "I searched but it's not showing up" — the user has to remember which tab they're on. Mitigated by always-available <b>+ Create</b>, but a power user with hundreds of courses may type the same query into two tabs.
+</div>
+
+
+<!-- ============================================================== -->
+<h2>Option 2 — Search collapses tabs (global flat results)</h2>
+<p class="section-desc">As soon as the user types in the search box, the tabs hide and the list flattens into a single global result set spanning all courses (catalog + customs). Source badges (CUSTOM) appear on each row so origin is still visible. Clearing the search restores the previously-active tab.</p>
+
+<div class="row">
+
+  <!-- 2A: All tab, default (same as 1A but for clarity) -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search"><span class="search-icon">🔍</span>Search courses</div>
+        <div class="tabs">
+          <div class="tabs-tab active">All</div>
+          <div class="tabs-tab">Recents</div>
+          <div class="tabs-tab">Custom</div>
+        </div>
+        <div class="list">
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Pine Ridge Golf Club</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Cedar Hills</div>
+              <div class="card-meta">Bellevue, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Harbor Links</div>
+              <div class="card-meta">Tacoma, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Backyard Par-3</div>
+              <div class="card-meta">Bellevue, WA · 9 holes · Par 27</div>
+            </div>
+            <span class="source-badge custom">Custom</span>
+          </div>
+        </div>
+        <div class="create-row">
+          <div class="create-default">+ Create new course</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Default. Tabs visible, no search active.</div>
+  </div>
+
+  <!-- 2B: Searching, tabs hidden, flat global results -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search active"><span class="search-icon">🔍</span>par<span class="search-clear">×</span></div>
+        <div class="list">
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Pine Ridge Golf Club</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Olympic National</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Backyard Par-3</div>
+              <div class="card-meta">Bellevue, WA · 9 holes · Par 27</div>
+              <div class="card-recent">Played 3 days ago</div>
+            </div>
+            <span class="source-badge custom">Custom</span>
+          </div>
+        </div>
+        <div class="create-row">
+          <div class="create-default">+ Create new course</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Search "par" — tabs hidden, results pull from everywhere. Custom badge + recent-play hint preserve context.</div>
+  </div>
+
+  <!-- 2C: Searching no results -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search active"><span class="search-icon">🔍</span>blackrock<span class="search-clear">×</span></div>
+        <div class="empty">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">No matches for "blackrock"</div>
+          <div class="empty-body">Don't see your course? Add it to your custom library.</div>
+        </div>
+        <div class="create-row">
+          <div class="create-prominent">
+            + Create "Blackrock"
+            <div class="sub-text">Adds to your custom courses</div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">No-results: tabs stay hidden, empty state + prominent Create take center stage.</div>
+  </div>
+
+</div>
+
+<div class="pros-cons">
+  <span class="good">Strengths:</span> a search query is treated as global from the user's perspective — they never miss a course because they were on the wrong tab. Less screen real-estate during search means more visible results. Source badges keep "is this mine?" answerable at a glance.<br>
+  <span class="bad">Watch-outs:</span> the user loses the ability to filter results by source while searching (e.g., "show me only my custom courses with 'par' in the name"). Tabs disappearing mid-interaction can feel abrupt — you'll want a smooth transition, not a jump.
+</div>
+
+
+<!-- ============================================================== -->
+<h2>Option 3 — Search shows tab counts (global filter, tabs as pivot)</h2>
+<p class="section-desc">Tabs stay visible during search but their labels gain count badges (<b>All 3 · Recents 1 · Custom 0</b>) reflecting how many results live under each. The user can pivot tabs without retyping. The active tab still scopes the visible result list. Best UX of the three; modestly more work to implement (need to compute per-tab counts on every keystroke).</p>
+
+<div class="row">
+
+  <!-- 3A: Searching with results -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search active"><span class="search-icon">🔍</span>par<span class="search-clear">×</span></div>
+        <div class="tabs">
+          <div class="tabs-tab active">All<span class="count">3</span></div>
+          <div class="tabs-tab">Recents<span class="count">1</span></div>
+          <div class="tabs-tab">Custom<span class="count">1</span></div>
+        </div>
+        <div class="list">
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Pine Ridge Golf Club</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Olympic National</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Backyard Par-3</div>
+              <div class="card-meta">Bellevue, WA · 9 holes · Par 27</div>
+            </div>
+            <span class="source-badge custom">Custom</span>
+          </div>
+        </div>
+        <div class="create-row">
+          <div class="create-default">+ Create new course</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Search "par" — All tab shows all 3 matches. Tab counts hint where the user could pivot.</div>
+  </div>
+
+  <!-- 3B: Pivot to Recents while searching -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search active"><span class="search-icon">🔍</span>par<span class="search-clear">×</span></div>
+        <div class="tabs">
+          <div class="tabs-tab">All<span class="count">3</span></div>
+          <div class="tabs-tab active">Recents<span class="count">1</span></div>
+          <div class="tabs-tab">Custom<span class="count">1</span></div>
+        </div>
+        <div class="list">
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Backyard Par-3</div>
+              <div class="card-meta">Bellevue, WA · 9 holes · Par 27</div>
+              <div class="card-recent">Played 3 days ago</div>
+            </div>
+            <span class="source-badge custom">Custom</span>
+          </div>
+        </div>
+        <div class="create-row">
+          <div class="create-default">+ Create new course</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Same query, pivoted to Recents tab. Counts persist — user can always tell which tab has hits.</div>
+  </div>
+
+  <!-- 3C: No matches anywhere -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search active"><span class="search-icon">🔍</span>blackrock<span class="search-clear">×</span></div>
+        <div class="tabs">
+          <div class="tabs-tab active">All<span class="count">0</span></div>
+          <div class="tabs-tab">Recents<span class="count">0</span></div>
+          <div class="tabs-tab">Custom<span class="count">0</span></div>
+        </div>
+        <div class="empty">
+          <div class="empty-icon">🔍</div>
+          <div class="empty-title">No matches for "blackrock"</div>
+          <div class="empty-body">No course in any list matches your search.</div>
+        </div>
+        <div class="create-row">
+          <div class="create-prominent">
+            + Create "Blackrock"
+            <div class="sub-text">Adds to your custom courses</div>
+          </div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">No-results: every tab shows 0. The shared "no matches anywhere" framing makes Create the only action that matters.</div>
+  </div>
+
+</div>
+
+<div class="pros-cons">
+  <span class="good">Strengths:</span> tabs serve as both filter and pivot during search. User instantly sees "my custom courses have 1 match for 'par'" without typing anywhere else. Counts surface the structure of the data. The "every tab shows 0" no-results state is uniquely persuasive — there's truly nowhere this course exists.<br>
+  <span class="bad">Watch-outs:</span> requires recomputing match counts per tab on every keystroke (cheap for our data sizes). Tabs are visually noisier when counts are present — typography needs care.
+</div>
+
+
+<!-- ============================================================== -->
+<h2>Recurring states (apply to all variants)</h2>
+<p class="section-desc">A few states that look the same regardless of which search-behavior we pick.</p>
+
+<div class="row">
+
+  <!-- Recents empty -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search"><span class="search-icon">🔍</span>Search courses</div>
+        <div class="tabs">
+          <div class="tabs-tab">All</div>
+          <div class="tabs-tab active">Recents</div>
+          <div class="tabs-tab">Custom</div>
+        </div>
+        <div class="empty">
+          <div class="empty-icon">⏱️</div>
+          <div class="empty-title">No recent rounds</div>
+          <div class="empty-body">Courses you've played will show up here, sorted by most recent.</div>
+        </div>
+        <div class="create-row">
+          <div class="create-default">+ Create new course</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">Recents empty (day-1 user). Calm empty state; Create stays muted because creating a course doesn't fix this.</div>
+  </div>
+
+  <!-- After-create return to All -->
+  <div class="col">
+    <div class="phone">
+      <div class="header">
+        <div class="left-slot">SCORE</div>
+        <div class="logo">tee time</div>
+        <div class="right"></div>
+      </div>
+      <div class="body">
+        <div class="title">Pick a course</div>
+        <div class="search"><span class="search-icon">🔍</span>Search courses</div>
+        <div class="tabs">
+          <div class="tabs-tab active">All</div>
+          <div class="tabs-tab">Recents</div>
+          <div class="tabs-tab">Custom</div>
+        </div>
+        <div class="list">
+          <div class="card sel">
+            <div class="card-body">
+              <div class="card-name">Blackrock Country Club</div>
+              <div class="card-meta">Just created · 18 holes · Par 72</div>
+            </div>
+            <span class="source-badge custom">Custom</span>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Pine Ridge Golf Club</div>
+              <div class="card-meta">Seattle, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Cedar Hills</div>
+              <div class="card-meta">Bellevue, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-body">
+              <div class="card-name">Harbor Links</div>
+              <div class="card-meta">Tacoma, WA · 18 holes · Par 72</div>
+            </div>
+          </div>
+        </div>
+        <div class="create-row">
+          <div class="create-default">+ Create new course</div>
+        </div>
+      </div>
+      <div class="tabbar">
+        <div class="tab"><div class="icon">🏠</div>Home</div>
+        <div class="tab active"><div class="icon">⛳</div>Score</div>
+        <div class="tab"><div class="icon">👤</div>You</div>
+      </div>
+    </div>
+    <div class="label">After Create: user lands on All tab. New course (Blackrock) sits at top, pre-selected, with CUSTOM badge.</div>
+  </div>
+
+</div>
+
+
+<!-- ============================================================== -->
+<div class="reco">
+  <h3>My pick</h3>
+  <b>Option 3</b> (tab counts during search) gives the cleanest UX: tabs always serve as pivot, search works globally, and the no-results state is unambiguous. The implementation cost over Option 1 is small — just compute three filtered lengths per keystroke instead of one. <b>Option 2</b> is the right fallback if the visual noise of count badges feels heavy. <b>Option 1</b> is only the right call if we want to ship the simplest possible thing this iteration and accept that some users will type the same query into two tabs.<br><br>
+  Independent of which we pick: the <b>recently-played hint</b> on cards (<i>"Played 3 days ago"</i>) is worth keeping in all variants — it's the visible payoff for tracking <code>completedRounds</code>, and it makes the Recents tab feel grounded in real activity.
+</div>
+
+</body>
+</html>

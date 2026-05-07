@@ -11,6 +11,11 @@ type GolfRoundContextValue = {
   completedRounds: Round[];
   courses: Course[];
   currentRound: Round | null;
+  // Transient hint set by new-course on save and consumed by Course Selection
+  // on focus, so the freshly-created course can be pre-selected without
+  // threading params through router.back().
+  pendingSelectedCourseId: string | null;
+  setPendingSelectedCourseId: (id: string | null) => void;
   addCourse: (course: Course) => void;
   startRound: (courseId: string, players?: Player[]) => void;
   setHoleScore: (playerId: string, holeNumber: number, relativeScore: number) => void;
@@ -40,12 +45,15 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const [courses, setCourses] = useState<Course[]>(seededRecentCourses);
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   const [completedRounds, setCompletedRounds] = useState<Round[]>([]);
+  const [pendingSelectedCourseId, setPendingSelectedCourseId] = useState<string | null>(null);
 
   const value = useMemo<GolfRoundContextValue>(
     () => ({
       completedRounds,
       courses,
       currentRound,
+      pendingSelectedCourseId,
+      setPendingSelectedCourseId,
       addCourse: (course) => {
         setCourses((prev) => [...prev, course]);
       },
@@ -150,7 +158,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         setCurrentRound(null);
       },
     }),
-    [completedRounds, courses, currentRound]
+    [completedRounds, courses, currentRound, pendingSelectedCourseId]
   );
 
   return <GolfRoundContext.Provider value={value}>{children}</GolfRoundContext.Provider>;

@@ -15,11 +15,14 @@ export type Hole = {
   yardage?: number;
 };
 
+export type CourseSource = 'catalog' | 'custom';
+
 export type Course = {
   id: string;
   name: string;
   location: string;
   holes: Hole[];
+  source: CourseSource;
 };
 
 export type RoundScore = {

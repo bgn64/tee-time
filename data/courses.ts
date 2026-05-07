@@ -1,5 +1,5 @@
 /**
- * Seed course data used for recent courses and round setup in the prototype.
+ * Seed course data — stands in for the global catalog in the prototype.
  */
 
 import { Course } from '@/types/golf';
@@ -9,6 +9,7 @@ export const recentCourses: Course[] = [
     id: 'pine-ridge',
     name: 'Pine Ridge Golf Club',
     location: 'Seattle, WA',
+    source: 'catalog',
     holes: [
       { number: 1, par: 4, yardage: 390 },
       { number: 2, par: 3, yardage: 162 },
@@ -34,6 +35,7 @@ export const recentCourses: Course[] = [
     id: 'cedar-hills',
     name: 'Cedar Hills',
     location: 'Bellevue, WA',
+    source: 'catalog',
     holes: [
       { number: 1, par: 4, yardage: 372 },
       { number: 2, par: 4, yardage: 401 },
@@ -59,6 +61,7 @@ export const recentCourses: Course[] = [
     id: 'harbor-links',
     name: 'Harbor Links',
     location: 'Tacoma, WA',
+    source: 'catalog',
     holes: [
       { number: 1, par: 5, yardage: 530 },
       { number: 2, par: 4, yardage: 384 },

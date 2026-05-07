@@ -1133,8 +1133,10 @@
       <tr><td class="elem">Header — right (⋯ menu)</td><td>Tap</td><td>Opens the round actions bottom sheet. Visible only on the Scoring screen.</td></tr>
 
       <tr class="ref-section-row"><td colspan="3">Course Selection (Score tab root, no active round)</td></tr>
-      <tr><td class="elem">Course card</td><td>Tap</td><td>Marks card as selected (orange left border + tinted bg). Only one card can be selected at a time. Enables the Next button. <b>Initial state:</b> no card pre-selected; Next is disabled until the user picks one. The pre-selected Pine Ridge in the mock is illustrative only. <span style="color:#fbbf24;">TODO</span> — empty-library state (no saved courses) is undesigned.</td></tr>
-      <tr><td class="elem">+ Create New Course</td><td>Tap</td><td>Pushes the New Course form onto the Score stack. Returns to Course Selection on save with the new course pre-selected.</td></tr>
+      <tr><td class="elem">Course card</td><td>Tap</td><td>Marks card as selected (orange left border + tinted bg). Only one card can be selected at a time. Enables the Next button. <b>Initial state:</b> no card pre-selected; Next is disabled until the user picks one. Custom courses carry a small <b>CUSTOM</b> badge; cards on which the user has played show a "Played X ago" sub-line.</td></tr>
+      <tr><td class="elem">Search input</td><td>Type</td><td>Filters the visible list by name + location (substring, case-insensitive). While a query is active, tab labels gain count badges so the user can pivot tabs without retyping. Clearing the query restores the previously-active tab's full list.</td></tr>
+      <tr><td class="elem">Tab strip (All / Recents / Custom)</td><td>Tap</td><td>Switches the scope of the visible list. <b>All</b> = catalog ∪ customs sorted by recency-of-play then name. <b>Recents</b> = courses with at least one completed round, sorted by lastPlayedAt desc. <b>Custom</b> = user-created courses only. The active tab persists for the lifetime of this screen instance.</td></tr>
+      <tr><td class="elem">+ Create new course</td><td>Tap</td><td>Always rendered as the last item in the visible list (inline, not in a footer) — same dashed-neutral pattern as <b>+ Add Player</b> in Player Config. Label is <i>+ Create new course</i> by default; while a search query is active it becomes <i>+ Create "&lt;query&gt;"</i> and the query is passed as <code>prefillName</code> so the form's name field is pre-populated. Pushes the New Course form onto the Score stack. On save, the new course is added (<code>source: 'custom'</code>) and the screen pops back to Course Selection, which jumps to the All tab and pre-selects the new course.</td></tr>
       <tr><td class="elem">Next →</td><td>Tap</td><td>Pushes Player Config onto the stack. Carries the selected course id forward. <b>No commit yet</b> — no round is created at this point.</td></tr>
 
       <tr class="ref-section-row"><td colspan="3">Player Config (sub-screen of Score)</td></tr>
@@ -1168,8 +1170,9 @@
       <tr><td class="elem">Cancel / scrim</td><td>Tap</td><td>Dismisses the sheet without action.</td></tr>
 
       <tr class="ref-section-row"><td colspan="3">New Course form (sub-screen of Score)</td></tr>
-      <tr><td class="elem">Form fields</td><td>—</td><td><span style="color:#fbbf24;">TODO</span> — define fields (likely: name, location, hole count, per-hole par).</td></tr>
-      <tr><td class="elem">Save</td><td>Tap</td><td>Validates and persists the new course. Pops back to Course Selection with the new course pre-selected.</td></tr>
+      <tr><td class="elem">Form fields</td><td>—</td><td>Minimum implemented: name, location, hole count (1–18), per-hole par. <span style="color:#fbbf24;">TODO</span> — advanced fields (tee selection, handicap index, per-hole yardage) still undecided.</td></tr>
+      <tr><td class="elem">Name field</td><td>—</td><td>Pre-filled with the search query if the form was opened from the no-results "+ Create" CTA on Course Selection.</td></tr>
+      <tr><td class="elem">Save</td><td>Tap</td><td>Persists the new course with <code>source: 'custom'</code>, parks the new course id on context (<code>pendingSelectedCourseId</code>), and pops back. Course Selection consumes the id on focus, jumps to the All tab, and pre-selects the new course.</td></tr>
       <tr><td class="elem">‹ Course (header)</td><td>Tap</td><td>Discards form input and pops back.</td></tr>
 
     </tbody>
@@ -1182,7 +1185,7 @@
   <b>Items still requiring design decisions before implementation:</b><br>
   &bull; <b>Home tab content</b> — what does the user see on the default landing tab?<br>
   &bull; <b>You tab content</b> — profile, stats, theme picker, settings?<br>
-  &bull; <b>New Course form fields</b> — minimum: name, location, hole count, per-hole par. Tee selection / handicap index / yardage per hole?<br>
+  &bull; <b>Advanced course fields</b> — minimum (name, location, hole count, per-hole par) is implemented. Still open: tee selection, handicap index, per-hole yardage.<br>
   &bull; <b>"Other" score support</b> — current chips only cover ±2. Need an affordance for triples, eagles, hole-in-one, snowman, etc. (likely an "Other" chip opening a numeric picker).<br>
   &bull; <b>Profile/settings dot interaction</b> — what happens when the user taps the right-slot avatar on Home / You / Course Selection?<br>
   &bull; <b>Create new player flow</b> — from inside the Add Player sheet, how is a brand-new player created?<br>

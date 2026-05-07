@@ -1,14 +1,15 @@
 /**
  * Course creation form. Pushed sub-screen of the Score tab. Header left =
  * "‹ Course" back button. On save, the new course is added to the library
- * and the screen pops back to Course Selection.
+ * (tagged source: 'custom') and the screen pops back to Course Selection,
+ * which consumes pendingSelectedCourseId from context and pre-selects the
+ * new course on the All tab.
  *
- * TODO (per design doc): on save, pop back with the new course pre-selected
- * on the Course Selection screen (requires lifting selection state above
- * Course Selection or returning a route param).
+ * Accepts a `prefillName` route param so the search-no-results "+ Create"
+ * CTA can carry the user's query into the name field.
  */
 
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -18,7 +19,8 @@ import { useTheme } from '@/state/ThemeContext';
 import { Hole } from '@/types/golf';
 
 export default function NewCourseScreen() {
-  const { addCourse } = useGolfRound();
+  const { prefillName } = useLocalSearchParams<{ prefillName?: string }>();
+  const { addCourse, setPendingSelectedCourseId } = useGolfRound();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -27,7 +29,7 @@ export default function NewCourseScreen() {
     right: { kind: 'profile' },
   });
 
-  const [name, setName] = useState('');
+  const [name, setName] = useState(prefillName ?? '');
   const [location, setLocation] = useState('');
   const [holeCount, setHoleCount] = useState('18');
   const [pars, setPars] = useState<string[]>(Array(18).fill('4'));
@@ -57,12 +59,15 @@ export default function NewCourseScreen() {
       par: Math.max(1, parseInt(pars[i], 10) || 4),
     }));
 
+    const newId = `course-${Date.now()}`;
     addCourse({
-      id: `course-${Date.now()}`,
+      id: newId,
       name: name.trim(),
       location: location.trim(),
+      source: 'custom',
       holes,
     });
+    setPendingSelectedCourseId(newId);
 
     router.back();
   }
