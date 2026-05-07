@@ -41,7 +41,6 @@ export function PlayerBottomSheet({ visible, onClose, onSelectPlayer, excludeIds
     const player: Player = {
       id: `player-${Date.now()}`,
       name: newName.trim(),
-      isUser: false,
       color: selectedColor,
     };
     addPlayer(player);

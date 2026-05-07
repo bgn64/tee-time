@@ -5,7 +5,7 @@
 import { createContext, PropsWithChildren, useContext, useMemo, useState } from 'react';
 
 import { recentCourses as seededRecentCourses } from '@/data/courses';
-import { Course, Player, Round, RoundScore } from '@/types/golf';
+import { Course, Round, RoundScore, ScoringRule, Team } from '@/types/golf';
 
 type GolfRoundContextValue = {
   completedRounds: Round[];
@@ -17,9 +17,14 @@ type GolfRoundContextValue = {
   pendingSelectedCourseId: string | null;
   setPendingSelectedCourseId: (id: string | null) => void;
   addCourse: (course: Course) => void;
-  startRound: (courseId: string, players?: Player[]) => void;
-  setHoleScore: (playerId: string, holeNumber: number, relativeScore: number) => void;
-  setCustomHoleScore: (playerId: string, holeNumber: number, strokes: number) => void;
+  startRound: (
+    courseId: string,
+    playerIds?: string[],
+    scoringRule?: ScoringRule,
+    teams?: Team[]
+  ) => void;
+  setHoleScore: (scorerId: string, holeNumber: number, relativeScore: number) => void;
+  setCustomHoleScore: (scorerId: string, holeNumber: number, strokes: number) => void;
   goToPreviousHole: () => void;
   goToNextHole: () => void;
   completeCurrentRound: () => void;
@@ -31,7 +36,7 @@ const GolfRoundContext = createContext<GolfRoundContextValue | undefined>(undefi
 function replaceScore(scores: RoundScore[], nextScore: RoundScore) {
   const existingScoreIndex = scores.findIndex(
     (score) =>
-      score.playerId === nextScore.playerId && score.holeNumber === nextScore.holeNumber
+      score.scorerId === nextScore.scorerId && score.holeNumber === nextScore.holeNumber
   );
 
   if (existingScoreIndex === -1) {
@@ -57,7 +62,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       addCourse: (course) => {
         setCourses((prev) => [...prev, course]);
       },
-      startRound: (courseId, players = []) => {
+      startRound: (courseId, playerIds = [], scoringRule = 'stroke', teams) => {
         const course = courses.find((c) => c.id === courseId);
 
         if (!course) {
@@ -67,13 +72,15 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         setCurrentRound({
           id: `round-${Date.now()}`,
           course,
-          players,
+          scoringRule,
+          playerIds,
+          teams,
           currentHoleNumber: 1,
           scores: [],
           startedAt: new Date().toISOString(),
         });
       },
-      setHoleScore: (playerId, holeNumber, relativeScore) => {
+      setHoleScore: (scorerId, holeNumber, relativeScore) => {
         setCurrentRound((round) => {
           if (!round) {
             throw new Error('Cannot set score without a current round.');
@@ -86,7 +93,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           }
 
           const strokes = Math.max(1, hole.par + relativeScore);
-          const nextScore = { playerId, holeNumber, strokes };
+          const nextScore = { scorerId, holeNumber, strokes };
 
           return {
             ...round,
@@ -94,7 +101,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           };
         });
       },
-      setCustomHoleScore: (playerId, holeNumber, strokes) => {
+      setCustomHoleScore: (scorerId, holeNumber, strokes) => {
         setCurrentRound((round) => {
           if (!round) {
             throw new Error('Cannot set custom score without a current round.');
@@ -106,7 +113,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             throw new Error(`Cannot set custom score for unknown hole: ${holeNumber}`);
           }
 
-          const nextScore = { playerId, holeNumber, strokes: Math.max(1, strokes) };
+          const nextScore = { scorerId, holeNumber, strokes: Math.max(1, strokes) };
 
           return {
             ...round,

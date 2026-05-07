@@ -10,8 +10,11 @@ import { Player } from '@/types/golf';
 type PlayerContextValue = {
   allPlayers: Player[];
   recentPlayers: Player[];
+  defaultPlayerId: string | null;
   addPlayer: (player: Player) => void;
   markRecent: (playerId: string) => void;
+  setDefaultPlayerId: (id: string | null) => void;
+  getPlayer: (id: string) => Player | undefined;
 };
 
 const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
@@ -19,6 +22,7 @@ const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
 export function PlayerProvider({ children }: PropsWithChildren) {
   const [allPlayers, setAllPlayers] = useState<Player[]>(defaultPlayers);
   const [recentIds, setRecentIds] = useState<string[]>(defaultPlayers.map((p) => p.id));
+  const [defaultPlayerId, setDefaultPlayerId] = useState<string | null>('user');
 
   const addPlayer = useCallback((player: Player) => {
     setAllPlayers((prev) => [...prev, player]);
@@ -28,6 +32,11 @@ export function PlayerProvider({ children }: PropsWithChildren) {
   const markRecent = useCallback((playerId: string) => {
     setRecentIds((prev) => [playerId, ...prev.filter((id) => id !== playerId)]);
   }, []);
+
+  const getPlayer = useCallback(
+    (id: string) => allPlayers.find((p) => p.id === id),
+    [allPlayers]
+  );
 
   const recentPlayers = useMemo(
     () =>
@@ -39,8 +48,16 @@ export function PlayerProvider({ children }: PropsWithChildren) {
   );
 
   const value = useMemo<PlayerContextValue>(
-    () => ({ allPlayers, recentPlayers, addPlayer, markRecent }),
-    [allPlayers, recentPlayers, addPlayer, markRecent]
+    () => ({
+      allPlayers,
+      recentPlayers,
+      defaultPlayerId,
+      addPlayer,
+      markRecent,
+      setDefaultPlayerId,
+      getPlayer,
+    }),
+    [allPlayers, recentPlayers, defaultPlayerId, addPlayer, markRecent, getPlayer]
   );
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;

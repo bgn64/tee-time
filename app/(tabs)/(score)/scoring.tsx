@@ -1,8 +1,9 @@
 /**
  * Scoring screen — root of the Score tab once a round is active (Model B
- * "locked round"). Every player is rendered as an always-expanded card with
- * labeled score chips; chip size scales by player count (60 / 44 / 42 px) for
- * touch ergonomics, but layout and behavior are otherwise uniform.
+ * "locked round"). Each scoring entity is rendered as an always-expanded card
+ * with labeled score chips. Stroke rounds: one card per player; Scramble
+ * rounds: one card per team with a single chip row (one ball per team).
+ * Chip size scales by entity count (60 / 44 / 42 px) for touch ergonomics.
  *
  * Header chrome: left = "SCORE" (no back button), right = ⋯ overflow menu.
  * Hardware back is intercepted on Android so the locked round can't be exited
@@ -17,6 +18,7 @@ import { ConfirmAbandonSheet } from '@/components/ConfirmAbandonSheet';
 import { RoundActionsSheet } from '@/components/RoundActionsSheet';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
+import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Round } from '@/types/golf';
 
@@ -39,11 +41,13 @@ function scoreLabel(relative: number): string {
   }
 }
 
-function getPlayerTotalRelative(round: Round, playerId: string): string {
+// Total relative-to-par for any scorer (player in stroke, team in scramble).
+// Both rounds shape scores the same way once the scorer id resolves.
+function getScorerTotalRelative(round: Round, scorerId: string): string {
   let total = 0;
   let holesScored = 0;
   for (const score of round.scores) {
-    if (score.playerId !== playerId) continue;
+    if (score.scorerId !== scorerId) continue;
     const hole = round.course.holes.find((h) => h.number === score.holeNumber);
     if (!hole) continue;
     total += score.strokes - hole.par;
@@ -65,6 +69,7 @@ export default function ScoringScreen() {
     completeCurrentRound,
     abandonCurrentRound,
   } = useGolfRound();
+  const { getPlayer } = usePlayers();
 
   const [actionsOpen, setActionsOpen] = useState(false);
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
@@ -84,15 +89,20 @@ export default function ScoringScreen() {
     }, [])
   );
 
-  const playerCount = currentRound?.players.length ?? 0;
-  const chipSize = playerCount === 1 ? 60 : playerCount === 2 ? 44 : 42;
+  // Chip size scales by the number of cards on screen (one per scoring entity).
+  const isScramble =
+    currentRound?.scoringRule === 'scramble' && (currentRound.teams?.length ?? 0) > 0;
+  const entityCount = isScramble
+    ? currentRound!.teams!.length
+    : currentRound?.playerIds.length ?? 0;
+  const chipSize = entityCount === 1 ? 60 : entityCount === 2 ? 44 : 42;
 
   const styles = useMemo(() => makeStyles(colors, chipSize), [colors, chipSize]);
 
   const handleScore = useCallback(
-    (playerId: string, relative: number) => {
+    (scorerId: string, relative: number) => {
       if (!currentRound) return;
-      setHoleScore(playerId, currentRound.currentHoleNumber, relative);
+      setHoleScore(scorerId, currentRound.currentHoleNumber, relative);
     },
     [currentRound, setHoleScore]
   );
@@ -110,14 +120,19 @@ export default function ScoringScreen() {
 
   const isLastHole = currentHole.number === currentRound.course.holes.length;
 
-  const allPlayersScoredThisHole = currentRound.players.every((p) =>
+  // Scorer ids that need a recorded score to advance the hole.
+  const requiredScorerIds = isScramble
+    ? currentRound.teams!.map((t) => t.id)
+    : currentRound.playerIds;
+
+  const allScoredThisHole = requiredScorerIds.every((sid) =>
     currentRound.scores.some(
-      (s) => s.playerId === p.id && s.holeNumber === currentHole.number
+      (s) => s.scorerId === sid && s.holeNumber === currentHole.number
     )
   );
 
   function handleNext() {
-    if (!allPlayersScoredThisHole) return;
+    if (!allScoredThisHole) return;
     if (isLastHole) {
       completeCurrentRound();
       router.replace('/(tabs)/(score)');
@@ -154,9 +169,9 @@ export default function ScoringScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.dotsRow}>
           {currentRound.course.holes.map((hole) => {
-            const allScored = currentRound.players.every((p) =>
+            const allScored = requiredScorerIds.every((sid) =>
               currentRound.scores.some(
-                (s) => s.playerId === p.id && s.holeNumber === hole.number
+                (s) => s.scorerId === sid && s.holeNumber === hole.number
               )
             );
             const isCurrent = hole.number === currentRound.currentHoleNumber;
@@ -189,53 +204,128 @@ export default function ScoringScreen() {
           </View>
         </View>
 
-        {currentRound.players.map((player) => {
-          const score = currentRound.scores.find(
-            (s) => s.playerId === player.id && s.holeNumber === currentHole.number
-          );
-          const relativeScore = score ? score.strokes - currentHole.par : null;
-          const totalStr = getPlayerTotalRelative(currentRound, player.id);
-
-          return (
-            <View key={player.id} style={styles.playerCard}>
-              <View style={styles.playerHeader}>
+        {isScramble
+          ? currentRound.teams!.map((team) => {
+              const score = currentRound.scores.find(
+                (s) => s.scorerId === team.id && s.holeNumber === currentHole.number
+              );
+              const relativeScore = score ? score.strokes - currentHole.par : null;
+              const totalStr = getScorerTotalRelative(currentRound, team.id);
+              return (
                 <View
-                  style={[styles.playerAvatar, { backgroundColor: player.color || colors.primary }]}>
-                  <Text style={styles.playerAvatarText}>{player.name[0]}</Text>
-                </View>
-                <Text style={styles.playerName}>{player.name}</Text>
-                {totalStr ? (
-                  <View style={styles.totalBadge}>
-                    <Text style={styles.totalBadgeText}>{totalStr}</Text>
-                  </View>
-                ) : (
-                  <View style={[styles.totalBadge, styles.totalBadgeEmpty]}>
-                    <Text style={styles.totalBadgeEmptyText}>—</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.chipsContainer}>
-                {SCORE_OPTIONS.map((rel) => {
-                  const isSelected = relativeScore === rel;
-                  return (
-                    <Pressable
-                      key={rel}
-                      onPress={() => handleScore(player.id, rel)}
-                      style={styles.chipWrapper}>
-                      <View style={[styles.chip, isSelected && styles.chipSelected]}>
-                        <Text style={[styles.chipText, isSelected && styles.chipTextSelected]}>
-                          {formatScore(rel)}
-                        </Text>
+                  key={team.id}
+                  style={[styles.teamCard, { borderLeftColor: team.color }]}>
+                  <View style={styles.teamHeader}>
+                    <View style={styles.avatarStack}>
+                      {team.playerIds.map((pid) => {
+                        const p = getPlayer(pid);
+                        if (!p) return null;
+                        return (
+                          <View
+                            key={pid}
+                            style={[
+                              styles.stackAvatar,
+                              { backgroundColor: p.color || colors.primary },
+                            ]}>
+                            <Text style={styles.stackAvatarText}>{p.name[0]}</Text>
+                          </View>
+                        );
+                      })}
+                    </View>
+                    <Text style={[styles.teamLabel, { color: team.color }]}>
+                      {team.name.toUpperCase()}
+                    </Text>
+                    {totalStr ? (
+                      <View style={styles.totalBadge}>
+                        <Text style={styles.totalBadgeText}>{totalStr}</Text>
                       </View>
-                      <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          );
-        })}
+                    ) : (
+                      <View style={[styles.totalBadge, styles.totalBadgeEmpty]}>
+                        <Text style={styles.totalBadgeEmptyText}>—</Text>
+                      </View>
+                    )}
+                  </View>
+                  <View style={styles.chipsContainer}>
+                    {SCORE_OPTIONS.map((rel) => {
+                      const isSelected = relativeScore === rel;
+                      return (
+                        <Pressable
+                          key={rel}
+                          onPress={() => handleScore(team.id, rel)}
+                          style={styles.chipWrapper}>
+                          <View style={[styles.chip, isSelected && styles.chipSelected]}>
+                            <Text
+                              style={[
+                                styles.chipText,
+                                isSelected && styles.chipTextSelected,
+                              ]}>
+                              {formatScore(rel)}
+                            </Text>
+                          </View>
+                          <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })
+          : currentRound.playerIds.map((id) => {
+              const player = getPlayer(id);
+              if (!player) return null;
+              const score = currentRound.scores.find(
+                (s) => s.scorerId === player.id && s.holeNumber === currentHole.number
+              );
+              const relativeScore = score ? score.strokes - currentHole.par : null;
+              const totalStr = getScorerTotalRelative(currentRound, player.id);
+
+              return (
+                <View key={player.id} style={styles.playerCard}>
+                  <View style={styles.playerHeader}>
+                    <View
+                      style={[
+                        styles.playerAvatar,
+                        { backgroundColor: player.color || colors.primary },
+                      ]}>
+                      <Text style={styles.playerAvatarText}>{player.name[0]}</Text>
+                    </View>
+                    <Text style={styles.playerName}>{player.name}</Text>
+                    {totalStr ? (
+                      <View style={styles.totalBadge}>
+                        <Text style={styles.totalBadgeText}>{totalStr}</Text>
+                      </View>
+                    ) : (
+                      <View style={[styles.totalBadge, styles.totalBadgeEmpty]}>
+                        <Text style={styles.totalBadgeEmptyText}>—</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={styles.chipsContainer}>
+                    {SCORE_OPTIONS.map((rel) => {
+                      const isSelected = relativeScore === rel;
+                      return (
+                        <Pressable
+                          key={rel}
+                          onPress={() => handleScore(player.id, rel)}
+                          style={styles.chipWrapper}>
+                          <View style={[styles.chip, isSelected && styles.chipSelected]}>
+                            <Text
+                              style={[
+                                styles.chipText,
+                                isSelected && styles.chipTextSelected,
+                              ]}>
+                              {formatScore(rel)}
+                            </Text>
+                          </View>
+                          <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                </View>
+              );
+            })}
       </ScrollView>
 
       <View style={styles.navRow}>
@@ -253,10 +343,10 @@ export default function ScoringScreen() {
             styles.navBtn,
             styles.navBtnNext,
             isLastHole && styles.navBtnFinish,
-            !allPlayersScoredThisHole && styles.navBtnDisabled,
+            !allScoredThisHole && styles.navBtnDisabled,
           ]}
           onPress={handleNext}
-          disabled={!allPlayersScoredThisHole}>
+          disabled={!allScoredThisHole}>
           <Text style={styles.navBtnNextText}>
             {isLastHole ? '🏁 Finish Round' : 'Next →'}
           </Text>
@@ -343,6 +433,45 @@ function makeStyles(
       borderColor: colors.border,
       marginBottom: 10,
       padding: 12,
+    },
+    teamCard: {
+      backgroundColor: colors.cardBg,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderLeftWidth: 4,
+      marginBottom: 12,
+      padding: 12,
+    },
+    teamHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    avatarStack: {
+      flexDirection: 'row',
+    },
+    stackAvatar: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: -8,
+      borderWidth: 2,
+      borderColor: colors.cardBg,
+    },
+    stackAvatarText: {
+      color: '#ffffff',
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    teamLabel: {
+      flex: 1,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 1,
+      marginLeft: 4,
     },
     playerHeader: {
       flexDirection: 'row',

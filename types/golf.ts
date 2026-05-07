@@ -5,7 +5,6 @@
 export type Player = {
   id: string;
   name: string;
-  isUser: boolean;
   color?: string;
 };
 
@@ -25,16 +24,29 @@ export type Course = {
   source: CourseSource;
 };
 
+export type ScoringRule = 'stroke' | 'scramble';
+
 export type RoundScore = {
-  playerId: string;
+  // In stroke rounds this is a player id; in scramble rounds it is a team id.
+  scorerId: string;
   holeNumber: number;
   strokes: number;
+};
+
+export type Team = {
+  id: string;
+  name: string;
+  color: string;
+  playerIds: string[];
 };
 
 export type Round = {
   id: string;
   course: Course;
-  players: Player[];
+  scoringRule: ScoringRule;
+  playerIds: string[];
+  // Required when scoringRule === 'scramble'; absent in stroke rounds.
+  teams?: Team[];
   currentHoleNumber: number;
   scores: RoundScore[];
   startedAt: string;
