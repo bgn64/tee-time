@@ -111,10 +111,14 @@ export default function CourseSelectionScreen() {
     }, [pendingSelectedCourseId, setPendingSelectedCourseId])
   );
 
-  // Resume an in-progress round from persisted state. If the user had a
-  // round going when the app last closed, AsyncStorage hydration repopulates
-  // currentRound on launch. Tapping the Score tab should drop them straight
-  // back into scoring instead of showing course selection.
+  // Resume an in-progress round whenever the Score tab focuses with a
+  // currentRound present. Two scenarios this covers:
+  //   1. Cold launch with a persisted round — Score is the default tab
+  //      (see (tabs)/_layout.tsx), so this effect fires immediately and
+  //      drops the user straight into /scoring instead of course selection.
+  //   2. Mid-session navigation — user is on /scoring, switches to another
+  //      tab, then taps Score again. The stack would otherwise return to
+  //      this index; this jump keeps them in the round.
   const { currentRound } = useGolfRound();
   useFocusEffect(
     useCallback(() => {

@@ -4,6 +4,11 @@
  *
  * Visual order matches docs/tab-layout-mockups.html (with Score in the middle
  * for thumb-zone access). Feed is a placeholder until Phase 3 social work lands.
+ *
+ * `initialRouteName="(score)"` makes Score the default landing tab on cold
+ * launch without altering the tab-bar order. Combined with the resume effect
+ * inside `(score)/index.tsx`, this means a user with a persisted in-progress
+ * round is dropped straight back into `/scoring` on relaunch.
  */
 
 import React from 'react';
@@ -24,6 +29,7 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      initialRouteName="(score)"
       screenOptions={{
         headerShown: false,
         // Per design mock: active tab uses the theme accent color.
