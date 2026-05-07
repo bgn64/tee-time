@@ -1,139 +1,331 @@
 /**
- * Course creation form. Pushed sub-screen of the Score tab. Header left =
- * "‹ Course" back button. On save, the new course is added to the library
- * (tagged source: 'custom') and the screen pops back to Course Selection,
- * which consumes pendingSelectedCourseId from context and pre-selects the
- * new course on the All tab.
+ * Unified course create / edit form. The same screen handles both modes;
+ * presence of a `courseId` route param flips it into edit mode.
  *
- * Accepts a `prefillName` route param so the search-no-results "+ Create"
- * CTA can carry the user's query into the name field.
+ *   Create mode:  push without params (or with `prefillName` from search)
+ *   Edit mode:    push with { courseId } (only valid for source: 'custom')
+ *
+ * Scope simplifications (per docs/phase-1-mockups.html):
+ *   · Always 18 holes — no hole-count input.
+ *   · Pars: tap-to-cycle 3 → 4 → 5 (default 4 / par 72). Color-coded.
+ *   · Long-press a par cell → bottom sheet with par picker + yardage input.
+ *     Yardage is the only way to enter optional `Hole.yardage`.
+ *   · Location is optional; empty string is valid.
+ *   · Yardage stays an optional `Hole.yardage?` field on the schema.
+ *
+ * Header chrome: left = "‹ Course" back button. The form uses no right slot.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
+import { HoleDetailSheet } from '@/components/HoleDetailSheet';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Hole } from '@/types/golf';
 
-export default function NewCourseScreen() {
-  const { prefillName } = useLocalSearchParams<{ prefillName?: string }>();
-  const { addCourse, setPendingSelectedCourseId } = useGolfRound();
+const HOLE_COUNT = 18;
+const DEFAULT_PAR = 3;
+const PAR_CYCLE = [3, 4, 5] as const;
+
+function nextPar(current: number): number {
+  const idx = PAR_CYCLE.indexOf(current as 3 | 4 | 5);
+  if (idx === -1) return DEFAULT_PAR;
+  return PAR_CYCLE[(idx + 1) % PAR_CYCLE.length];
+}
+
+function buildHoles(pars: number[], yardages: (number | null)[]): Hole[] {
+  return Array.from({ length: HOLE_COUNT }, (_, i) => {
+    const yardage = yardages[i];
+    return {
+      number: i + 1,
+      par: Math.max(1, pars[i] ?? DEFAULT_PAR),
+      ...(yardage !== null && yardage > 0 ? { yardage } : {}),
+    };
+  });
+}
+
+export default function CourseFormScreen() {
+  const { prefillName, courseId } = useLocalSearchParams<{
+    prefillName?: string;
+    courseId?: string;
+  }>();
   const { colors } = useTheme();
+  const { courses, addCourse, updateCourse, removeCourse, setPendingSelectedCourseId } =
+    useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Lazy-init from the editing course if present.
+  const editingCourse = useMemo(() => {
+    if (!courseId) return null;
+    return courses.find((c) => c.id === courseId) ?? null;
+  }, [courseId, courses]);
+
+  const isEditMode = Boolean(editingCourse);
+
+  const [name, setName] = useState<string>(() => editingCourse?.name ?? prefillName ?? '');
+  const [location, setLocation] = useState<string>(() => editingCourse?.location ?? '');
+  const [pars, setPars] = useState<number[]>(() =>
+    Array.from({ length: HOLE_COUNT }, (_, i) =>
+      editingCourse?.holes[i]?.par ?? DEFAULT_PAR
+    )
+  );
+  const [yardages, setYardages] = useState<(number | null)[]>(() =>
+    Array.from({ length: HOLE_COUNT }, (_, i) =>
+      editingCourse?.holes[i]?.yardage ?? null
+    )
+  );
+  const [editingHole, setEditingHole] = useState<number | null>(null);
 
   useScreenHeader({
     left: { kind: 'back', label: 'Course', onPress: () => router.back() },
-    right: { kind: 'profile' },
+    right: { kind: 'none' },
   });
 
-  const [name, setName] = useState(prefillName ?? '');
-  const [location, setLocation] = useState('');
-  const [holeCount, setHoleCount] = useState('18');
-  const [pars, setPars] = useState<string[]>(Array(18).fill('4'));
-
-  const parsedHoleCount = Math.max(1, Math.min(18, parseInt(holeCount, 10) || 18));
-
-  function updateHoleCount(text: string) {
-    setHoleCount(text);
-    const count = Math.max(1, Math.min(18, parseInt(text, 10) || 18));
-    setPars((prev) => {
-      if (count > prev.length) {
-        return [...prev, ...Array(count - prev.length).fill('4')];
-      }
-      return prev.slice(0, count);
-    });
+  function handleParTap(index: number) {
+    setPars((prev) => prev.map((p, i) => (i === index ? nextPar(p) : p)));
   }
 
-  function updatePar(index: number, value: string) {
-    setPars((prev) => prev.map((p, i) => (i === index ? value : p)));
+  function handleParLongPress(index: number) {
+    setEditingHole(index);
   }
 
-  function saveCourse() {
+  function handleSheetSave(par: number, yardage: number | null) {
+    if (editingHole === null) return;
+    setPars((prev) => prev.map((p, i) => (i === editingHole ? par : p)));
+    setYardages((prev) => prev.map((y, i) => (i === editingHole ? yardage : y)));
+    setEditingHole(null);
+  }
+
+  function handleSheetCancel() {
+    setEditingHole(null);
+  }
+
+  function handleSave() {
     if (!name.trim()) return;
+    const holes = buildHoles(pars, yardages);
 
-    const holes: Hole[] = Array.from({ length: parsedHoleCount }, (_, i) => ({
-      number: i + 1,
-      par: Math.max(1, parseInt(pars[i], 10) || 4),
-    }));
-
-    const newId = `course-${Date.now()}`;
-    addCourse({
-      id: newId,
-      name: name.trim(),
-      location: location.trim(),
-      source: 'custom',
-      holes,
-    });
-    setPendingSelectedCourseId(newId);
-
+    if (editingCourse) {
+      updateCourse(editingCourse.id, {
+        name: name.trim(),
+        location: location.trim(),
+        holes,
+      });
+      setPendingSelectedCourseId(editingCourse.id);
+    } else {
+      const newId = `course-${Date.now()}`;
+      addCourse({
+        id: newId,
+        name: name.trim(),
+        location: location.trim(),
+        source: 'custom',
+        holes,
+      });
+      setPendingSelectedCourseId(newId);
+    }
     router.back();
   }
 
+  function handleDelete() {
+    if (!editingCourse) return;
+    removeCourse(editingCourse.id);
+    router.back();
+  }
+
+  const front9 = pars.slice(0, 9);
+  const back9 = pars.slice(9, 18);
+  const front9Total = front9.reduce((t, p) => t + p, 0);
+  const back9Total = back9.reduce((t, p) => t + p, 0);
+  const totalPar = front9Total + back9Total;
+
+  const yardagesEntered = yardages.filter((y) => y !== null && y > 0).length;
+  const totalYards = yardages.reduce<number>((t, y) => t + (y ?? 0), 0);
+
+  const editingHoleNumber = editingHole !== null ? editingHole + 1 : null;
+  const editingPar = editingHole !== null ? pars[editingHole] : DEFAULT_PAR;
+  const editingYardage = editingHole !== null ? yardages[editingHole] : null;
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Create a Course</Text>
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>{isEditMode ? 'Edit Course' : 'New Course'}</Text>
 
-      <View style={styles.field}>
-        <Text style={styles.label}>Course Name</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Pine Ridge Golf Club"
-          placeholderTextColor={colors.textMuted}
-        />
-      </View>
-
-      <View style={styles.field}>
-        <Text style={styles.label}>Location</Text>
-        <TextInput
-          style={styles.input}
-          value={location}
-          onChangeText={setLocation}
-          placeholder="e.g. Seattle, WA"
-          placeholderTextColor={colors.textMuted}
-        />
-      </View>
-
-      <View style={styles.field}>
-        <Text style={styles.label}>Number of Holes</Text>
-        <TextInput
-          style={styles.input}
-          value={holeCount}
-          onChangeText={updateHoleCount}
-          keyboardType="number-pad"
-          placeholder="18"
-          placeholderTextColor={colors.textMuted}
-        />
-      </View>
-
-      <View style={styles.field}>
-        <Text style={styles.label}>Par per Hole</Text>
-        <View style={styles.parGrid}>
-          {Array.from({ length: parsedHoleCount }, (_, i) => (
-            <View key={i} style={styles.parItem}>
-              <Text style={styles.parLabel}>{i + 1}</Text>
-              <TextInput
-                style={styles.parInput}
-                value={pars[i]}
-                onChangeText={(text) => updatePar(i, text)}
-                keyboardType="number-pad"
-              />
-            </View>
-          ))}
+        <View style={styles.field}>
+          <Text style={styles.label}>Course Name</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g. Pine Ridge Golf Club"
+            placeholderTextColor={colors.textMuted}
+          />
         </View>
-      </View>
 
-      <Pressable
-        style={[styles.saveButton, !name.trim() && styles.disabledButton]}
-        onPress={saveCourse}
-        disabled={!name.trim()}>
-        <Text style={styles.saveButtonText}>Save Course</Text>
-      </Pressable>
-    </ScrollView>
+        <View style={styles.field}>
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>Location</Text>
+            <Text style={styles.optChip}>OPTIONAL</Text>
+          </View>
+          <TextInput
+            style={styles.input}
+            value={location}
+            onChangeText={setLocation}
+            placeholder="e.g. Seattle, WA"
+            placeholderTextColor={colors.textMuted}
+          />
+        </View>
+
+        <View style={styles.parsSection}>
+          <Text style={styles.label}>Pars per Hole</Text>
+
+          <ParGrid
+            styles={styles}
+            colors={colors}
+            pars={front9}
+            yardages={yardages.slice(0, 9)}
+            startIndex={0}
+            label="FRONT 9"
+            parTotal={front9Total}
+            onTap={handleParTap}
+            onLongPress={handleParLongPress}
+          />
+
+          <View style={{ height: 12 }} />
+
+          <ParGrid
+            styles={styles}
+            colors={colors}
+            pars={back9}
+            yardages={yardages.slice(9, 18)}
+            startIndex={9}
+            label="BACK 9"
+            parTotal={back9Total}
+            onTap={handleParTap}
+            onLongPress={handleParLongPress}
+          />
+
+          <Text style={styles.tipCaption}>
+            Tap a hole to cycle pars · long-press for yardage
+          </Text>
+        </View>
+
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>TOTAL PAR</Text>
+          <Text style={styles.totalNumber}>{totalPar}</Text>
+        </View>
+
+        {yardagesEntered > 0 && (
+          <View style={styles.totalRow}>
+            <Text style={styles.totalLabel}>
+              YARDAGES · {yardagesEntered} of {HOLE_COUNT}
+            </Text>
+            <Text style={styles.totalNumber}>{totalYards.toLocaleString()} yds</Text>
+          </View>
+        )}
+
+        <Pressable
+          style={[styles.saveButton, !name.trim() && styles.disabledButton]}
+          onPress={handleSave}
+          disabled={!name.trim()}>
+          <Text style={styles.saveButtonText}>
+            {isEditMode ? 'Save Changes' : 'Create'}
+          </Text>
+        </Pressable>
+
+        {isEditMode && (
+          <Pressable style={styles.deleteButton} onPress={handleDelete}>
+            <Text style={styles.deleteButtonText}>Delete course</Text>
+          </Pressable>
+        )}
+      </ScrollView>
+
+      <HoleDetailSheet
+        visible={editingHole !== null}
+        holeNumber={editingHoleNumber}
+        initialPar={editingPar}
+        initialYardage={editingYardage}
+        onCancel={handleSheetCancel}
+        onSave={handleSheetSave}
+      />
+    </KeyboardAvoidingView>
+  );
+}
+
+type ParGridProps = {
+  styles: ReturnType<typeof makeStyles>;
+  colors: ReturnType<typeof useTheme>['colors'];
+  pars: number[];
+  yardages: (number | null)[];
+  startIndex: number;
+  label: string;
+  parTotal: number;
+  onTap: (index: number) => void;
+  onLongPress: (index: number) => void;
+};
+
+function ParGrid({
+  styles,
+  colors,
+  pars,
+  yardages,
+  startIndex,
+  label,
+  parTotal,
+  onTap,
+  onLongPress,
+}: ParGridProps) {
+  return (
+    <View>
+      <View style={styles.nineLabelRow}>
+        <Text style={styles.nineLabelText}>{label}</Text>
+        <Text style={styles.nineTotalText}>{parTotal}</Text>
+      </View>
+      <View style={styles.parRow}>
+        {pars.map((par, i) => {
+          const absoluteIndex = startIndex + i;
+          const hasYardage = yardages[i] !== null && (yardages[i] ?? 0) > 0;
+          const par3 = par === 3;
+          const par5 = par === 5;
+          return (
+            <Pressable
+              key={absoluteIndex}
+              onPress={() => onTap(absoluteIndex)}
+              onLongPress={() => onLongPress(absoluteIndex)}
+              delayLongPress={300}
+              style={({ pressed }) => [
+                styles.parCell,
+                par3 && { backgroundColor: colors.primary + '22' },
+                par5 && { backgroundColor: colors.accent + '22' },
+                pressed && { opacity: 0.6 },
+              ]}>
+              <Text style={styles.parCellHole}>{absoluteIndex + 1}</Text>
+              <Text
+                style={[
+                  styles.parCellNumber,
+                  par3 && { color: colors.primaryDark },
+                  par5 && { color: colors.accent },
+                ]}>
+                {par}
+              </Text>
+              {hasYardage && <View style={[styles.yardageMark, { backgroundColor: colors.accent }]} />}
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -144,23 +336,43 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.background,
     },
     content: {
-      padding: 24,
+      padding: 20,
       paddingBottom: 40,
     },
     title: {
-      fontSize: 26,
+      fontSize: 24,
       fontWeight: '800',
       color: colors.textTitle,
-      marginBottom: 8,
+      marginBottom: 12,
     },
     field: {
-      marginTop: 22,
+      marginTop: 16,
+    },
+    labelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
     },
     label: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.textTitle,
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textMuted,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
       marginBottom: 8,
+    },
+    optChip: {
+      fontSize: 9,
+      fontWeight: '800',
+      color: colors.accent,
+      backgroundColor: colors.accent + '22',
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      borderRadius: 4,
+      letterSpacing: 0.5,
+      marginBottom: 8,
+      overflow: 'hidden',
     },
     input: {
       backgroundColor: colors.cardBg,
@@ -171,37 +383,93 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 16,
       padding: 14,
     },
-    parGrid: {
+    parsSection: {
+      marginTop: 22,
+    },
+    nineLabelRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 10,
+      justifyContent: 'space-between',
+      alignItems: 'baseline',
+      marginBottom: 6,
+      marginTop: 4,
     },
-    parItem: {
-      alignItems: 'center',
-      width: 52,
-    },
-    parLabel: {
+    nineLabelText: {
+      fontSize: 10,
+      fontWeight: '800',
       color: colors.textMuted,
-      fontSize: 12,
-      fontWeight: '700',
-      marginBottom: 4,
+      letterSpacing: 0.6,
     },
-    parInput: {
-      backgroundColor: colors.cardBg,
-      borderColor: colors.border,
-      borderRadius: 10,
-      borderWidth: 1,
-      color: colors.textBody,
-      fontSize: 16,
-      padding: 8,
+    nineTotalText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    parRow: {
+      flexDirection: 'row',
+      gap: 4,
+    },
+    parCell: {
+      flex: 1,
+      backgroundColor: colors.chipBg,
+      borderRadius: 8,
+      paddingVertical: 8,
+      alignItems: 'center',
+      position: 'relative',
+    },
+    parCellHole: {
+      fontSize: 9,
+      color: colors.textMuted,
+      fontWeight: '700',
+      lineHeight: 11,
+    },
+    parCellNumber: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: colors.textTitle,
+      lineHeight: 22,
+      marginTop: 2,
+    },
+    yardageMark: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+    },
+    tipCaption: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontStyle: 'italic',
       textAlign: 'center',
-      width: 52,
+      marginTop: 10,
+    },
+    totalRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: colors.chipBg,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      marginTop: 10,
+    },
+    totalLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textMuted,
+      letterSpacing: 0.5,
+    },
+    totalNumber: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: colors.textTitle,
     },
     saveButton: {
       alignItems: 'center',
       backgroundColor: colors.primary,
       borderRadius: 14,
-      marginTop: 32,
+      marginTop: 24,
       paddingVertical: 16,
     },
     disabledButton: {
@@ -211,6 +479,17 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: '#ffffff',
       fontSize: 17,
       fontWeight: '800',
+    },
+    deleteButton: {
+      alignItems: 'center',
+      borderRadius: 14,
+      marginTop: 6,
+      paddingVertical: 14,
+    },
+    deleteButtonText: {
+      color: '#d32f2f',
+      fontSize: 14,
+      fontWeight: '700',
     },
   });
 }

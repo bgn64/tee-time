@@ -17,6 +17,8 @@ type GolfRoundContextValue = {
   pendingSelectedCourseId: string | null;
   setPendingSelectedCourseId: (id: string | null) => void;
   addCourse: (course: Course) => void;
+  updateCourse: (courseId: string, patch: Partial<Omit<Course, 'id' | 'source'>>) => void;
+  removeCourse: (courseId: string) => void;
   startRound: (
     courseId: string,
     playerIds?: string[],
@@ -61,6 +63,14 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       setPendingSelectedCourseId,
       addCourse: (course) => {
         setCourses((prev) => [...prev, course]);
+      },
+      updateCourse: (courseId, patch) => {
+        setCourses((prev) =>
+          prev.map((c) => (c.id === courseId ? { ...c, ...patch, id: c.id, source: c.source } : c))
+        );
+      },
+      removeCourse: (courseId) => {
+        setCourses((prev) => prev.filter((c) => c.id !== courseId));
       },
       startRound: (courseId, playerIds = [], scoringRule = 'stroke', teams) => {
         const course = courses.find((c) => c.id === courseId);

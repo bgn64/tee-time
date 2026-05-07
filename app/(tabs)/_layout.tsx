@@ -1,6 +1,7 @@
 /**
- * Tab navigation layout for the golf scoring app's three sections:
- * Home (stub) / Score / You.
+ * Tab navigation layout for the golf scoring app's four current sections:
+ * Home (stub) / Score / Rounds / You. People will slot in once Phase 1 step 4
+ * lands; the design target is the 5-tab layout in docs/tab-layout-mockups.html.
  */
 
 import React from 'react';
@@ -50,6 +51,13 @@ export default function TabLayout() {
         options={{
           title: 'Score',
           tabBarIcon: ({ color }) => <TabBarIcon name="flag" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="(rounds)"
+        options={{
+          title: 'Rounds',
+          tabBarIcon: ({ color }) => <TabBarIcon name="history" color={color} />,
         }}
       />
       <Tabs.Screen

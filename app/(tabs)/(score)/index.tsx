@@ -7,6 +7,9 @@
  * scopes the visible result list. The "+ Create" CTA lives at the bottom
  * (muted by default, prominent on no-results) and pre-fills the new-course
  * form's name field with the search query.
+ *
+ * Custom courses carry a ⋯ button that opens CourseActionsSheet (Edit / Delete).
+ * Catalog courses don't expose those actions; they're read-only.
  */
 
 import { Link, router, useFocusEffect } from 'expo-router';
@@ -20,6 +23,7 @@ import {
   View,
 } from 'react-native';
 
+import { CourseActionsSheet } from '@/components/CourseActionsSheet';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
@@ -79,20 +83,23 @@ export default function CourseSelectionScreen() {
     completedRounds,
     pendingSelectedCourseId,
     setPendingSelectedCourseId,
+    removeCourse,
   } = useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [selectedCourseId, setSelectedCourseId] = useState<string>('');
   const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [query, setQuery] = useState<string>('');
+  const [actionsCourseId, setActionsCourseId] = useState<string | null>(null);
 
   useScreenHeader({
     left: { kind: 'text', text: 'SCORE' },
     right: { kind: 'profile' },
   });
 
-  // After saving a new course, new-course.tsx parks the new course id in
-  // context. Consume it here on focus: jump to All, pre-select, clear query.
+  // After saving a course (create or edit), new-course.tsx parks the affected
+  // course id in context. Consume it here on focus: jump to All, pre-select,
+  // and clear any active search.
   useFocusEffect(
     useCallback(() => {
       if (pendingSelectedCourseId) {
@@ -174,6 +181,10 @@ export default function CourseSelectionScreen() {
     ? `+ Create "${query.trim()}"`
     : '+ Create new course';
 
+  const sheetCourse = actionsCourseId
+    ? courses.find((c) => c.id === actionsCourseId)
+    : null;
+
   return (
     <View style={styles.container}>
       <View style={styles.fixedTop}>
@@ -243,22 +254,35 @@ export default function CourseSelectionScreen() {
           visibleList.map(({ course, lastPlayedAt: lp }) => {
             const isSelected = course.id === selectedCourseId;
             const totalPar = course.holes.reduce((t, h) => t + h.par, 0);
+            const isCustom = course.source === 'custom';
             return (
               <Pressable
                 key={course.id}
                 onPress={() => setSelectedCourseId(course.id)}
                 style={[styles.courseCard, isSelected && styles.courseCardSelected]}>
                 <View style={styles.courseCardBody}>
-                  <Text style={styles.courseName}>{course.name}</Text>
+                  <View style={styles.nameRow}>
+                    <Text style={styles.courseName} numberOfLines={1}>
+                      {course.name}
+                    </Text>
+                    {isCustom && <Text style={styles.sourceBadge}>CUSTOM</Text>}
+                  </View>
                   <Text style={styles.courseMeta}>
-                    {course.location} · {course.holes.length} holes · Par {totalPar}
+                    {course.location ? `${course.location} · ` : ''}
+                    {course.holes.length} holes · Par {totalPar}
                   </Text>
                   {lp && (
                     <Text style={styles.courseRecent}>Played {formatRelative(lp)}</Text>
                   )}
                 </View>
-                {course.source === 'custom' && (
-                  <Text style={styles.sourceBadge}>CUSTOM</Text>
+                {isCustom && (
+                  <Pressable
+                    style={({ pressed }) => [styles.menuBtn, pressed && styles.menuBtnPressed]}
+                    hitSlop={8}
+                    onPress={() => setActionsCourseId(course.id)}
+                    accessibilityLabel={`Actions for ${course.name}`}>
+                    <Text style={styles.menuGlyph}>⋯</Text>
+                  </Pressable>
                 )}
               </Pressable>
             );
@@ -288,6 +312,24 @@ export default function CourseSelectionScreen() {
           <Text style={styles.nextBtnText}>Next →</Text>
         </Pressable>
       </View>
+
+      <CourseActionsSheet
+        visible={actionsCourseId !== null}
+        courseName={sheetCourse?.name ?? ''}
+        onClose={() => setActionsCourseId(null)}
+        onEdit={() => {
+          if (!actionsCourseId) return;
+          router.push({
+            pathname: '/(tabs)/(score)/new-course',
+            params: { courseId: actionsCourseId },
+          });
+        }}
+        onDelete={() => {
+          if (!actionsCourseId) return;
+          if (selectedCourseId === actionsCourseId) setSelectedCourseId('');
+          removeCourse(actionsCourseId);
+        }}
+      />
     </View>
   );
 }
@@ -402,7 +444,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderWidth: 1,
       marginBottom: 8,
       padding: 14,
-      gap: 10,
+      gap: 6,
     },
     courseCardSelected: {
       borderLeftColor: colors.accent,
@@ -411,8 +453,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     courseCardBody: {
       flex: 1,
+      minWidth: 0,
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
     courseName: {
+      flexShrink: 1,
       fontSize: 15,
       fontWeight: '700',
       color: colors.textTitle,
@@ -438,6 +487,23 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 3,
       borderRadius: 6,
       overflow: 'hidden',
+    },
+    menuBtn: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 4,
+    },
+    menuBtnPressed: {
+      opacity: 0.5,
+    },
+    menuGlyph: {
+      fontSize: 22,
+      fontWeight: '800',
+      color: colors.textMuted,
+      letterSpacing: -1,
+      lineHeight: 22,
     },
     emptyWrap: {
       alignItems: 'center',
