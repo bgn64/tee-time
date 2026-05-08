@@ -147,10 +147,14 @@ export function SocialProvider({ children }: PropsWithChildren) {
       setOutgoingRequests([]);
       setIncomingRequests([]);
       setProfileCache({});
-      setHydrated(false);
+      // Signed-out users have nothing to load — flip hydrated immediately so
+      // the splash gate doesn't get stuck waiting for a signed-in user that
+      // may never arrive.
+      setHydrated(true);
       return;
     }
 
+    setHydrated(false);
     let cancelled = false;
     (async () => {
       const [friendshipsRes, requestsRes] = await Promise.all([

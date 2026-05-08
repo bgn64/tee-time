@@ -35,7 +35,7 @@ export default function FriendSearchScreen() {
   const { colors } = useTheme();
   const { sourcePlayerId } = useLocalSearchParams<{ sourcePlayerId?: string }>();
   const { searchHandle, friends, outgoingRequests } = useSocial();
-  const { getPlayer, allPlayers } = usePlayers();
+  const { getPlayer } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [query, setQuery] = useState<string>('');
@@ -53,10 +53,6 @@ export default function FriendSearchScreen() {
   const pendingTargets = useMemo(
     () => new Set(outgoingRequests.filter((r) => r.status === 'pending').map((r) => r.toUserId)),
     [outgoingRequests]
-  );
-  const linkedUserIds = useMemo(
-    () => new Set(allPlayers.map((p) => p.userId).filter((u): u is string => !!u)),
-    [allPlayers]
   );
 
   // Debounced server-side search. Empty query -> empty results.
@@ -83,13 +79,15 @@ export default function FriendSearchScreen() {
 
   const visible = useMemo(
     () =>
+      // Only filter out people you're already friends with or have a
+      // pending request to. A roster Player having `userId` set doesn't
+      // imply a friendship — it can be stale state from a previous
+      // friendship that was removed. Search needs to surface them again
+      // so the user can re-send a request.
       results.filter(
-        (d) =>
-          !friendsSet.has(d.userId) &&
-          !pendingTargets.has(d.userId) &&
-          !linkedUserIds.has(d.userId)
+        (d) => !friendsSet.has(d.userId) && !pendingTargets.has(d.userId)
       ),
-    [results, friendsSet, pendingTargets, linkedUserIds]
+    [results, friendsSet, pendingTargets]
   );
 
   return (
