@@ -1,23 +1,24 @@
 /**
- * Sign-in flow — three-step state machine in one route.
+ * Sign-in flow — multi-step state machine for Magic-Link OTP auth.
  *
- *   1. SSO sheet — pick Apple or Google.
- *   2. Handle picker — choose @handle (regex-validated). Default seeded
- *      from the user's existing default-player name when possible so the
- *      handle feels personal.
- *   3. All set — profile preview + Continue button.
+ *   1. email   — input email, "Send code".
+ *   2. code    — input 6-digit code from the inbox, "Verify".
+ *   3. handle  — first-sign-in only: pick a unique @handle and create the
+ *                profile row.
+ *   4. done    — success; tap to dismiss.
  *
- * Steps are local component state (`step` enum), not nested routes. The
- * flow is linear and back-navigation needs to step *within* the modal,
- * not pop the stack — so a step machine is simpler than three screens.
+ * Step transitions are driven by AccountContext state plus local user
+ * intent. Once `verifyMagicCode` resolves successfully, AccountContext's
+ * onAuthStateChange handler will populate either `account` (existing user)
+ * or `needsProfile = true` (first-time user). We watch both flags here and
+ * advance the step accordingly.
  *
- * Lives outside `(tabs)` so the tab bar disappears for the duration of
- * the flow. AppHeader stays visible; we set our own slots via
- * `useScreenHeader` (back/cancel on the left).
+ * Lives outside `(tabs)` so the tab bar disappears for the duration of the
+ * flow. AppHeader stays visible; we set our own slots via `useScreenHeader`.
  */
 
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -28,63 +29,68 @@ import {
   View,
 } from 'react-native';
 
-import { useAccount, isValidHandle } from '@/state/AccountContext';
+import { isValidHandle, useAccount } from '@/state/AccountContext';
 import { useScreenHeader } from '@/state/HeaderContext';
-import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
-import { Account, AuthProvider } from '@/types/account';
 
-type Step = 'sso' | 'handle' | 'done';
-
-/**
- * Suggest a handle from a player display name. Strips non-alphanumerics,
- * lowercases, collapses spaces, and trims to satisfy HANDLE_REGEX.
- */
-function suggestHandleFromName(name: string): string {
-  const slug = name
-    .toLowerCase()
-    .replace(/[^a-z0-9._]+/g, '.')
-    .replace(/^\.+|\.+$/g, '')
-    .replace(/\.{2,}/g, '.');
-  // Must start with a letter; if it doesn't, prepend "u".
-  const startsWithLetter = /^[a-z]/.test(slug);
-  const seeded = startsWithLetter ? slug : `u${slug}`;
-  return seeded.slice(0, 20);
-}
+type Step = 'email' | 'code' | 'handle' | 'done';
 
 export default function SignInScreen() {
   const { colors } = useTheme();
-  const { signIn } = useAccount();
-  const { defaultPlayerId, getPlayer } = usePlayers();
+  const { account, needsProfile, sendMagicCode, verifyMagicCode, completeProfile } = useAccount();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [step, setStep] = useState<Step>('sso');
-  const [provider, setProvider] = useState<AuthProvider | null>(null);
-  const [handle, setHandle] = useState<string>(() => {
-    const name = defaultPlayerId ? getPlayer(defaultPlayerId)?.nickname : undefined;
-    return name ? suggestHandleFromName(name) : '';
-  });
+  const [step, setStep] = useState<Step>('email');
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [handle, setHandle] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [createdAccount, setCreatedAccount] = useState<Account | null>(null);
 
-  // Header reflects the current step.
+  // After OTP verification, AccountContext flips one of two flags. React to
+  // them to advance the wizard:
+  //   · `needsProfile === true`  → we're on `code`, move to `handle`.
+  //   · `account !== null`       → we're done.
+  useEffect(() => {
+    if (account && step !== 'done') {
+      setStep('done');
+    } else if (needsProfile && (step === 'code' || step === 'email')) {
+      setStep('handle');
+    }
+  }, [account, needsProfile, step]);
+
   useScreenHeader({
     left:
-      step === 'sso'
+      step === 'email'
         ? { kind: 'back', label: 'Cancel', onPress: () => router.back() }
-        : step === 'handle'
-        ? { kind: 'back', label: 'Back', onPress: () => setStep('sso') }
+        : step === 'code'
+        ? { kind: 'back', label: 'Email', onPress: () => setStep('email') }
         : { kind: 'text', text: 'WELCOME' },
     right: { kind: 'none' },
   });
 
-  const onPickProvider = (p: AuthProvider) => {
-    setProvider(p);
-    setStep('handle');
+  const onSendCode = async () => {
+    setSubmitting(true);
+    const result = await sendMagicCode(email);
+    setSubmitting(false);
+    if (!result.ok) {
+      Alert.alert('Could not send code', result.error);
+      return;
+    }
+    setStep('code');
   };
 
-  const onConfirmHandle = async () => {
-    if (!provider) return;
+  const onVerifyCode = async () => {
+    setSubmitting(true);
+    const result = await verifyMagicCode(code);
+    setSubmitting(false);
+    if (!result.ok) {
+      Alert.alert('Invalid code', result.error);
+      return;
+    }
+    // Auth state listener will move step to 'handle' or 'done'.
+  };
+
+  const onCompleteProfile = async () => {
     if (!isValidHandle(handle)) {
       Alert.alert(
         'Invalid handle',
@@ -93,48 +99,103 @@ export default function SignInScreen() {
       return;
     }
     setSubmitting(true);
-    try {
-      const acct = await signIn(provider, handle);
-      setCreatedAccount(acct);
-      setStep('done');
-    } finally {
-      setSubmitting(false);
+    const result = await completeProfile(handle);
+    setSubmitting(false);
+    if (!result.ok) {
+      Alert.alert('Could not create profile', result.error);
+      return;
     }
+    // refreshFromSession will populate account → step flips to 'done'.
   };
 
   const onFinish = () => {
     router.back();
   };
 
-  if (step === 'sso') {
+  if (step === 'email') {
+    const valid = /\S+@\S+\.\S+/.test(email);
     return (
       <View style={styles.container}>
         <View style={styles.body}>
           <Text style={styles.title}>Sign in to Tee Time</Text>
           <Text style={styles.subtitle}>
-            Back up your rounds and connect with friends. You can keep playing
-            locally without an account — sign in any time.
+            Back up your rounds and connect with friends. We'll email you a 6-digit code — no
+            password to remember.
           </Text>
 
-          <View style={styles.ssoStack}>
-            <Pressable
-              style={[styles.ssoButton, styles.ssoApple]}
-              onPress={() => onPickProvider('apple')}>
-              <Text style={styles.ssoIcon}></Text>
-              <Text style={styles.ssoAppleText}>Sign in with Apple</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.ssoButton, styles.ssoGoogle]}
-              onPress={() => onPickProvider('google')}>
-              <Text style={styles.ssoGoogleIcon}>G</Text>
-              <Text style={styles.ssoGoogleText}>Sign in with Google</Text>
-            </Pressable>
+          <View style={[styles.field, valid && styles.fieldValid]}>
+            <TextInput
+              style={styles.fieldInput}
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="email"
+              keyboardType="email-address"
+              autoFocus
+              placeholder="you@example.com"
+              placeholderTextColor={colors.textMuted}
+            />
           </View>
 
-          <Text style={styles.stubFooter}>
-            Stub mode — both buttons fake a successful SSO. Real auth lands
-            once Supabase is wired in.
+          <Pressable
+            style={[styles.primaryButton, (!valid || submitting) && styles.primaryButtonDisabled]}
+            onPress={onSendCode}
+            disabled={!valid || submitting}>
+            {submitting ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Send code</Text>
+            )}
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  if (step === 'code') {
+    // Supabase OTP length is configurable (6-10 digits depending on project
+    // settings). Stay flexible rather than hardcoding to 6.
+    const valid = /^\d{6,10}$/.test(code);
+    return (
+      <View style={styles.container}>
+        <View style={styles.body}>
+          <Text style={styles.title}>Check your email</Text>
+          <Text style={styles.subtitle}>
+            We sent a code to <Text style={styles.subtitleEm}>{email}</Text>. It expires in
+            an hour.
           </Text>
+
+          <View style={[styles.field, valid && styles.fieldValid]}>
+            <TextInput
+              style={[styles.fieldInput, styles.codeInput]}
+              value={code}
+              onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 10))}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoComplete="one-time-code"
+              keyboardType="number-pad"
+              autoFocus
+              maxLength={10}
+              placeholder="enter code"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+
+          <Pressable
+            style={[styles.primaryButton, (!valid || submitting) && styles.primaryButtonDisabled]}
+            onPress={onVerifyCode}
+            disabled={!valid || submitting}>
+            {submitting ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Verify</Text>
+            )}
+          </Pressable>
+
+          <Pressable style={styles.linkButton} onPress={onSendCode} disabled={submitting}>
+            <Text style={styles.linkButtonText}>Resend code</Text>
+          </Pressable>
         </View>
       </View>
     );
@@ -147,14 +208,14 @@ export default function SignInScreen() {
         <View style={styles.body}>
           <Text style={styles.title}>Pick your @handle</Text>
           <Text style={styles.subtitle}>
-            Friends find you by your handle. Lowercase letters, numbers, dots,
-            and underscores. 3-20 characters.
+            Friends find you by your handle. Lowercase letters, numbers, dots, and underscores.
+            3-20 characters.
           </Text>
 
-          <View style={[styles.handleField, valid && styles.handleFieldValid]}>
-            <Text style={styles.handleAt}>@</Text>
+          <View style={[styles.field, valid && styles.fieldValid]}>
+            <Text style={styles.fieldPrefix}>@</Text>
             <TextInput
-              style={styles.handleInput}
+              style={styles.fieldInput}
               value={handle}
               onChangeText={(t) => setHandle(t.toLowerCase())}
               autoCapitalize="none"
@@ -167,15 +228,15 @@ export default function SignInScreen() {
             />
           </View>
 
-          <Text style={styles.handleHint}>
+          <Text style={styles.fieldHint}>
             {valid
-              ? '✓ Looks good'
+              ? '✓ Looks good — uniqueness is checked when you continue.'
               : '3-20 chars, start with a letter, lowercase only.'}
           </Text>
 
           <Pressable
             style={[styles.primaryButton, (!valid || submitting) && styles.primaryButtonDisabled]}
-            onPress={onConfirmHandle}
+            onPress={onCompleteProfile}
             disabled={!valid || submitting}>
             {submitting ? (
               <ActivityIndicator color="#ffffff" />
@@ -189,11 +250,10 @@ export default function SignInScreen() {
   }
 
   // step === 'done'
-  if (!createdAccount) {
-    // Defensive — shouldn't happen because we only enter `done` after success.
+  if (!account) {
     return null;
   }
-  const initial = createdAccount.displayName[0]?.toUpperCase() ?? '?';
+  const initial = account.displayName[0]?.toUpperCase() ?? '?';
   return (
     <View style={styles.container}>
       <View style={styles.body}>
@@ -202,16 +262,15 @@ export default function SignInScreen() {
         </View>
         <Text style={styles.title}>You're all set</Text>
         <Text style={styles.subtitle}>
-          Your account is ready. Find friends by their @handle to start sharing
-          rounds.
+          Your account is ready. Find friends by their @handle to start sharing rounds.
         </Text>
 
         <View style={styles.profilePreview}>
-          <View style={[styles.profileAvatar, { backgroundColor: createdAccount.avatarColor }]}>
+          <View style={[styles.profileAvatar, { backgroundColor: account.avatarColor }]}>
             <Text style={styles.profileAvatarText}>{initial}</Text>
           </View>
-          <Text style={styles.profileName}>{createdAccount.displayName}</Text>
-          <Text style={styles.profileHandle}>@{createdAccount.handle}</Text>
+          <Text style={styles.profileName}>{account.displayName}</Text>
+          <Text style={styles.profileHandle}>@{account.handle}</Text>
         </View>
 
         <Pressable style={styles.primaryButton} onPress={onFinish}>
@@ -245,57 +304,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       lineHeight: 19,
       marginBottom: 28,
     },
-
-    // SSO step
-    ssoStack: {
-      gap: 12,
+    subtitleEm: {
+      fontWeight: '800',
+      color: colors.textTitle,
     },
-    ssoButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 10,
-      paddingVertical: 14,
-      borderRadius: 12,
-    },
-    ssoApple: {
-      backgroundColor: '#000000',
-    },
-    ssoIcon: {
-      fontSize: 20,
-      color: '#ffffff',
-    },
-    ssoAppleText: {
-      color: '#ffffff',
-      fontSize: 15,
-      fontWeight: '700',
-    },
-    ssoGoogle: {
-      backgroundColor: '#ffffff',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    ssoGoogleIcon: {
-      fontSize: 18,
-      fontWeight: '900',
-      color: '#4285f4',
-    },
-    ssoGoogleText: {
-      color: '#3c4043',
-      fontSize: 15,
-      fontWeight: '700',
-    },
-    stubFooter: {
-      marginTop: 24,
-      fontSize: 11,
-      color: colors.textMuted,
-      fontStyle: 'italic',
-      textAlign: 'center',
-      lineHeight: 16,
-    },
-
-    // Handle step
-    handleField: {
+    field: {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: colors.cardBg,
@@ -306,29 +319,32 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 12,
       marginBottom: 8,
     },
-    handleFieldValid: {
+    fieldValid: {
       borderColor: colors.primary,
     },
-    handleAt: {
+    fieldPrefix: {
       fontSize: 18,
       fontWeight: '700',
       color: colors.textMuted,
       marginRight: 4,
     },
-    handleInput: {
+    fieldInput: {
       flex: 1,
       fontSize: 18,
       fontWeight: '700',
       color: colors.textTitle,
       padding: 0,
     },
-    handleHint: {
+    codeInput: {
+      letterSpacing: 8,
+      fontSize: 22,
+      textAlign: 'center',
+    },
+    fieldHint: {
       fontSize: 12,
       color: colors.textMuted,
       marginBottom: 28,
     },
-
-    // Done step
     doneCheck: {
       width: 64,
       height: 64,
@@ -375,13 +391,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.primaryDark,
       fontWeight: '700',
     },
-
-    // Shared
     primaryButton: {
       backgroundColor: colors.primary,
       borderRadius: 12,
       paddingVertical: 14,
       alignItems: 'center',
+      marginTop: 18,
     },
     primaryButtonDisabled: {
       opacity: 0.4,
@@ -391,6 +406,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 15,
       fontWeight: '800',
       letterSpacing: 0.3,
+    },
+    linkButton: {
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    linkButtonText: {
+      color: colors.primaryDark,
+      fontSize: 13,
+      fontWeight: '700',
     },
   });
 }

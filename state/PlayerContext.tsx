@@ -1,22 +1,27 @@
 /**
- * Player context managing the list of known players and recent selections.
+ * Player context — local roster + AsyncStorage backup + Supabase cloud sync.
  *
- * Persists `allPlayers`, `recentIds`, and `defaultPlayerId` to AsyncStorage
- * so roster state survives app restarts. Hydration happens in parallel for
- * each piece of state; `hydrated` flips to true once all three reads complete
- * (the root layout gates the splash screen on this).
+ * Three layers stack:
+ *   1. In-memory state (`allPlayers`, `recentIds`, `defaultPlayerId`).
+ *   2. AsyncStorage persistence (offline survival; mirrors layer 1).
+ *   3. Supabase cloud sync (cross-device backup; mirrors layer 1 when signed in).
  *
- * Phase 3 step 8 additions:
- *   · One-time hydrate-time migration of the legacy `name` field into the
- *     new required `nickname` field, plus default-fill for any other newly
- *     introduced optional Player fields.
- *   · `linkPlayer` / `unlinkPlayer` actions that mutate a Player's
- *     account-association fields (userId, displayName, handle) without
- *     touching its local nickname.
- *   · A sign-in side effect that links the default-player record to the
- *     active account, and unlinks on sign-out. Intentionally only mutates
- *     the default player — other roster entries are linked via the
- *     friend-request flow (Step 8 phase D/E).
+ * Cloud sync model: "everything is your private backup, friendships layer
+ * on top." Roster rows are scoped per-owner via RLS. We don't subscribe to
+ * realtime for the roster — your own private data doesn't change behind
+ * your back. Sync is:
+ *
+ *   · One-time pull-and-merge per account when `account` becomes non-null
+ *     (or its userId changes). Cloud rows replace local for matching ids;
+ *     local-only rows get pushed up.
+ *   · Per-mutation push: `addPlayer` / `linkPlayer` / `unlinkPlayer` each
+ *     fire-and-forget upsert the changed row to cloud.
+ *
+ * Known limitation: switching between two different accounts on the same
+ * device can leak Account A's local-only rows into Account B's cloud on the
+ * second sign-in. For our prototype use case (one account per device) this
+ * is acceptable; we'll add an account-purge step later if it becomes a
+ * real concern.
  */
 
 import {
@@ -26,21 +31,19 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
 import { defaultPlayers } from '@/data/players';
 import { useAccount } from '@/state/AccountContext';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
+import { supabase } from '@/state/supabaseClient';
 import { Player } from '@/types/golf';
 
 const DEFAULT_RECENT_IDS = defaultPlayers.map((p) => p.id);
 const DEFAULT_DEFAULT_ID: string | null = 'user';
 
-/**
- * Account-side fields that can be set on a Player to mark it as linked to
- * a real user. The local nickname is intentionally NOT part of this shape.
- */
 export type PlayerLink = {
   userId: string;
   displayName: string;
@@ -55,21 +58,13 @@ type PlayerContextValue = {
   markRecent: (playerId: string) => void;
   setDefaultPlayerId: (id: string | null) => void;
   getPlayer: (id: string) => Player | undefined;
-  /** Set userId / displayName / handle on a Player. Nickname is preserved. */
   linkPlayer: (playerId: string, link: PlayerLink) => void;
-  /** Clear userId / displayName / handle on a Player. Nickname is preserved. */
   unlinkPlayer: (playerId: string) => void;
   hydrated: boolean;
 };
 
 const PlayerContext = createContext<PlayerContextValue | undefined>(undefined);
 
-/**
- * Coerce a raw stored player object into the current Player shape. Handles
- * pre-Step-8 records where `name` was the only label field. Defensive
- * fallback for `nickname` so a malformed record never lands undefined into
- * a required field.
- */
 function migratePlayer(raw: any): Player {
   return {
     id: String(raw.id),
@@ -81,6 +76,36 @@ function migratePlayer(raw: any): Player {
   };
 }
 
+type CloudRosterRow = {
+  id: string;
+  nickname: string;
+  color: string | null;
+  linked_user_id: string | null;
+};
+
+/**
+ * Strict-ish UUID v4 (or any v) regex. Used to filter out legacy stub
+ * `linked_user_id` values like `stub-mike` that survived from Step 8 stub
+ * testing — Postgres' uuid type would reject them and fail the whole upsert.
+ * Real Supabase user ids ARE valid UUIDs, so a fresh signup would never
+ * trigger this filter.
+ */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function safeLinkedUserId(value: string | undefined | null): string | null {
+  if (!value) return null;
+  return UUID_REGEX.test(value) ? value : null;
+}
+
+function rowToPlayer(row: CloudRosterRow): Player {
+  return {
+    id: row.id,
+    nickname: row.nickname,
+    color: row.color ?? undefined,
+    userId: row.linked_user_id ?? undefined,
+  };
+}
+
 export function PlayerProvider({ children }: PropsWithChildren) {
   const [allPlayers, setAllPlayers] = useState<Player[]>(defaultPlayers);
   const [recentIds, setRecentIds] = useState<string[]>(DEFAULT_RECENT_IDS);
@@ -89,9 +114,12 @@ export function PlayerProvider({ children }: PropsWithChildren) {
 
   const { account, hydrated: accountHydrated } = useAccount();
 
-  // Hydrate all three keys in parallel on mount. Players go through the
-  // migration helper so legacy `name`-only records are coerced into the
-  // current shape on first read.
+  const allPlayersRef = useRef(allPlayers);
+  allPlayersRef.current = allPlayers;
+
+  const cloudSyncedAccountRef = useRef<string | null>(null);
+
+  // Local hydration
   useEffect(() => {
     let cancelled = false;
     Promise.all([
@@ -110,8 +138,6 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     };
   }, []);
 
-  // Per-key write effects, each gated on hydration so we don't stomp stored
-  // data with the seed on first render.
   useEffect(() => {
     if (!hydrated) return;
     saveJSON(STORAGE_KEYS.PLAYERS, allPlayers);
@@ -127,42 +153,160 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     saveJSON(STORAGE_KEYS.DEFAULT_PLAYER_ID, defaultPlayerId);
   }, [defaultPlayerId, hydrated]);
 
-  const addPlayer = useCallback((player: Player) => {
-    setAllPlayers((prev) => [...prev, player]);
-    setRecentIds((prev) => [player.id, ...prev.filter((id) => id !== player.id)]);
-  }, []);
+  const cloudUpsertPlayer = useCallback(
+    async (player: Player) => {
+      if (!account) return;
+      const { error } = await supabase
+        .from('roster_players')
+        .upsert(
+          {
+            owner_user_id: account.userId,
+            id: player.id,
+            nickname: player.nickname,
+            color: player.color ?? null,
+            linked_user_id: safeLinkedUserId(player.userId),
+          },
+          { onConflict: 'owner_user_id,id' }
+        );
+      if (error) console.warn('[roster] upsert failed:', error);
+    },
+    [account]
+  );
+
+  // One-time-per-account initial sync
+  useEffect(() => {
+    if (!hydrated || !accountHydrated) return;
+    if (!account) {
+      cloudSyncedAccountRef.current = null;
+      return;
+    }
+    if (cloudSyncedAccountRef.current === account.userId) return;
+
+    let cancelled = false;
+    const ownerUserId = account.userId;
+
+    const sync = async () => {
+      const { data: cloudRowsRaw, error } = await supabase
+        .from('roster_players')
+        .select('id, nickname, color, linked_user_id')
+        .eq('owner_user_id', ownerUserId);
+
+      if (error) {
+        console.warn('[roster] initial sync pull failed:', error);
+        return;
+      }
+      if (cancelled) return;
+
+      const cloudRows = (cloudRowsRaw ?? []) as CloudRosterRow[];
+      const cloudById = new Map(cloudRows.map((r) => [r.id, r]));
+      const localSnapshot = allPlayersRef.current;
+
+      const merged: Player[] = [];
+      const seenIds = new Set<string>();
+      for (const local of localSnapshot) {
+        const cloud = cloudById.get(local.id);
+        if (cloud) {
+          merged.push({
+            ...rowToPlayer(cloud),
+            displayName: local.displayName,
+            handle: local.handle,
+          });
+          seenIds.add(cloud.id);
+        } else {
+          merged.push(local);
+        }
+      }
+      for (const cloud of cloudRows) {
+        if (seenIds.has(cloud.id)) continue;
+        merged.push(rowToPlayer(cloud));
+      }
+
+      if (cancelled) return;
+      setAllPlayers(merged);
+
+      const localOnly = localSnapshot.filter((p) => !cloudById.has(p.id));
+      if (localOnly.length > 0) {
+        const { error: pushError } = await supabase.from('roster_players').upsert(
+          localOnly.map((p) => ({
+            owner_user_id: ownerUserId,
+            id: p.id,
+            nickname: p.nickname,
+            color: p.color ?? null,
+            linked_user_id: safeLinkedUserId(p.userId),
+          })),
+          { onConflict: 'owner_user_id,id' }
+        );
+        if (pushError) console.warn('[roster] initial sync push failed:', pushError);
+      }
+
+      cloudSyncedAccountRef.current = ownerUserId;
+    };
+
+    sync();
+    return () => {
+      cancelled = true;
+    };
+  }, [account, hydrated, accountHydrated]);
+
+  const addPlayer = useCallback(
+    (player: Player) => {
+      setAllPlayers((prev) => [...prev, player]);
+      setRecentIds((prev) => [player.id, ...prev.filter((id) => id !== player.id)]);
+      void cloudUpsertPlayer(player);
+    },
+    [cloudUpsertPlayer]
+  );
 
   const markRecent = useCallback((playerId: string) => {
     setRecentIds((prev) => [playerId, ...prev.filter((id) => id !== playerId)]);
   }, []);
 
-  const linkPlayer = useCallback((playerId: string, link: PlayerLink) => {
-    setAllPlayers((prev) =>
-      prev.map((p) =>
-        p.id === playerId
-          ? { ...p, userId: link.userId, displayName: link.displayName, handle: link.handle }
-          : p
-      )
-    );
-  }, []);
+  const linkPlayer = useCallback(
+    (playerId: string, link: PlayerLink) => {
+      let updated: Player | undefined;
+      setAllPlayers((prev) =>
+        prev.map((p) => {
+          if (p.id !== playerId) return p;
+          updated = {
+            ...p,
+            userId: link.userId,
+            displayName: link.displayName,
+            handle: link.handle,
+          };
+          return updated;
+        })
+      );
+      if (updated) void cloudUpsertPlayer(updated);
+    },
+    [cloudUpsertPlayer]
+  );
 
-  const unlinkPlayer = useCallback((playerId: string) => {
-    setAllPlayers((prev) =>
-      prev.map((p) =>
-        p.id === playerId
-          ? { ...p, userId: undefined, displayName: undefined, handle: undefined }
-          : p
-      )
-    );
-  }, []);
+  const unlinkPlayer = useCallback(
+    (playerId: string) => {
+      let updated: Player | undefined;
+      setAllPlayers((prev) =>
+        prev.map((p) => {
+          if (p.id !== playerId) return p;
+          updated = {
+            ...p,
+            userId: undefined,
+            displayName: undefined,
+            handle: undefined,
+          };
+          return updated;
+        })
+      );
+      if (updated) void cloudUpsertPlayer(updated);
+    },
+    [cloudUpsertPlayer]
+  );
 
-  // Sign-in side effect: keep the default player's link in sync with the
-  // active account. Runs once both the player roster and the account context
-  // have hydrated; no-ops if either is still loading.
+  // Sign-in side effect (auto-link default player + push to cloud)
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
     if (!defaultPlayerId) return;
 
+    let updated: Player | undefined;
     setAllPlayers((prev) => {
       const current = prev.find((p) => p.id === defaultPlayerId);
       if (!current) return prev;
@@ -175,7 +319,6 @@ export function PlayerProvider({ children }: PropsWithChildren) {
           }
         : { userId: undefined, displayName: undefined, handle: undefined };
 
-      // Bail early if nothing actually changed; avoids redundant writes.
       if (
         current.userId === desired.userId &&
         current.displayName === desired.displayName &&
@@ -184,9 +327,12 @@ export function PlayerProvider({ children }: PropsWithChildren) {
         return prev;
       }
 
-      return prev.map((p) => (p.id === defaultPlayerId ? { ...p, ...desired } : p));
+      updated = { ...current, ...desired };
+      return prev.map((p) => (p.id === defaultPlayerId ? updated! : p));
     });
-  }, [account, accountHydrated, defaultPlayerId, hydrated]);
+
+    if (updated) void cloudUpsertPlayer(updated);
+  }, [account, accountHydrated, defaultPlayerId, hydrated, cloudUpsertPlayer]);
 
   const getPlayer = useCallback(
     (id: string) => allPlayers.find((p) => p.id === id),
@@ -233,10 +379,8 @@ export function PlayerProvider({ children }: PropsWithChildren) {
 
 export function usePlayers() {
   const context = useContext(PlayerContext);
-
   if (!context) {
     throw new Error('usePlayers must be used inside PlayerProvider.');
   }
-
   return context;
 }

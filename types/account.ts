@@ -8,7 +8,7 @@
  * consumer.
  */
 
-export type AuthProvider = 'apple' | 'google';
+export type AuthProvider = 'apple' | 'google' | 'email';
 
 export type Account = {
   /** Stable id. Stub: uuid-like. Future: Supabase auth.users.id. */

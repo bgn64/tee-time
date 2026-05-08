@@ -21,6 +21,7 @@ import { useTheme } from '@/state/ThemeContext';
 const PROVIDER_LABEL = {
   apple: 'Apple',
   google: 'Google',
+  email: 'Email (magic link)',
 } as const;
 
 export default function AccountScreen() {
@@ -88,11 +89,6 @@ export default function AccountScreen() {
       <Pressable style={styles.signOutButton} onPress={onSignOut}>
         <Text style={styles.signOutText}>Sign out</Text>
       </Pressable>
-
-      <Text style={styles.stubFooter}>
-        Stub mode — sign-in produces a fake account stored on this device only.
-        Real auth lands once Supabase is wired in.
-      </Text>
     </ScrollView>
   );
 }
@@ -197,14 +193,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 15,
       fontWeight: '800',
       letterSpacing: 0.3,
-    },
-    stubFooter: {
-      marginTop: 16,
-      fontSize: 11,
-      color: colors.textMuted,
-      fontStyle: 'italic',
-      textAlign: 'center',
-      lineHeight: 16,
     },
   });
 }

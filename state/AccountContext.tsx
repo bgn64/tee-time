@@ -1,14 +1,19 @@
 /**
- * Account context — local-only stub for Phase 3 step 7.
+ * Account context — wraps Supabase auth.
  *
- * Persists:
- *   · `account`: the signed-in user's record, or `null` when signed out.
- *   · `postRoundPromptDismissCount`: how many times the user has tapped
- *     "Maybe later" on the post-round sign-in banner. Once this hits the
- *     suppress threshold (3), the banner stops appearing on future rounds.
+ * Auth providers: Magic-link OTP code (email → 6-digit code → verify) is the
+ * shipped path here. Google OAuth lands in a follow-on commit once the
+ * Google Cloud OAuth client is configured.
  *
- * The signIn / signOut surface is async so swapping the stub for a real
- * Supabase client later doesn't ripple through callers.
+ * Persisted via Supabase's built-in AsyncStorage adapter (configured in
+ * `state/supabaseClient.ts`); we don't manage account storage manually
+ * anymore. Local-only `postRoundPromptDismissCount` still lives here under
+ * its own AsyncStorage key.
+ *
+ * Profile shape lives in the `profiles` table, joined to `auth.users` by
+ * `user_id`. On first sign-in there's no profile yet — the sign-in screen
+ * presents the handle picker, then calls `completeProfile(handle)` which
+ * INSERTs and populates `account`.
  */
 
 import {
@@ -21,118 +26,188 @@ import {
   useState,
 } from 'react';
 
+import { pickAvatarColor } from '@/constants/avatarColors';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
-import { Account, AuthProvider } from '@/types/account';
+import { supabase } from '@/state/supabaseClient';
+import { Account } from '@/types/account';
 
 /** Number of "Maybe later" taps after which the post-round banner is muted. */
 export const POST_ROUND_PROMPT_SUPPRESS_THRESHOLD = 3;
 
+/** Result envelope used by every async auth action. */
+export type AuthResult<T = void> =
+  | { ok: true; value: T }
+  | { ok: false; error: string };
+
 type AccountContextValue = {
   account: Account | null;
-  /**
-   * Stub sign-in: produces a deterministic-looking fake `Account` record. The
-   * caller picks a `provider` (Apple / Google) and a `handle` (validated by
-   * the picker UI). All other fields are filled in here.
-   */
-  signIn: (provider: AuthProvider, handle: string) => Promise<Account>;
+  needsProfile: boolean;
+  pendingEmail: string | null;
+  sendMagicCode: (email: string) => Promise<AuthResult>;
+  verifyMagicCode: (code: string) => Promise<AuthResult>;
+  completeProfile: (handle: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
-
   postRoundPromptDismissCount: number;
-  /** Returns true if the post-round banner is suppressed (count >= threshold). */
   postRoundPromptSuppressed: boolean;
-  /** Increment the dismiss counter. Idempotently bounded by the threshold. */
   markPostRoundPromptDismissed: () => void;
-
   hydrated: boolean;
 };
 
 const AccountContext = createContext<AccountContextValue | undefined>(undefined);
 
-/**
- * Generate a fake user id. Real implementation will use Supabase auth.users.id.
- */
-function fakeUserId(): string {
-  return `stub-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-/**
- * Pick a stable but varied avatar color from the palette used elsewhere in
- * the app. Same color seed per provider so reruns of the stub feel coherent.
- */
-function avatarColorFor(provider: AuthProvider): string {
-  return provider === 'apple' ? '#0a84ff' : '#ea4335';
-}
-
-/**
- * Stub display name. Real implementation pulls from SSO provider response.
- * Kept generic so the user can tell at a glance they're in the stub.
- */
-function stubDisplayName(provider: AuthProvider): string {
-  return provider === 'apple' ? 'Apple Tester' : 'Google Tester';
-}
-
-/**
- * Stub email. Apple uses its private-relay format; Google a plausible gmail.
- */
-function stubEmail(provider: AuthProvider, handle: string): string {
-  if (provider === 'apple') {
-    return `${handle}@privaterelay.appleid.com`;
-  }
-  return `${handle}@gmail.com`;
-}
-
 export function AccountProvider({ children }: PropsWithChildren) {
   const [account, setAccount] = useState<Account | null>(null);
+  const [needsProfile, setNeedsProfile] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [postRoundPromptDismissCount, setPostRoundPromptDismissCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
-  // Hydrate both keys in parallel on mount.
+  const refreshFromSession = useCallback(async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
+    const session = sessionData.session;
+    if (!session) {
+      setAccount(null);
+      setNeedsProfile(false);
+      return;
+    }
+
+    const userId = session.user.id;
+    const email = session.user.email ?? '';
+
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('user_id, handle, display_name, avatar_color, created_at')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) {
+      console.warn('[account] failed to load profile:', error);
+      setAccount(null);
+      setNeedsProfile(false);
+      return;
+    }
+
+    if (!profile) {
+      setAccount(null);
+      setNeedsProfile(true);
+      setPendingEmail(email);
+      return;
+    }
+
+    setAccount({
+      userId: profile.user_id,
+      provider: 'email',
+      email,
+      handle: profile.handle,
+      displayName: profile.display_name,
+      avatarColor: profile.avatar_color,
+      createdAt: profile.created_at,
+    });
+    setNeedsProfile(false);
+    setPendingEmail(null);
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    Promise.all([
-      loadJSON<Account | null>(STORAGE_KEYS.ACCOUNT, null),
-      loadJSON<number>(STORAGE_KEYS.POST_ROUND_PROMPT_DISMISS_COUNT, 0),
-    ]).then(([loadedAccount, loadedCount]) => {
+    const run = async () => {
+      const count = await loadJSON<number>(STORAGE_KEYS.POST_ROUND_PROMPT_DISMISS_COUNT, 0);
       if (cancelled) return;
-      setAccount(loadedAccount);
-      setPostRoundPromptDismissCount(loadedCount);
+      setPostRoundPromptDismissCount(count);
+      await refreshFromSession();
+      if (cancelled) return;
       setHydrated(true);
-    });
+    };
+    run();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshFromSession]);
 
-  // Per-key write effects, gated on hydration so seeds don't stomp stored data.
   useEffect(() => {
-    if (!hydrated) return;
-    saveJSON(STORAGE_KEYS.ACCOUNT, account);
-  }, [account, hydrated]);
+    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_OUT') {
+        setAccount(null);
+        setNeedsProfile(false);
+        setPendingEmail(null);
+        return;
+      }
+      void refreshFromSession();
+    });
+    return () => {
+      sub.subscription.unsubscribe();
+    };
+  }, [refreshFromSession]);
 
   useEffect(() => {
     if (!hydrated) return;
     saveJSON(STORAGE_KEYS.POST_ROUND_PROMPT_DISMISS_COUNT, postRoundPromptDismissCount);
   }, [postRoundPromptDismissCount, hydrated]);
 
-  const signIn = useCallback(async (provider: AuthProvider, handle: string): Promise<Account> => {
-    // Brief artificial delay so the stub feels closer to real OAuth latency.
-    // Real implementation will await Supabase's signInWithIdToken instead.
-    await new Promise((resolve) => setTimeout(resolve, 600));
-    const next: Account = {
-      userId: fakeUserId(),
-      provider,
-      email: stubEmail(provider, handle),
-      handle,
-      displayName: stubDisplayName(provider),
-      avatarColor: avatarColorFor(provider),
-      createdAt: new Date().toISOString(),
-    };
-    setAccount(next);
-    return next;
+  const sendMagicCode = useCallback(async (email: string): Promise<AuthResult> => {
+    const trimmed = email.trim().toLowerCase();
+    if (!trimmed) return { ok: false, error: 'Enter an email address.' };
+    const { error } = await supabase.auth.signInWithOtp({
+      email: trimmed,
+      options: { shouldCreateUser: true },
+    });
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+    setPendingEmail(trimmed);
+    return { ok: true, value: undefined };
   }, []);
 
+  const verifyMagicCode = useCallback(
+    async (code: string): Promise<AuthResult> => {
+      if (!pendingEmail) {
+        return { ok: false, error: 'No pending sign-in. Request a new code.' };
+      }
+      const trimmed = code.trim();
+      if (!/^\d{6,10}$/.test(trimmed)) {
+        return { ok: false, error: 'Enter the code from your email.' };
+      }
+      const { error } = await supabase.auth.verifyOtp({
+        email: pendingEmail,
+        token: trimmed,
+        type: 'email',
+      });
+      if (error) {
+        return { ok: false, error: error.message };
+      }
+      return { ok: true, value: undefined };
+    },
+    [pendingEmail]
+  );
+
+  const completeProfile = useCallback(
+    async (handle: string): Promise<AuthResult> => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const session = sessionData.session;
+      if (!session) {
+        return { ok: false, error: 'Not signed in.' };
+      }
+      const userId = session.user.id;
+      const trimmed = handle.trim().toLowerCase();
+      const { error } = await supabase.from('profiles').insert({
+        user_id: userId,
+        handle: trimmed,
+        display_name: trimmed,
+        avatar_color: pickAvatarColor(userId),
+      });
+      if (error) {
+        if (error.code === '23505') {
+          return { ok: false, error: 'That handle is taken. Try another.' };
+        }
+        return { ok: false, error: error.message };
+      }
+      await refreshFromSession();
+      return { ok: true, value: undefined };
+    },
+    [refreshFromSession]
+  );
+
   const signOut = useCallback(async () => {
-    setAccount(null);
+    await supabase.auth.signOut();
   }, []);
 
   const markPostRoundPromptDismissed = useCallback(() => {
@@ -144,7 +219,11 @@ export function AccountProvider({ children }: PropsWithChildren) {
   const value = useMemo<AccountContextValue>(
     () => ({
       account,
-      signIn,
+      needsProfile,
+      pendingEmail,
+      sendMagicCode,
+      verifyMagicCode,
+      completeProfile,
       signOut,
       postRoundPromptDismissCount,
       postRoundPromptSuppressed:
@@ -154,7 +233,11 @@ export function AccountProvider({ children }: PropsWithChildren) {
     }),
     [
       account,
-      signIn,
+      needsProfile,
+      pendingEmail,
+      sendMagicCode,
+      verifyMagicCode,
+      completeProfile,
       signOut,
       postRoundPromptDismissCount,
       markPostRoundPromptDismissed,
@@ -173,13 +256,6 @@ export function useAccount() {
   return context;
 }
 
-/**
- * Validate a handle against the regex rules used by the handle picker.
- * Exported so tests / future Supabase server-side validation can stay aligned.
- *
- * Rules: 3–20 chars, must start with a lowercase letter, otherwise lowercase
- * letters / digits / dot / underscore.
- */
 export const HANDLE_REGEX = /^[a-z][a-z0-9._]{2,19}$/;
 
 export function isValidHandle(handle: string): boolean {
