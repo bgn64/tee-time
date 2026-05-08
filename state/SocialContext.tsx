@@ -1,21 +1,23 @@
 /**
- * Social context — friends, friend requests, claim resolution.
+ * Social context — real Supabase wiring for the friend graph.
  *
- * Phase 3 step 8 ships this layer as a local stub that fakes "the other side
- * of the conversation" with two timers and a dev-only injection helper.
- * Real Supabase wiring later will replace the timers with subscription-driven
- * state changes; the public surface (sendFriendRequest, acceptIncomingRequest,
- * etc.) stays the same.
+ * Replaces the Step 8 stub. Surface kept the same so consumers (People-tab
+ * search / confirm-request / detail screens, incoming-request banner) need
+ * minimal changes.
  *
- * Side-channels:
- *   1. Auto-accept outgoing — when `autoAcceptOutgoing` is true, every newly
- *      pending outgoing request flips to `accepted` after AUTO_ACCEPT_DELAY_MS.
- *   2. Auto-claim pending — when `autoClaimPending` is true, every Round
- *      claim entry marked `pending` flips to `claimed` after
- *      AUTO_CLAIM_DELAY_MS.
+ * Three Supabase resources back this:
+ *   · `profiles`           — handle search reads from here.
+ *   · `friend_requests`    — outgoing/incoming. Realtime subscription
+ *                            keeps both lists in sync with the server.
+ *   · `friendships`        — accepted relationships. Symmetric two-row
+ *                            entries written transactionally by the
+ *                            `accept_friend_request` RPC. Realtime sub.
  *
- * Both timers are gated on the toggle being true; flipping the toggle off
- * cancels in-flight timers immediately.
+ * The `friends` array is derived from `friendships` (the userIds of every
+ * row where `user_id = me`). When that table changes, friends change.
+ *
+ * Sign-out clear: the realtime channel is torn down and local state
+ * resets when `account` flips to null. Sign-back-in re-pulls on mount.
  */
 
 import {
@@ -29,303 +31,339 @@ import {
   useState,
 } from 'react';
 
-import { STUB_FRIEND_DIRECTORY } from '@/data/friend-directory';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
-import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { usePlayers } from '@/state/PlayerContext';
-import { Player, Round } from '@/types/golf';
-import { FriendRequest, StubDirectoryEntry } from '@/types/social';
+import { supabase } from '@/state/supabaseClient';
+import { Round } from '@/types/golf';
+import { FriendRequest, ProfileSummary } from '@/types/social';
 
-const AUTO_ACCEPT_DELAY_MS = 5000;
-const AUTO_CLAIM_DELAY_MS = 8000;
-
-type PersistedSocial = {
-  friends: string[];
-  outgoingRequests: FriendRequest[];
-  incomingRequests: FriendRequest[];
+type CloudFriendRequestRow = {
+  id: string;
+  from_user_id: string;
+  to_user_id: string;
+  status: 'pending' | 'accepted' | 'declined' | 'expired';
+  source_player_id: string | null;
+  created_at: string;
 };
 
-const EMPTY_SOCIAL: PersistedSocial = {
-  friends: [],
-  outgoingRequests: [],
-  incomingRequests: [],
+type CloudFriendshipRow = {
+  user_id: string;
+  friend_user_id: string;
+  created_at: string;
+};
+
+type CloudProfileRow = {
+  user_id: string;
+  handle: string;
+  display_name: string;
+  avatar_color: string;
 };
 
 type SocialContextValue = {
   friends: string[];
   outgoingRequests: FriendRequest[];
   incomingRequests: FriendRequest[];
-  directory: StubDirectoryEntry[];
+  profileCache: Record<string, ProfileSummary>;
 
-  /** Lowercase-prefix match against directory handles. Local-only. */
-  searchHandle: (q: string) => StubDirectoryEntry[];
-
-  /** Outgoing pending request between this device's account and `target`. */
-  sendFriendRequest: (target: StubDirectoryEntry, sourcePlayerId?: string) => void;
-
-  /**
-   * Resolve an incoming friend request by accepting it. Links or creates a
-   * roster Player for the new friend, adds the friend's userId to the
-   * friends list, and returns the shared completed rounds so the caller can
-   * surface a bulk-claim sheet.
-   */
-  acceptIncomingRequest: (requestId: string) => {
+  searchHandle: (q: string) => Promise<ProfileSummary[]>;
+  sendFriendRequest: (target: ProfileSummary, sourcePlayerId?: string) => Promise<void>;
+  acceptIncomingRequest: (requestId: string) => Promise<{
     newFriendUserId: string;
-    matchedPlayerId: string;
+    matchedPlayerId: string | null;
     sharedRounds: Round[];
-  } | null;
-
-  declineIncomingRequest: (requestId: string) => void;
-
-  /** Dev-only: inject an incoming request from a directory entry. */
-  injectStubIncomingRequest: (directoryUserId: string) => void;
-
-  autoAcceptOutgoing: boolean;
-  setAutoAcceptOutgoing: (v: boolean) => void;
-  autoClaimPending: boolean;
-  setAutoClaimPending: (v: boolean) => void;
+  } | null>;
+  declineIncomingRequest: (requestId: string) => Promise<void>;
 
   hydrated: boolean;
 };
 
 const SocialContext = createContext<SocialContextValue | undefined>(undefined);
 
+function rowToFriendRequest(row: CloudFriendRequestRow, profile?: ProfileSummary): FriendRequest {
+  return {
+    id: row.id,
+    fromUserId: row.from_user_id,
+    fromHandle: profile?.handle ?? '',
+    fromDisplayName: profile?.displayName ?? '',
+    fromAvatarColor: profile?.avatarColor ?? '#888888',
+    toUserId: row.to_user_id,
+    toHandle: '',
+    sourcePlayerId: row.source_player_id ?? undefined,
+    status: row.status,
+    createdAt: row.created_at,
+  };
+}
+
+function profileFromRow(row: CloudProfileRow): ProfileSummary {
+  return {
+    userId: row.user_id,
+    handle: row.handle,
+    displayName: row.display_name,
+    avatarColor: row.avatar_color,
+  };
+}
+
 export function SocialProvider({ children }: PropsWithChildren) {
-  const [friends, setFriends] = useState<string[]>(EMPTY_SOCIAL.friends);
-  const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>(
-    EMPTY_SOCIAL.outgoingRequests
-  );
-  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>(
-    EMPTY_SOCIAL.incomingRequests
-  );
-  const [autoAcceptOutgoing, setAutoAcceptOutgoing] = useState(true);
-  const [autoClaimPending, setAutoClaimPending] = useState(true);
+  const [friends, setFriends] = useState<string[]>([]);
+  const [outgoingRequests, setOutgoingRequests] = useState<FriendRequest[]>([]);
+  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
+  const [profileCache, setProfileCache] = useState<Record<string, ProfileSummary>>({});
   const [hydrated, setHydrated] = useState(false);
 
   const { account } = useAccount();
-  const { allPlayers, addPlayer, linkPlayer, getPlayer, defaultPlayerId } = usePlayers();
-  const { completedRounds, setRoundClaim } = useGolfRound();
+  const { allPlayers, addPlayer } = usePlayers();
+  const { completedRounds } = useGolfRound();
 
-  // Hydrate all four social keys on mount.
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([
-      loadJSON<PersistedSocial>(STORAGE_KEYS.SOCIAL, EMPTY_SOCIAL),
-      loadJSON<boolean>(STORAGE_KEYS.AUTO_ACCEPT_OUTGOING, true),
-      loadJSON<boolean>(STORAGE_KEYS.AUTO_CLAIM_PENDING, true),
-    ]).then(([social, autoAccept, autoClaim]) => {
-      if (cancelled) return;
-      setFriends(social.friends);
-      setOutgoingRequests(social.outgoingRequests);
-      setIncomingRequests(social.incomingRequests);
-      setAutoAcceptOutgoing(autoAccept);
-      setAutoClaimPending(autoClaim);
-      setHydrated(true);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const profileCacheRef = useRef(profileCache);
+  profileCacheRef.current = profileCache;
 
-  // Persist the three social arrays as a single blob — they mutate together
-  // often enough that splitting them would mostly mean three writes for
-  // every accept-flow call.
-  useEffect(() => {
-    if (!hydrated) return;
-    saveJSON(STORAGE_KEYS.SOCIAL, {
-      friends,
-      outgoingRequests,
-      incomingRequests,
-    } satisfies PersistedSocial);
-  }, [friends, outgoingRequests, incomingRequests, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    saveJSON(STORAGE_KEYS.AUTO_ACCEPT_OUTGOING, autoAcceptOutgoing);
-  }, [autoAcceptOutgoing, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    saveJSON(STORAGE_KEYS.AUTO_CLAIM_PENDING, autoClaimPending);
-  }, [autoClaimPending, hydrated]);
-
-  const searchHandle = useCallback((q: string): StubDirectoryEntry[] => {
-    const trimmed = q.trim().toLowerCase().replace(/^@/, '');
-    if (!trimmed) return [];
-    return STUB_FRIEND_DIRECTORY.filter((d) => d.handle.toLowerCase().startsWith(trimmed));
-  }, []);
-
-  const sendFriendRequest = useCallback(
-    (target: StubDirectoryEntry, sourcePlayerId?: string) => {
-      if (!account) {
-        // Defensive: the UI should already gate this, but bail rather than
-        // create an outgoing request with no `from` identity.
-        return;
+  const ensureProfilesCached = useCallback(
+    async (userIds: string[]): Promise<Record<string, ProfileSummary>> => {
+      const missing = userIds.filter((id) => !profileCacheRef.current[id]);
+      if (missing.length === 0) return profileCacheRef.current;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, handle, display_name, avatar_color')
+        .in('user_id', missing);
+      if (error) {
+        console.warn('[social] profile lookup failed:', error);
+        return profileCacheRef.current;
       }
-      // Don't double-send to the same target.
-      if (outgoingRequests.some((r) => r.toUserId === target.userId && r.status === 'pending')) {
-        return;
+      const additions: Record<string, ProfileSummary> = {};
+      for (const row of (data ?? []) as CloudProfileRow[]) {
+        additions[row.user_id] = profileFromRow(row);
       }
-      const req: FriendRequest = {
-        id: `req-out-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        fromUserId: account.userId,
-        fromHandle: account.handle,
-        fromDisplayName: account.displayName,
-        fromAvatarColor: account.avatarColor,
-        toUserId: target.userId,
-        toHandle: target.handle,
-        sourcePlayerId,
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      setOutgoingRequests((prev) => [...prev, req]);
-    },
-    [account, outgoingRequests]
-  );
-
-  /**
-   * Resolve a single accepted outgoing request: link or create the roster
-   * Player, add to friends list, mark the request accepted.
-   */
-  const consumeAcceptedOutgoing = useCallback(
-    (req: FriendRequest) => {
-      const directoryEntry = STUB_FRIEND_DIRECTORY.find((d) => d.userId === req.toUserId);
-      const link = {
-        userId: req.toUserId,
-        displayName: directoryEntry?.displayName ?? req.toHandle,
-        handle: req.toHandle,
-      };
-
-      if (req.sourcePlayerId) {
-        // Source-rooted: link the existing roster row Ben tapped from.
-        linkPlayer(req.sourcePlayerId, link);
-      } else if (directoryEntry?.seedPlayerId && getPlayer(directoryEntry.seedPlayerId)) {
-        // Sourceless but the directory entry maps onto a seed Player that's
-        // currently unlinked: prefer linking it over creating a duplicate.
-        const existing = getPlayer(directoryEntry.seedPlayerId);
-        if (existing && !existing.userId) {
-          linkPlayer(directoryEntry.seedPlayerId, link);
-        }
-      } else if (directoryEntry) {
-        // Truly fresh: create a new Player.
-        const newPlayer: Player = {
-          id: `player-${directoryEntry.userId}-${Date.now()}`,
-          nickname: directoryEntry.displayName,
-          displayName: directoryEntry.displayName,
-          handle: directoryEntry.handle,
-          color: directoryEntry.avatarColor,
-          userId: directoryEntry.userId,
-        };
-        addPlayer(newPlayer);
-      }
-
-      setFriends((prev) => (prev.includes(req.toUserId) ? prev : [...prev, req.toUserId]));
-      setOutgoingRequests((prev) =>
-        prev.map((r) => (r.id === req.id ? { ...r, status: 'accepted' as const } : r))
-      );
-    },
-    [addPlayer, getPlayer, linkPlayer]
-  );
-
-  // Auto-accept outgoing — schedule a timer per pending request.
-  const outgoingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  useEffect(() => {
-    if (!hydrated) return;
-
-    if (!autoAcceptOutgoing) {
-      // Toggled off: clear any pending timers.
-      outgoingTimers.current.forEach((t) => clearTimeout(t));
-      outgoingTimers.current.clear();
-      return;
-    }
-
-    for (const req of outgoingRequests) {
-      if (req.status !== 'pending') continue;
-      if (outgoingTimers.current.has(req.id)) continue;
-      const timer = setTimeout(() => {
-        outgoingTimers.current.delete(req.id);
-        consumeAcceptedOutgoing(req);
-      }, AUTO_ACCEPT_DELAY_MS);
-      outgoingTimers.current.set(req.id, timer);
-    }
-
-    return () => {
-      // On unmount only — not on every re-run — clean up any survivors.
-      // Effect re-runs preserve the timers map so timers schedule once.
-    };
-  }, [autoAcceptOutgoing, outgoingRequests, hydrated, consumeAcceptedOutgoing]);
-
-  // Final cleanup on unmount.
-  useEffect(
-    () => () => {
-      outgoingTimers.current.forEach((t) => clearTimeout(t));
-      outgoingTimers.current.clear();
+      setProfileCache((prev) => ({ ...prev, ...additions }));
+      return { ...profileCacheRef.current, ...additions };
     },
     []
   );
 
+  // Initial pull when account becomes non-null. Sign-out clears.
+  useEffect(() => {
+    if (!account) {
+      setFriends([]);
+      setOutgoingRequests([]);
+      setIncomingRequests([]);
+      setProfileCache({});
+      setHydrated(false);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      const [friendshipsRes, requestsRes] = await Promise.all([
+        supabase.from('friendships').select('user_id, friend_user_id, created_at'),
+        supabase
+          .from('friend_requests')
+          .select('id, from_user_id, to_user_id, status, source_player_id, created_at'),
+      ]);
+      if (cancelled) return;
+      if (friendshipsRes.error) console.warn('[social] friendships pull:', friendshipsRes.error);
+      if (requestsRes.error) console.warn('[social] requests pull:', requestsRes.error);
+
+      const friendships = (friendshipsRes.data ?? []) as CloudFriendshipRow[];
+      const requests = (requestsRes.data ?? []) as CloudFriendRequestRow[];
+
+      const friendUserIds = friendships.map((f) => f.friend_user_id);
+      setFriends(friendUserIds);
+
+      const profileIds = new Set<string>([
+        ...friendUserIds,
+        ...requests.map((r) => r.from_user_id),
+        ...requests.map((r) => r.to_user_id),
+      ]);
+      const profiles = await ensureProfilesCached([...profileIds]);
+      if (cancelled) return;
+
+      const meId = account.userId;
+      const incoming: FriendRequest[] = [];
+      const outgoing: FriendRequest[] = [];
+      for (const r of requests) {
+        if (r.status !== 'pending') continue;
+        if (r.from_user_id === meId) {
+          const targetProfile = profiles[r.to_user_id];
+          outgoing.push({
+            ...rowToFriendRequest(r, targetProfile),
+            toHandle: targetProfile?.handle ?? '',
+            fromHandle: account.handle,
+            fromDisplayName: account.displayName,
+            fromAvatarColor: account.avatarColor,
+          });
+        } else if (r.to_user_id === meId) {
+          incoming.push(rowToFriendRequest(r, profiles[r.from_user_id]));
+        }
+      }
+      setOutgoingRequests(outgoing);
+      setIncomingRequests(incoming);
+      setHydrated(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [account, ensureProfilesCached]);
+
+  // Realtime subscription: friend_requests + friendships.
+  useEffect(() => {
+    if (!account) return;
+    const meId = account.userId;
+
+    const channel = supabase
+      .channel('friends-and-requests')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'friend_requests' },
+        async (payload) => {
+          const newRow = payload.new as CloudFriendRequestRow | undefined;
+          const oldRow = payload.old as CloudFriendRequestRow | undefined;
+          const row = newRow ?? oldRow;
+          if (!row) return;
+
+          await ensureProfilesCached([row.from_user_id, row.to_user_id]);
+          const profiles = profileCacheRef.current;
+
+          if (payload.eventType === 'DELETE') {
+            setIncomingRequests((prev) => prev.filter((r) => r.id !== row.id));
+            setOutgoingRequests((prev) => prev.filter((r) => r.id !== row.id));
+            return;
+          }
+
+          const next = newRow!;
+          const isOutgoing = next.from_user_id === meId;
+          const targetList = isOutgoing ? setOutgoingRequests : setIncomingRequests;
+
+          if (next.status !== 'pending') {
+            targetList((prev) => prev.filter((r) => r.id !== next.id));
+            return;
+          }
+
+          const fr: FriendRequest = isOutgoing
+            ? {
+                ...rowToFriendRequest(next, profiles[next.to_user_id]),
+                toHandle: profiles[next.to_user_id]?.handle ?? '',
+                fromHandle: account.handle,
+                fromDisplayName: account.displayName,
+                fromAvatarColor: account.avatarColor,
+              }
+            : rowToFriendRequest(next, profiles[next.from_user_id]);
+
+          targetList((prev) => {
+            const i = prev.findIndex((r) => r.id === fr.id);
+            if (i === -1) return [...prev, fr];
+            const copy = prev.slice();
+            copy[i] = fr;
+            return copy;
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'friendships' },
+        async (payload) => {
+          const newRow = payload.new as CloudFriendshipRow | undefined;
+          const oldRow = payload.old as CloudFriendshipRow | undefined;
+
+          if (payload.eventType === 'DELETE' && oldRow) {
+            if (oldRow.user_id !== meId) return;
+            setFriends((prev) => prev.filter((id) => id !== oldRow.friend_user_id));
+            return;
+          }
+          if (newRow && newRow.user_id === meId) {
+            await ensureProfilesCached([newRow.friend_user_id]);
+            setFriends((prev) =>
+              prev.includes(newRow.friend_user_id) ? prev : [...prev, newRow.friend_user_id]
+            );
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [account, ensureProfilesCached]);
+
+  const searchHandle = useCallback(
+    async (q: string): Promise<ProfileSummary[]> => {
+      if (!account) return [];
+      const trimmed = q.trim().toLowerCase().replace(/^@/, '');
+      if (!trimmed) return [];
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, handle, display_name, avatar_color')
+        .ilike('handle', `${trimmed}%`)
+        .neq('user_id', account.userId)
+        .limit(20);
+      if (error) {
+        console.warn('[social] handle search failed:', error);
+        return [];
+      }
+      const profiles = ((data ?? []) as CloudProfileRow[]).map(profileFromRow);
+      setProfileCache((prev) => {
+        const next = { ...prev };
+        for (const p of profiles) next[p.userId] = p;
+        return next;
+      });
+      return profiles;
+    },
+    [account]
+  );
+
+  const sendFriendRequest = useCallback(
+    async (target: ProfileSummary, sourcePlayerId?: string) => {
+      if (!account) return;
+      setProfileCache((prev) => ({ ...prev, [target.userId]: target }));
+      const { error } = await supabase.from('friend_requests').insert({
+        from_user_id: account.userId,
+        to_user_id: target.userId,
+        status: 'pending',
+        source_player_id: sourcePlayerId ?? null,
+      });
+      if (error) console.warn('[social] sendFriendRequest:', error);
+    },
+    [account]
+  );
+
   const acceptIncomingRequest = useCallback(
-    (requestId: string) => {
+    async (requestId: string) => {
+      if (!account) return null;
       const req = incomingRequests.find((r) => r.id === requestId);
       if (!req) return null;
 
-      const directoryEntry = STUB_FRIEND_DIRECTORY.find((d) => d.userId === req.fromUserId);
-      const link = {
-        userId: req.fromUserId,
-        displayName: req.fromDisplayName,
-        handle: req.fromHandle,
-      };
-
-      // Decide which roster Player ends up linked.
-      let matchedPlayerId: string;
-      if (directoryEntry?.seedPlayerId) {
-        const existing = getPlayer(directoryEntry.seedPlayerId);
-        if (existing && !existing.userId) {
-          linkPlayer(directoryEntry.seedPlayerId, link);
-          matchedPlayerId = directoryEntry.seedPlayerId;
-        } else {
-          // Seed already taken (e.g. linked to someone else); fall through
-          // to fresh-create.
-          matchedPlayerId = `player-${req.fromUserId}-${Date.now()}`;
-          addPlayer({
-            id: matchedPlayerId,
-            nickname: req.fromDisplayName,
-            displayName: req.fromDisplayName,
-            handle: req.fromHandle,
-            color: req.fromAvatarColor,
-            userId: req.fromUserId,
-          });
-        }
-      } else {
-        matchedPlayerId = `player-${req.fromUserId}-${Date.now()}`;
-        addPlayer({
-          id: matchedPlayerId,
-          nickname: req.fromDisplayName,
-          displayName: req.fromDisplayName,
-          handle: req.fromHandle,
-          color: req.fromAvatarColor,
-          userId: req.fromUserId,
-        });
+      const { error } = await supabase.rpc('accept_friend_request', { request_id: requestId });
+      if (error) {
+        console.warn('[social] accept_friend_request:', error);
+        return null;
       }
 
-      setFriends((prev) => (prev.includes(req.fromUserId) ? prev : [...prev, req.fromUserId]));
-      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      const newFriendProfile =
+        profileCacheRef.current[req.fromUserId] ??
+        (await ensureProfilesCached([req.fromUserId]))[req.fromUserId];
 
-      const sharedRounds = completedRounds.filter((r) => {
-        // Bulk-claim is "rounds the new friend scored that include me."
-        // In stub mode this set is always empty (no friend-owned rounds
-        // exist locally); when real social sync ships, friends' rounds
-        // will land in `completedRounds` with their `ownerId` set, and
-        // this filter starts producing meaningful results without further
-        // change.
-        const ownerId = r.ownerId ?? defaultPlayerId;
-        return (
-          ownerId === matchedPlayerId &&
-          defaultPlayerId !== null &&
-          r.playerIds.includes(defaultPlayerId)
-        );
-      });
+      let matchedPlayerId: string | null = null;
+      if (newFriendProfile) {
+        const existing = allPlayers.find((p) => p.userId === newFriendProfile.userId);
+        if (existing) {
+          matchedPlayerId = existing.id;
+        } else {
+          const newId = `player-${newFriendProfile.userId}-${Date.now()}`;
+          addPlayer({
+            id: newId,
+            nickname: newFriendProfile.displayName,
+            displayName: newFriendProfile.displayName,
+            handle: newFriendProfile.handle,
+            color: newFriendProfile.avatarColor,
+            userId: newFriendProfile.userId,
+          });
+          matchedPlayerId = newId;
+        }
+      }
+
+      const sharedRounds: Round[] = matchedPlayerId
+        ? completedRounds.filter((r) => r.ownerId === matchedPlayerId)
+        : [];
 
       return {
         newFriendUserId: req.fromUserId,
@@ -333,104 +371,42 @@ export function SocialProvider({ children }: PropsWithChildren) {
         sharedRounds,
       };
     },
-    [incomingRequests, getPlayer, linkPlayer, addPlayer, completedRounds, defaultPlayerId]
+    [account, incomingRequests, allPlayers, addPlayer, completedRounds, ensureProfilesCached]
   );
 
-  const declineIncomingRequest = useCallback((requestId: string) => {
-    setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
-  }, []);
-
-  const injectStubIncomingRequest = useCallback(
-    (directoryUserId: string) => {
-      const entry = STUB_FRIEND_DIRECTORY.find((d) => d.userId === directoryUserId);
-      if (!entry) return;
-      // Don't inject duplicates.
-      if (incomingRequests.some((r) => r.fromUserId === entry.userId && r.status === 'pending')) {
-        return;
-      }
-      const req: FriendRequest = {
-        id: `req-in-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        fromUserId: entry.userId,
-        fromHandle: entry.handle,
-        fromDisplayName: entry.displayName,
-        fromAvatarColor: entry.avatarColor,
-        toUserId: account?.userId ?? 'self',
-        toHandle: account?.handle ?? 'self',
-        status: 'pending',
-        createdAt: new Date().toISOString(),
-      };
-      setIncomingRequests((prev) => [...prev, req]);
+  const declineIncomingRequest = useCallback(
+    async (requestId: string) => {
+      if (!account) return;
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'declined' })
+        .eq('id', requestId);
+      if (error) console.warn('[social] decline:', error);
     },
-    [account, incomingRequests]
+    [account]
   );
-
-  // Auto-claim pending — sweep claim entries on completed rounds.
-  const claimTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  useEffect(() => {
-    if (!hydrated) return;
-
-    if (!autoClaimPending) {
-      claimTimers.current.forEach((t) => clearTimeout(t));
-      claimTimers.current.clear();
-      return;
-    }
-
-    for (const round of completedRounds) {
-      if (!round.claims) continue;
-      for (const [participantId, status] of Object.entries(round.claims)) {
-        if (status !== 'pending') continue;
-        const key = `${round.id}:${participantId}`;
-        if (claimTimers.current.has(key)) continue;
-        const timer = setTimeout(() => {
-          claimTimers.current.delete(key);
-          setRoundClaim(round.id, participantId, 'claimed');
-        }, AUTO_CLAIM_DELAY_MS);
-        claimTimers.current.set(key, timer);
-      }
-    }
-  }, [autoClaimPending, completedRounds, hydrated, setRoundClaim]);
-
-  useEffect(
-    () => () => {
-      claimTimers.current.forEach((t) => clearTimeout(t));
-      claimTimers.current.clear();
-    },
-    []
-  );
-
-  // Touch allPlayers in the deps of nothing here (silences a linter false
-  // positive about unused destructure). It's pulled in for completeness;
-  // future actions like player-merge will reference it.
-  void allPlayers;
 
   const value = useMemo<SocialContextValue>(
     () => ({
       friends,
       outgoingRequests,
       incomingRequests,
-      directory: STUB_FRIEND_DIRECTORY,
+      profileCache,
       searchHandle,
       sendFriendRequest,
       acceptIncomingRequest,
       declineIncomingRequest,
-      injectStubIncomingRequest,
-      autoAcceptOutgoing,
-      setAutoAcceptOutgoing,
-      autoClaimPending,
-      setAutoClaimPending,
       hydrated,
     }),
     [
       friends,
       outgoingRequests,
       incomingRequests,
+      profileCache,
       searchHandle,
       sendFriendRequest,
       acceptIncomingRequest,
       declineIncomingRequest,
-      injectStubIncomingRequest,
-      autoAcceptOutgoing,
-      autoClaimPending,
       hydrated,
     ]
   );

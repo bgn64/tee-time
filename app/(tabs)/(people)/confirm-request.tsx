@@ -5,19 +5,25 @@
  * send — request goes out, auto-link on acceptance, past shared rounds
  * queue as bulk-claim — so the user doesn't accidentally fire off requests.
  *
+ * Loads the target profile from `useSocial().profileCache`. The cache is
+ * populated by the search step that preceded us; if that cache miss
+ * happens (e.g., deep-linked route), we fall back to a fresh fetch.
+ *
  * On send: dispatches `sendFriendRequest` and pops back two screens (out
  * of confirm and search) so the user lands on the screen they came from
  * (roster detail or Friends segment).
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useSocial } from '@/state/SocialContext';
+import { supabase } from '@/state/supabaseClient';
 import { useTheme } from '@/state/ThemeContext';
+import { ProfileSummary } from '@/types/social';
 
 export default function ConfirmRequestScreen() {
   const { colors } = useTheme();
@@ -25,23 +31,51 @@ export default function ConfirmRequestScreen() {
     targetUserId: string;
     sourcePlayerId?: string;
   }>();
-  const { directory, sendFriendRequest } = useSocial();
+  const { profileCache, sendFriendRequest } = useSocial();
   const { completedRounds } = useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const [target, setTarget] = useState<ProfileSummary | null>(
+    targetUserId ? profileCache[targetUserId] ?? null : null
+  );
+  const [submitting, setSubmitting] = useState(false);
 
   useScreenHeader({
     left: { kind: 'back', label: 'Search', onPress: () => router.back() },
     right: { kind: 'profile' },
   });
 
-  const target = directory.find((d) => d.userId === targetUserId);
+  // Cache miss fallback — fetch directly.
+  useEffect(() => {
+    if (!targetUserId || target) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('user_id, handle, display_name, avatar_color')
+        .eq('user_id', targetUserId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data) {
+        setTarget({
+          userId: data.user_id,
+          handle: data.handle,
+          displayName: data.display_name,
+          avatarColor: data.avatar_color,
+        });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [targetUserId, target]);
 
   if (!target) {
     return (
       <View style={styles.notFound}>
         <Text style={styles.notFoundIcon}>👤</Text>
-        <Text style={styles.notFoundTitle}>That account isn't reachable</Text>
-        <Text style={styles.notFoundBody}>The link is stale. Search again.</Text>
+        <Text style={styles.notFoundTitle}>Loading…</Text>
+        <Text style={styles.notFoundBody}>If this stalls, search again.</Text>
       </View>
     );
   }
@@ -55,11 +89,10 @@ export default function ConfirmRequestScreen() {
     ? completedRounds.filter((r) => r.playerIds.includes(sourcePlayerId)).length
     : 0;
 
-  const onSend = () => {
-    sendFriendRequest(target, sourcePlayerId);
-    // Pop the confirm screen — we want to leave the search route open
-    // briefly then bounce all the way out. router.back() once exits to
-    // search; calling back twice exits the whole flow.
+  const onSend = async () => {
+    setSubmitting(true);
+    await sendFriendRequest(target, sourcePlayerId);
+    setSubmitting(false);
     router.back();
     router.back();
   };
@@ -75,9 +108,6 @@ export default function ConfirmRequestScreen() {
         <View style={styles.previewInfo}>
           <Text style={styles.previewName}>{target.displayName}</Text>
           <Text style={styles.previewHandle}>@{target.handle}</Text>
-          <Text style={styles.previewMeta}>
-            Joined {new Date(target.joinedAt).toLocaleDateString()}
-          </Text>
         </View>
       </View>
 
@@ -91,8 +121,11 @@ export default function ConfirmRequestScreen() {
           : '.'}
       </Text>
 
-      <Pressable style={styles.primaryBtn} onPress={onSend}>
-        <Text style={styles.primaryBtnText}>Send friend request</Text>
+      <Pressable
+        style={[styles.primaryBtn, submitting && { opacity: 0.5 }]}
+        onPress={onSend}
+        disabled={submitting}>
+        <Text style={styles.primaryBtnText}>{submitting ? 'Sending…' : 'Send friend request'}</Text>
       </Pressable>
       <Pressable style={styles.secondaryBtn} onPress={() => router.back()}>
         <Text style={styles.secondaryBtnText}>Cancel</Text>

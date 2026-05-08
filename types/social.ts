@@ -1,7 +1,6 @@
 /**
- * Social-domain types — friend requests, claim status, stub directory entries.
- * Kept separate from `types/golf.ts` so the round-scoring domain stays
- * unaware of social concepts (friends, requests, accounts).
+ * Social-domain types — friend requests, claim status, profile shape used
+ * by handle search.
  */
 
 import { ClaimStatus } from '@/types/golf';
@@ -12,7 +11,7 @@ export type FriendRequestStatus = 'pending' | 'accepted' | 'declined' | 'expired
 
 export type FriendRequest = {
   id: string;
-  /** Sender's userId (account.userId on Ben's side; directoryEntry.userId on Mike's side). */
+  /** Sender's userId. */
   fromUserId: string;
   fromHandle: string;
   fromDisplayName: string;
@@ -23,11 +22,9 @@ export type FriendRequest = {
   toHandle: string;
 
   /**
-   * On *outgoing* requests, the local roster Player whose row was the source
-   * of the "Connect to a friend" tap. Set so the auto-accept path can link
-   * that Player to the new friend's userId. Undefined for source-less flows
-   * (Friends segment "+ Find friends" entry point) — those auto-create a
-   * fresh roster Player on accept.
+   * On *outgoing* requests, the local roster Player whose row was the
+   * source of the "Connect to a friend" tap. The cloud RPC uses this to
+   * link that Player to the new friend's userId on accept.
    */
   sourcePlayerId?: string;
 
@@ -36,23 +33,12 @@ export type FriendRequest = {
 };
 
 /**
- * A stub friend-directory entry — the fake-backend's representation of
- * "people on the platform you could befriend." When real Supabase lands,
- * this exact shape is returned by the handle-search RPC.
+ * A discovered profile from handle search. Mirrors the public `profiles`
+ * row that's safe to show in search results.
  */
-export type StubDirectoryEntry = {
+export type ProfileSummary = {
   userId: string;
   handle: string;
   displayName: string;
   avatarColor: string;
-  joinedAt: string;
-  /**
-   * If set, this directory entry corresponds to one of the existing seed
-   * Players in `data/players.ts`. The friend-request flow uses this to
-   * auto-link the seed Player when the user befriends the corresponding
-   * directory entry from a source-rooted search (i.e., the request was
-   * launched from Mike's roster row, so on accept Mike's Player gets
-   * linked rather than a duplicate created).
-   */
-  seedPlayerId?: string;
 };

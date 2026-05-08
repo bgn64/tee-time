@@ -85,10 +85,10 @@ export default function PeopleScreen() {
       .sort((a, b) => a.player.nickname.localeCompare(b.player.nickname));
   }, [friends, allPlayers, completedRounds]);
 
-  const onAcceptIncoming = (requestId: string) => {
-    const result = acceptIncomingRequest(requestId);
+  const onAcceptIncoming = async (requestId: string) => {
+    const result = await acceptIncomingRequest(requestId);
     if (!result) return;
-    if (result.sharedRounds.length > 0) {
+    if (result.sharedRounds.length > 0 && result.matchedPlayerId) {
       const matched = allPlayers.find((p) => p.id === result.matchedPlayerId);
       setBulkClaim({
         friendName: matched?.nickname ?? 'New friend',

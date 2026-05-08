@@ -6,34 +6,41 @@
  *      CTA. The header keeps the source roster entry's name visible so the
  *      user remembers what they're linking. `sourcePlayerId` is forwarded
  *      to the confirm screen, which forwards it to `sendFriendRequest`,
- *      which the auto-accept path uses to link that exact roster Player to
- *      the new friend's userId.
+ *      which the RPC uses to link that exact roster Player to the new
+ *      friend's userId on accept.
  *   2. Sourceless — launched from the Friends segment "+ Find friends"
  *      CTA. No source param. On accept, a fresh roster Player is created
  *      from the directory entry rather than linking an existing row.
  *
- * Search is local: prefix-match against the stub directory's `handle`
- * field. When real Supabase lands this gets replaced with an RPC call
- * returning the same StubDirectoryEntry shape.
+ * Search calls `useSocial().searchHandle(q)` which queries the `profiles`
+ * table for a case-insensitive prefix match on `handle`. Results stream
+ * back as the user types (debounced lightly). Empty query renders an
+ * informational empty-state — we don't surface "people you might know"
+ * suggestions until we have signal for that (mutual friends, etc.).
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
+import { ProfileSummary } from '@/types/social';
+
+const DEBOUNCE_MS = 200;
 
 export default function FriendSearchScreen() {
   const { colors } = useTheme();
   const { sourcePlayerId } = useLocalSearchParams<{ sourcePlayerId?: string }>();
-  const { directory, searchHandle, friends, outgoingRequests } = useSocial();
+  const { searchHandle, friends, outgoingRequests } = useSocial();
   const { getPlayer, allPlayers } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [query, setQuery] = useState<string>('');
+  const [results, setResults] = useState<ProfileSummary[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const sourcePlayer = sourcePlayerId ? getPlayer(sourcePlayerId) : undefined;
 
@@ -42,28 +49,48 @@ export default function FriendSearchScreen() {
     right: { kind: 'profile' },
   });
 
-  // Hide directory entries the user is already friended with or has a
-  // pending outgoing request to — selecting them would be a no-op.
   const friendsSet = useMemo(() => new Set(friends), [friends]);
   const pendingTargets = useMemo(
     () => new Set(outgoingRequests.filter((r) => r.status === 'pending').map((r) => r.toUserId)),
     [outgoingRequests]
   );
-
   const linkedUserIds = useMemo(
     () => new Set(allPlayers.map((p) => p.userId).filter((u): u is string => !!u)),
     [allPlayers]
   );
 
-  const results = useMemo(() => {
-    const matches = query.trim() ? searchHandle(query) : directory;
-    return matches.filter(
-      (d) =>
-        !friendsSet.has(d.userId) &&
-        !pendingTargets.has(d.userId) &&
-        !linkedUserIds.has(d.userId)
-    );
-  }, [query, directory, searchHandle, friendsSet, pendingTargets, linkedUserIds]);
+  // Debounced server-side search. Empty query -> empty results.
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!trimmed) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const matches = await searchHandle(trimmed);
+      if (cancelled) return;
+      setResults(matches);
+      setSearching(false);
+    }, DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, searchHandle]);
+
+  const visible = useMemo(
+    () =>
+      results.filter(
+        (d) =>
+          !friendsSet.has(d.userId) &&
+          !pendingTargets.has(d.userId) &&
+          !linkedUserIds.has(d.userId)
+      ),
+    [results, friendsSet, pendingTargets, linkedUserIds]
+  );
 
   return (
     <View style={styles.container}>
@@ -99,43 +126,48 @@ export default function FriendSearchScreen() {
           />
         </View>
 
-        <Text style={styles.resultsHead}>
-          {query.trim() ? 'RESULTS' : 'PEOPLE YOU MIGHT KNOW'}
-        </Text>
-        {results.length === 0 ? (
-          <Text style={styles.empty}>
-            {query.trim()
-              ? 'No matches. Double-check the handle spelling.'
-              : 'No new people to suggest right now.'}
-          </Text>
+        {query.trim() ? (
+          <>
+            <Text style={styles.resultsHead}>RESULTS</Text>
+            {searching ? (
+              <Text style={styles.empty}>Searching…</Text>
+            ) : visible.length === 0 ? (
+              <Text style={styles.empty}>
+                No matches. Double-check the handle spelling — or maybe they don't have an account
+                yet.
+              </Text>
+            ) : (
+              visible.map((entry) => (
+                <Pressable
+                  key={entry.userId}
+                  style={styles.resultRow}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/(people)/confirm-request',
+                      params: {
+                        targetUserId: entry.userId,
+                        sourcePlayerId: sourcePlayerId,
+                      },
+                    })
+                  }>
+                  <View style={[styles.resultAvatar, { backgroundColor: entry.avatarColor }]}>
+                    <Text style={styles.resultAvatarText}>
+                      {entry.displayName[0]?.toUpperCase()}
+                    </Text>
+                  </View>
+                  <View style={styles.resultInfo}>
+                    <Text style={styles.resultName} numberOfLines={1}>
+                      {entry.displayName}
+                    </Text>
+                    <Text style={styles.resultHandle}>@{entry.handle}</Text>
+                  </View>
+                  <Text style={styles.resultChev}>›</Text>
+                </Pressable>
+              ))
+            )}
+          </>
         ) : (
-          results.map((entry) => (
-            <Pressable
-              key={entry.userId}
-              style={styles.resultRow}
-              onPress={() =>
-                router.push({
-                  pathname: '/(tabs)/(people)/confirm-request',
-                  params: {
-                    targetUserId: entry.userId,
-                    sourcePlayerId: sourcePlayerId,
-                  },
-                })
-              }>
-              <View style={[styles.resultAvatar, { backgroundColor: entry.avatarColor }]}>
-                <Text style={styles.resultAvatarText}>
-                  {entry.displayName[0]?.toUpperCase()}
-                </Text>
-              </View>
-              <View style={styles.resultInfo}>
-                <Text style={styles.resultName} numberOfLines={1}>
-                  {entry.displayName}
-                </Text>
-                <Text style={styles.resultHandle}>@{entry.handle}</Text>
-              </View>
-              <Text style={styles.resultChev}>›</Text>
-            </Pressable>
-          ))
+          <Text style={styles.empty}>Start typing a handle to find someone.</Text>
         )}
       </ScrollView>
     </View>
