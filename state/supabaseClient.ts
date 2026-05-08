@@ -1,21 +1,22 @@
 /**
  * Supabase client singleton.
  *
- * Wires the JS SDK with AsyncStorage as the auth-session storage so the
- * signed-in user persists across app restarts (mirrors how every other
- * context in this app handles persistence).
+ * Wires the JS SDK with platform-appropriate auth-session storage:
+ *   - Native (iOS/Android): AsyncStorage adapter, mirrors how every other
+ *     context in this app handles persistence.
+ *   - Web: supabase-js's built-in default uses localStorage when `window`
+ *     is available, and falls back to in-memory storage during SSR. We
+ *     deliberately don't pass AsyncStorage on web because its commonjs
+ *     module references `window` at import time, which crashes Expo
+ *     Router's static-render pass.
  *
  * Configuration is sourced from environment variables exposed via Expo's
  * `EXPO_PUBLIC_*` convention (auto-inlined at build time, safe to ship in
  * the app bundle since the anon key is intended to be public).
- *
- * If either env var is missing we throw at module-load time rather than
- * letting an opaque `fetch failed` show up later — much easier to diagnose
- * a bad `.env` that way.
  */
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
+import { Platform } from 'react-native';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
@@ -31,14 +32,20 @@ if (!SUPABASE_ANON_KEY) {
   );
 }
 
+// Only require AsyncStorage on native; on web supabase-js uses localStorage
+// itself (or in-memory during SSR) without us pulling in AsyncStorage's
+// `window`-reading commonjs module.
+const storage =
+  Platform.OS === 'web'
+    ? undefined
+    : // eslint-disable-next-line @typescript-eslint/no-require-imports
+      require('@react-native-async-storage/async-storage').default;
+
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
-    storage: AsyncStorage,
+    storage,
     autoRefreshToken: true,
     persistSession: true,
-    // We're a mobile app, not a website — no URL-based auth callbacks to
-    // detect. Magic-link emails open Expo Go via a deep link, which we'll
-    // wire up explicitly when we ship that flow.
     detectSessionInUrl: false,
   },
 });

@@ -119,6 +119,11 @@ export function PlayerProvider({ children }: PropsWithChildren) {
 
   const cloudSyncedAccountRef = useRef<string | null>(null);
 
+  // Track the previous account so we can detect the sign-out transition
+  // (non-null -> null). Initial mount with account=null doesn't trigger a
+  // clear; only an actual sign-out does.
+  const prevAccountUserIdRef = useRef<string | null>(null);
+
   // Local hydration
   useEffect(() => {
     let cancelled = false;
@@ -152,6 +157,24 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     if (!hydrated) return;
     saveJSON(STORAGE_KEYS.DEFAULT_PLAYER_ID, defaultPlayerId);
   }, [defaultPlayerId, hydrated]);
+
+  // Sign-out reset: when account transitions non-null -> null, wipe the
+  // local cloud-cached roster back to seed defaults. The persistence
+  // effects above will then write the cleared state to AsyncStorage.
+  // Theme and other purely local state stay intact (they live in their
+  // own contexts).
+  useEffect(() => {
+    if (!hydrated || !accountHydrated) return;
+    const prev = prevAccountUserIdRef.current;
+    const curr = account?.userId ?? null;
+    if (prev !== null && curr === null) {
+      setAllPlayers(defaultPlayers);
+      setRecentIds(DEFAULT_RECENT_IDS);
+      setDefaultPlayerId(DEFAULT_DEFAULT_ID);
+      cloudSyncedAccountRef.current = null;
+    }
+    prevAccountUserIdRef.current = curr;
+  }, [account, accountHydrated, hydrated]);
 
   const cloudUpsertPlayer = useCallback(
     async (player: Player) => {

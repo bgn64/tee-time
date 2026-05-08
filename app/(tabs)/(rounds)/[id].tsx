@@ -16,7 +16,7 @@
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { FriendStatusChip } from '@/components/FriendStatusChip';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
@@ -54,7 +54,7 @@ function formatScore(rel: number): string {
 export default function RoundDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
-  const { completedRounds } = useGolfRound();
+  const { completedRounds, deleteRoundFromHistory } = useGolfRound();
   const { account, postRoundPromptSuppressed, markPostRoundPromptDismissed } = useAccount();
   const { getPlayer } = usePlayers();
   const [bannerDismissedLocal, setBannerDismissedLocal] = useState(false);
@@ -159,6 +159,38 @@ export default function RoundDetailScreen() {
       )}
 
       <ReadOnlyScorecard round={round} />
+
+      {/* Delete button. Only meaningful while signed in (cloud round_claims
+          drives the lifecycle); offline-only rounds get a local-only delete
+          since there's no claim graph to consult. The confirmation message
+          adapts to whether anyone else has a 'claimed' entry. */}
+      <View style={styles.dangerZone}>
+        <Pressable
+          style={styles.deleteButton}
+          onPress={() => {
+            const otherClaimedCount = round.claims
+              ? Object.entries(round.claims).filter(([, status]) => status === 'claimed')
+                  .length
+              : 0;
+            const message =
+              otherClaimedCount > 0
+                ? 'Other players who claimed this round will keep their copy.'
+                : 'It will be removed permanently.';
+            Alert.alert('Delete this round?', message, [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Delete',
+                style: 'destructive',
+                onPress: async () => {
+                  await deleteRoundFromHistory(round.id);
+                  router.back();
+                },
+              },
+            ]);
+          }}>
+          <Text style={styles.deleteButtonText}>Delete this round</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
@@ -303,6 +335,24 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 13,
       fontWeight: '700',
       color: colors.textTitle,
+    },
+    dangerZone: {
+      marginTop: 28,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    deleteButton: {
+      borderRadius: 10,
+      borderWidth: 1.5,
+      borderColor: '#dc2626',
+      paddingVertical: 12,
+      alignItems: 'center',
+    },
+    deleteButtonText: {
+      color: '#dc2626',
+      fontWeight: '800',
+      fontSize: 13,
     },
   });
 }
