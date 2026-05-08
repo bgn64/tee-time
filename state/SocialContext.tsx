@@ -170,7 +170,12 @@ export function SocialProvider({ children }: PropsWithChildren) {
       const friendships = (friendshipsRes.data ?? []) as CloudFriendshipRow[];
       const requests = (requestsRes.data ?? []) as CloudFriendRequestRow[];
 
-      const friendUserIds = friendships.map((f) => f.friend_user_id);
+      // Friendships are stored symmetrically (two rows per pair); pick the
+      // ones where user_id is me so the resulting list is "people I'm
+      // friends with" without including myself.
+      const friendUserIds = friendships
+        .filter((f) => f.user_id === account.userId)
+        .map((f) => f.friend_user_id);
       setFriends(friendUserIds);
 
       const profileIds = new Set<string>([
