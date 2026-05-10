@@ -14,6 +14,7 @@
 import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Tabs } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useTheme } from '@/state/ThemeContext';
 
@@ -26,21 +27,28 @@ function TabBarIcon(props: {
 
 export default function TabLayout() {
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  // Add the device's bottom safe-area inset (Android nav-bar / iPhone home
+  // indicator) on top of our base tab-bar padding so labels never disappear
+  // under the system chrome. Total height grows by `insets.bottom` to keep
+  // the icon row vertically centered above the inset.
+  const baseHeight = 60;
+  const baseBottomPad = 8;
 
   return (
     <Tabs
       initialRouteName="(score)"
       screenOptions={{
         headerShown: false,
-        // Per design mock: active tab uses the theme accent color.
         tabBarActiveTintColor: colors.accent,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
           backgroundColor: colors.tabBar,
           borderTopColor: colors.border,
-          height: 60,
+          height: baseHeight + insets.bottom,
           paddingTop: 6,
-          paddingBottom: 8,
+          paddingBottom: baseBottomPad + insets.bottom,
         },
         tabBarLabelStyle: {
           fontSize: 10,

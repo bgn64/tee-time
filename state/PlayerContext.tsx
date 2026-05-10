@@ -381,13 +381,18 @@ export function PlayerProvider({ children }: PropsWithChildren) {
             userId: account.userId,
             displayName: account.displayName,
             handle: account.handle,
+            // Sync the local roster entry's color to the profile's
+            // avatar_color so the scoring screen matches the snapshot
+            // color the rest of the app derives from the participant row.
+            color: account.avatarColor,
           }
         : { userId: undefined, displayName: undefined, handle: undefined };
 
       if (
         current.userId === desired.userId &&
         current.displayName === desired.displayName &&
-        current.handle === desired.handle
+        current.handle === desired.handle &&
+        (desired.color === undefined || current.color === desired.color)
       ) {
         return prev;
       }
