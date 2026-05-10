@@ -1,6 +1,60 @@
 # Tee Time
 
-A mobile golf scoring app built with **Expo + React Native + TypeScript**. This README is the entry point for new developers and agents working in this codebase. Read it end-to-end before making non-trivial changes.
+A mobile golf scoring app built with **Expo + React Native + TypeScript**. This README is the entry point for new developers and agents working in this codebase.
+
+> **Note:** Sections of this README still describe the early prototype phase. Persistence (Supabase), accounts, friend graph, and a real test suite have all since shipped. The v6 redesign migrated the round model from per-claim status to per-participant confirmation. Read `final.md` for the current status and `supabase/migrations/006_redesign.sql` for the canonical backend.
+
+## Quick start
+
+```bash
+npm install
+npm start          # Expo dev server with QR code; pick a target from the menu
+# or:
+npm run ios        # open in iOS simulator
+npm run android    # open in Android emulator
+npm run web        # serve as a web build
+
+# Verification (the bar before declaring a change "done"):
+npx tsc --noEmit   # type-check; should be silent
+npm test           # Tier 1 unit tests (helpers in lib/)
+npm run test:db    # Tier 2 backend tests — requires Docker + `npx supabase start`
+```
+
+## Testing
+
+The repo has two tiers of automated tests, gated by what infra they need.
+
+### Tier 1 — unit tests (`npm test`)
+
+Pure-function tests against helpers in `lib/scoring.ts` (score formatters, time formatting, round-title rendering, score-array upserts). No React, no Supabase, no Expo runtime. Fast (under 15s) and never flake.
+
+- Test files: `lib/__tests__/*.test.ts`.
+- Runner: jest with the `jest-expo` preset (in case a future test pulls a transformed RN module).
+
+### Tier 2 — backend tests (`npm run test:db`)
+
+Integration tests against a local Supabase stack — actual Postgres + PostgREST + Auth. Catches RPC, trigger, and RLS regressions. Requires Docker.
+
+```bash
+# One-time per machine: install Docker, then:
+npx supabase start          # boots local stack on http://127.0.0.1:54321
+                             # auto-applies migrations from supabase/migrations/
+                             # prints anon + service keys (already in .env.test)
+
+npm run test:db              # runs the suite serially against the local stack
+```
+
+- Test files: `supabase/tests/*.test.ts` covering RPC happy paths (`rpc-happy.test.ts`), authz/error rejections (`rpc-errors.test.ts`), trigger lifecycle and cascade rules (`triggers.test.ts`), and RLS visibility (`rls.test.ts`).
+- Fixtures: `supabase/tests/fixtures.ts` exposes `createTestUser`, `befriend`, `seedRound`, and `cleanupAll`. `cleanupAll` deletes every `auth.users` row (which cascades to all app tables) and runs in `beforeEach`.
+- Tests run serially (`--runInBand`) because they share a single Postgres instance and a single auth space.
+- If the local stack is wedged or you want a clean slate: `npx supabase db reset` re-applies all migrations from scratch.
+
+### Resetting the test DB
+
+```bash
+npx supabase db reset       # re-apply migrations; wipes all data
+npx supabase stop           # tear down the Docker containers entirely
+```
 
 ## Status
 
@@ -279,8 +333,8 @@ Conventions:
 ## Conventions
 
 - **No comments unless the WHY is non-obvious.** Don't narrate what the code does; well-named identifiers handle that. Comments explaining a hidden constraint, a workaround, or a non-obvious invariant are encouraged.
-- **No persistence layer yet.** Don't add AsyncStorage / MMKV / SQLite without an explicit conversation — the in-memory model is intentional for the prototype phase.
-- **No tests.** Verification is `npx tsc --noEmit` + a manual walkthrough of the affected flow on a device or simulator.
+- **Persistence is real.** Supabase migrations under `supabase/migrations/` are the source of truth for the backend schema; do not add ad-hoc SQL in screens or contexts.
+- **Tests exist.** `npm test` (unit) and `npm run test:db` (Supabase) are the bar for changes touching helpers, RPCs, triggers, or RLS. Adding a regression test alongside any bug fix is strongly preferred.
 - **Path alias `@/`** for all internal imports. Configured in `tsconfig.json`. Don't use long `../../../` chains.
 - **One file = one screen / one component / one context.** Resist the urge to split a screen into ten small files.
 - **Screens are functional + hook-based.** The first thing a screen does is call its hooks (`useTheme`, `useGolfRound`, `useScreenHeader`, etc.), then derive locals, then render. No class components.

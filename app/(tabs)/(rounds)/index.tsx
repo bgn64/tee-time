@@ -11,6 +11,12 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import {
+  formatDay,
+  formatScore,
+  getRoundTotalRelative,
+  monthKey,
+} from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -26,38 +32,8 @@ const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'scramble', label: 'Scramble' },
 ];
 
-const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const MONTH_LONG = [
-  'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
-  'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER',
-];
-
 function getRoundEndDate(round: Round): Date {
   return new Date(round.completedAt ?? round.startedAt);
-}
-
-function formatDay(date: Date): string {
-  return `${MONTH_SHORT[date.getMonth()]} ${date.getDate()}`;
-}
-
-function monthKey(date: Date): string {
-  return `${MONTH_LONG[date.getMonth()]} ${date.getFullYear()}`;
-}
-
-function getRoundTotalRelative(round: Round, scorerId?: string): number {
-  let total = 0;
-  for (const score of round.scores) {
-    if (scorerId && score.scorerId !== scorerId) continue;
-    const hole = round.course.holes.find((h) => h.number === score.holeNumber);
-    if (hole) total += score.strokes - hole.par;
-  }
-  return total;
-}
-
-function formatScore(rel: number): string {
-  if (rel === 0) return 'E';
-  if (rel > 0) return `+${rel}`;
-  return `−${Math.abs(rel)}`;
 }
 
 export default function RoundsListScreen() {

@@ -23,17 +23,12 @@ import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { themeNames } from '@/constants/themes';
+import { formatScore } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
-
-function formatScore(rel: number): string {
-  if (rel === 0) return 'E';
-  if (rel > 0) return `+${rel}`;
-  return `−${Math.abs(rel)}`;
-}
 
 function formatAvg(avg: number): string {
   // Sign-aware to one decimal: +4.2, −1.5, E

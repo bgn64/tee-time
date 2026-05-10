@@ -16,6 +16,7 @@ import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'reac
 
 import { ConfirmAbandonSheet } from '@/components/ConfirmAbandonSheet';
 import { RoundActionsSheet } from '@/components/RoundActionsSheet';
+import { formatScore, getScorerTotalRelative } from '@/lib/scoring';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
@@ -23,12 +24,6 @@ import { useTheme } from '@/state/ThemeContext';
 import { Round } from '@/types/golf';
 
 const SCORE_OPTIONS = [-2, -1, 0, 1, 2];
-
-function formatScore(relative: number): string {
-  if (relative === 0) return 'E';
-  if (relative > 0) return `+${relative}`;
-  return `${relative}`;
-}
 
 function scoreLabel(relative: number): string {
   switch (relative) {
@@ -39,24 +34,6 @@ function scoreLabel(relative: number): string {
     case 2: return 'Dbl';
     default: return 'Other';
   }
-}
-
-// Total relative-to-par for any scorer (player in stroke, team in scramble).
-// Both rounds shape scores the same way once the scorer id resolves.
-function getScorerTotalRelative(round: Round, scorerId: string): string {
-  let total = 0;
-  let holesScored = 0;
-  for (const score of round.scores) {
-    if (score.scorerId !== scorerId) continue;
-    const hole = round.course.holes.find((h) => h.number === score.holeNumber);
-    if (!hole) continue;
-    total += score.strokes - hole.par;
-    holesScored++;
-  }
-  if (holesScored === 0) return '';
-  if (total === 0) return `E thru ${holesScored}`;
-  const prefix = total > 0 ? '+' : '';
-  return `${prefix}${total} thru ${holesScored}`;
 }
 
 export default function ScoringScreen() {

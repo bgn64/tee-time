@@ -30,6 +30,7 @@ import {
   View,
 } from 'react-native';
 
+import { formatRelativeTime, formatScore, getRoundTotalRelative } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -37,50 +38,6 @@ import { usePlayers } from '@/state/PlayerContext';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Player, Round } from '@/types/golf';
-
-const MS_PER_MIN = 60 * 1000;
-const MS_PER_HOUR = 60 * MS_PER_MIN;
-const MS_PER_DAY = 24 * MS_PER_HOUR;
-
-const MONTHS_SHORT = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-];
-
-function formatRelativeTime(iso: string): string {
-  const then = new Date(iso).getTime();
-  const now = Date.now();
-  const delta = Math.max(0, now - then);
-  if (delta < MS_PER_HOUR) {
-    const mins = Math.max(1, Math.floor(delta / MS_PER_MIN));
-    return `${mins}m ago`;
-  }
-  if (delta < MS_PER_DAY) {
-    return `${Math.floor(delta / MS_PER_HOUR)}h ago`;
-  }
-  if (delta < 2 * MS_PER_DAY) return 'Yesterday';
-  if (delta < 7 * MS_PER_DAY) {
-    return `${Math.floor(delta / MS_PER_DAY)} days ago`;
-  }
-  const d = new Date(iso);
-  return `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
-}
-
-function getRoundTotalRelative(round: Round, scorerId?: string): number {
-  let total = 0;
-  for (const score of round.scores) {
-    if (scorerId && score.scorerId !== scorerId) continue;
-    const hole = round.course.holes.find((h) => h.number === score.holeNumber);
-    if (hole) total += score.strokes - hole.par;
-  }
-  return total;
-}
-
-function formatScore(rel: number): string {
-  if (rel === 0) return 'E';
-  if (rel > 0) return `+${rel}`;
-  return `−${Math.abs(rel)}`;
-}
 
 export default function FeedScreen() {
   const { colors } = useTheme();

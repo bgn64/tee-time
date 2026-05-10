@@ -25,6 +25,7 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { recentCourses as seededRecentCourses } from '@/data/courses';
+import { replaceScore } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { usePlayers } from '@/state/PlayerContext';
@@ -88,19 +89,6 @@ type GolfRoundContextValue = {
 };
 
 const GolfRoundContext = createContext<GolfRoundContextValue | undefined>(undefined);
-
-function replaceScore(scores: RoundScore[], nextScore: RoundScore) {
-  const existingScoreIndex = scores.findIndex(
-    (score) =>
-      score.scorerId === nextScore.scorerId && score.holeNumber === nextScore.holeNumber
-  );
-
-  if (existingScoreIndex === -1) {
-    return [...scores, nextScore];
-  }
-
-  return scores.map((score, index) => (index === existingScoreIndex ? nextScore : score));
-}
 
 export function GolfRoundProvider({ children }: PropsWithChildren) {
   const [courses, setCourses] = useState<Course[]>(seededRecentCourses);

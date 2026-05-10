@@ -23,6 +23,7 @@ import { useAccount } from '@/state/AccountContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Hole, Round, RoundScore } from '@/types/golf';
+import { formatScore } from '@/lib/scoring';
 
 type Scorer = { id: string; name: string; color: string };
 
@@ -33,12 +34,6 @@ type Props = {
   pendingScorerIds?: Set<string>;
   onCellPress?: (scorerId: string, holeNumber: number) => void;
 };
-
-function formatScore(rel: number): string {
-  if (rel === 0) return 'E';
-  if (rel > 0) return `+${rel}`;
-  return `−${Math.abs(rel)}`;
-}
 
 export function ReadOnlyScorecard({
   round,

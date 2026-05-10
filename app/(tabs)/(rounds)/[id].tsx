@@ -25,6 +25,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 
 import { HoleEditSheet } from '@/components/HoleEditSheet';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
+import { buildRoundTitle } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -36,24 +37,6 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 function formatDate(iso: string): string {
   const d = new Date(iso);
   return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
-}
-
-function buildTitle(round: Round, myUserId?: string): string {
-  const isScramble = round.scoringRule === 'scramble';
-  if (isScramble) {
-    if (!round.teams || round.teams.length === 0) return 'Round';
-    return round.teams.map((t) => t.name).join(' vs ');
-  }
-  // Stroke: list confirmed linked participants by displayName, replacing
-  // own name with "you" when the current viewer is one of them.
-  const confirmed =
-    round.participants
-      ?.filter((p) => p.linkedUserId && p.status === 'confirmed')
-      .map((p) => (p.linkedUserId === myUserId ? 'you' : p.displayName)) ?? [];
-  if (confirmed.length === 0) return 'Round';
-  if (confirmed.length === 1) return `${confirmed[0]} played`;
-  if (confirmed.length === 2) return `${confirmed[0]} and ${confirmed[1]} played`;
-  return `${confirmed.slice(0, -1).join(', ')}, and ${confirmed[confirmed.length - 1]} played`;
 }
 
 export default function RoundDetailScreen() {
@@ -185,7 +168,7 @@ export default function RoundDetailScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{round.course.name}</Text>
       <Text style={styles.subtitle}>
-        {isScramble ? 'Scramble' : 'Stroke'} · {buildTitle(round, myUserId)} ·{' '}
+        {isScramble ? 'Scramble' : 'Stroke'} · {buildRoundTitle(round, myUserId)} ·{' '}
         {formatDate(round.completedAt ?? round.startedAt)}
       </Text>
 

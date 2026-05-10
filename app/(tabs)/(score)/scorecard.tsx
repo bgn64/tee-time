@@ -10,25 +10,11 @@ import { useMemo } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
+import { formatScore, getRoundTotalRelative } from '@/lib/scoring';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Round } from '@/types/golf';
-
-function getRoundTotalRelative(round: Round): number {
-  let total = 0;
-  for (const score of round.scores) {
-    const hole = round.course.holes.find((h) => h.number === score.holeNumber);
-    if (hole) total += score.strokes - hole.par;
-  }
-  return total;
-}
-
-function formatScore(rel: number): string {
-  if (rel === 0) return 'E';
-  if (rel > 0) return `+${rel}`;
-  return `−${Math.abs(rel)}`;
-}
 
 export default function ScorecardScreen() {
   const { colors } = useTheme();
