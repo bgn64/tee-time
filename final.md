@@ -1,9 +1,11 @@
 # Tee Time — implementation status & follow-ups
 
-> Snapshot at the end of Path A's phases A-F. Phase G (deployment) is the
-> only remaining item from the original Path A plan; everything else listed
-> below is *optional polish* or *future feature work* worth tracking so it
-> doesn't fall through the cracks.
+> Snapshot at the end of Path A's phases A-F, plus the v6 round-confirmation
+> + merge redesign. Phase G (deployment) is the only remaining item from
+> the original Path A plan; everything else listed below is *optional polish*
+> or *future feature work* worth tracking so it doesn't fall through the
+> cracks. Items marked **[OBSOLETED BY v6]** were superseded by migration
+> 006 and the participant-based round model.
 
 ---
 
@@ -102,13 +104,12 @@ You can't rename a roster Player from the UI. Backend supports it: the
 `linkPlayer`/local mutation pattern is there. Adding a tap-to-edit on
 the People-tab person detail would be small.
 
-#### 5. Roster merge *(med)*
+#### 5. Roster merge *(med)* **[OBSOLETED BY v6]**
 
-If you have two roster entries for the same real person (e.g., one
-called "Mickey" and another called "Mike Chen" added later), there's no
-way to merge them. Solution involves: pick a winner, rewrite all rounds
-referencing the loser's local id to use the winner's id, delete the
-loser. Non-trivial because rounds reference roster ids.
+Replaced by the unlinked → friend merge flow under the v6 redesign.
+`merge_unlinked_player` RPC fans out per-round confirmation requests to
+the friend; the unlinked roster row is hard-deleted on success. Uniqueness
+violations on a round are surfaced as an error.
 
 #### 6. Add roster entry from People tab *(low)*
 
@@ -126,30 +127,19 @@ roster entry, auto-create on continue rather than requiring a separate
 
 ### Round flow polish
 
-#### 8. Round editing + re-claim flip *(med-high)*
+#### 8. Round editing + re-claim flip *(med-high)* **[OBSOLETED BY v6]**
 
-Once a round is completed, scores can't be edited. The plan doc was
-explicit that editing should *flip claim entries back to pending* on
-the affected participants — for stroke rounds, only the player whose
-score changed; for scramble, the whole team. This is intentional friction
-to preserve the integrity of others' history.
+Replaced by the v6 confirm/deny model: linked-friend participants explicitly
+confirm their participation; once confirmed, they own edit rights on their
+own scoreline. The round detail screen now supports per-hole editing via
+`HoleEditSheet` and the `update_score` RPC. No claim-flip-on-edit needed.
 
-Implementation needs: edit UI on the round detail, claim-status reset
-logic, server-side trigger or RPC to enforce the flip atomically with
-the score update. Decent surface area.
+#### 9. Unclaimed-rounds sub-view in Rounds tab *(med)* **[OBSOLETED BY v6]**
 
-#### 9. Unclaimed-rounds sub-view in Rounds tab *(med)*
-
-Per your earlier preference, claim/reject UX should ultimately live in
-the Rounds tab — likely as a segment or sub-tab showing rounds where
-you have a `pending` or `not-claimed` claim. Tapping a row would let
-you Claim or Reject. Today the only way to claim a round is via the
-bulk-claim sheet on accepting an incoming friend request, and the
-per-round chips on the round detail are read-only.
-
-This pairs well with #8: once you can edit a round, the claim flip
-needs an interactive surface, and the Rounds-tab sub-view is where it
-lives.
+Replaced by the Pending drawer-link in the Rounds tab plus the
+`/(rounds)/pending` drilldown screen. Inline Confirm / Deny buttons; a
+banner above the round detail also surfaces the same actions for pending
+participants.
 
 #### 10. Round-detail claim chips don't currently show owner status *(low)*
 
@@ -338,16 +328,12 @@ a backstop: when an unlinked-friend round arrives, auto-create or
 auto-link the roster entry. Today there's no automatic mechanism
 beyond what `acceptIncomingRequest` does.
 
-#### 32. Bulk-claim sheet effectively unreachable *(low)*
+#### 32. Bulk-claim sheet effectively unreachable *(low)* **[OBSOLETED BY v6]**
 
-The bulk-claim sheet that appears after accepting an incoming request
-fires only when there are shared rounds that were *owned by the sender*
-and you participated in. That's a narrow case in practice (the sender
-would have had to score with you before you were friends, which means
-they'd have needed your handle as a participant, which doesn't happen
-pre-friendship). The sheet is still wired in the code but rarely
-shows. Probably fine to leave; revisit if Phase 9-style multi-step
-onboarding becomes a thing.
+Removed. The v6 redesign drops auto-link-on-friend-accept and the
+`BulkClaimSheet` component entirely. Friend acceptance now only inserts
+a roster entry for the new friend; merging unlinked history is a
+deliberate user action.
 
 ---
 

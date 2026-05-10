@@ -9,11 +9,17 @@
  *
  * Stroke rounds: scorers are players (resolved via PlayerContext).
  * Scramble rounds: scorers are teams (taken directly from round.teams).
+ *
+ * Per-scorer overlays (post v6 redesign) are optional:
+ *   - editableScorerIds — score cells become tappable; calls `onCellPress`.
+ *   - blurredScorerIds  — score cells render as masked tiles, total hidden.
+ *   - pendingScorerIds  — appends a `?` chip to the scorer's name.
  */
 
-import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Fragment, useMemo } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { useAccount } from '@/state/AccountContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Hole, Round, RoundScore } from '@/types/golf';
@@ -22,6 +28,10 @@ type Scorer = { id: string; name: string; color: string };
 
 type Props = {
   round: Round;
+  editableScorerIds?: Set<string>;
+  blurredScorerIds?: Set<string>;
+  pendingScorerIds?: Set<string>;
+  onCellPress?: (scorerId: string, holeNumber: number) => void;
 };
 
 function formatScore(rel: number): string {
@@ -30,16 +40,38 @@ function formatScore(rel: number): string {
   return `−${Math.abs(rel)}`;
 }
 
-export function ReadOnlyScorecard({ round }: Props) {
+export function ReadOnlyScorecard({
+  round,
+  editableScorerIds,
+  blurredScorerIds,
+  pendingScorerIds,
+  onCellPress,
+}: Props) {
   const { colors } = useTheme();
   const { getPlayer } = usePlayers();
+  const { account } = useAccount();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const isScramble = round.scoringRule === 'scramble';
 
+  // Build the scorer list. For stroke we prefer the cloud-synced
+  // `round.participants` snapshot (displayName + color captured at insert
+  // time) because local Player.ids collide across users — particularly the
+  // hardcoded 'user' default player. Falling back to a roster lookup is a
+  // legacy compat path for pre-v6 rounds that don't carry participants.
   const scorers: Scorer[] = useMemo(() => {
     if (isScramble && round.teams) {
       return round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
+    }
+    if (round.participants && round.participants.length > 0) {
+      return round.participants.map((p) => {
+        const isMe = !!account?.userId && p.linkedUserId === account.userId;
+        return {
+          id: p.participantKey,
+          name: isMe ? 'You' : p.displayName,
+          color: p.displayColor || colors.primary,
+        };
+      });
     }
     return round.playerIds
       .map((pid) => {
@@ -47,7 +79,7 @@ export function ReadOnlyScorecard({ round }: Props) {
         return p ? { id: p.id, name: p.nickname, color: p.color || colors.primary } : null;
       })
       .filter((s): s is Scorer => s !== null);
-  }, [round, isScramble, getPlayer, colors.primary]);
+  }, [round, isScramble, getPlayer, colors.primary, account?.userId]);
 
   const front9 = useMemo(
     () => round.course.holes.filter((h) => h.number <= 9),
@@ -66,6 +98,10 @@ export function ReadOnlyScorecard({ round }: Props) {
         scorers={scorers}
         scores={round.scores}
         totalLabel="OUT"
+        editableScorerIds={editableScorerIds}
+        blurredScorerIds={blurredScorerIds}
+        pendingScorerIds={pendingScorerIds}
+        onCellPress={onCellPress}
       />
       {back9.length > 0 && (
         <View style={{ marginTop: 14 }}>
@@ -75,6 +111,10 @@ export function ReadOnlyScorecard({ round }: Props) {
             scorers={scorers}
             scores={round.scores}
             totalLabel="IN"
+            editableScorerIds={editableScorerIds}
+            blurredScorerIds={blurredScorerIds}
+            pendingScorerIds={pendingScorerIds}
+            onCellPress={onCellPress}
           />
         </View>
       )}
@@ -84,6 +124,8 @@ export function ReadOnlyScorecard({ round }: Props) {
           allHoles={round.course.holes}
           scorers={scorers}
           scores={round.scores}
+          blurredScorerIds={blurredScorerIds}
+          pendingScorerIds={pendingScorerIds}
         />
       </View>
     </View>
@@ -96,9 +138,23 @@ type SectionProps = {
   scorers: Scorer[];
   scores: RoundScore[];
   totalLabel: string;
+  editableScorerIds?: Set<string>;
+  blurredScorerIds?: Set<string>;
+  pendingScorerIds?: Set<string>;
+  onCellPress?: (scorerId: string, holeNumber: number) => void;
 };
 
-function NineSection({ styles, holes, scorers, scores, totalLabel }: SectionProps) {
+function NineSection({
+  styles,
+  holes,
+  scorers,
+  scores,
+  totalLabel,
+  editableScorerIds,
+  blurredScorerIds,
+  pendingScorerIds,
+  onCellPress,
+}: SectionProps) {
   const parTotal = holes.reduce((t, h) => t + h.par, 0);
 
   return (
@@ -127,6 +183,10 @@ function NineSection({ styles, holes, scorers, scores, totalLabel }: SectionProp
 
       {/* Per-scorer rows */}
       {scorers.map((scorer) => {
+        const isBlurred = !!blurredScorerIds?.has(scorer.id);
+        const isPending = !!pendingScorerIds?.has(scorer.id);
+        const isEditable = !!editableScorerIds?.has(scorer.id);
+
         let nineRel = 0;
         let nineStrokes = 0;
         let holesScored = 0;
@@ -151,29 +211,52 @@ function NineSection({ styles, holes, scorers, scores, totalLabel }: SectionProp
 
         return (
           <View key={scorer.id} style={styles.row}>
-            <Text style={[styles.cellName, { color: scorer.color }]} numberOfLines={1}>
-              {scorer.name}
-            </Text>
-            {cells.map((c, i) => (
-              <Text
-                key={holes[i].number}
-                style={[
-                  styles.cellNum,
-                  c.rel !== null && c.rel > 0 && styles.cellOver,
-                  c.rel !== null && c.rel < 0 && styles.cellUnder,
-                  c.strokes === null && styles.cellEmpty,
-                ]}>
-                {c.strokes ?? '—'}
+            <View style={styles.cellName}>
+              <Text style={{ color: scorer.color, fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
+                {scorer.name}
+                {isPending ? ' ?' : ''}
+                {isEditable && !isPending ? ' ✎' : ''}
               </Text>
-            ))}
-            <Text
-              style={[
-                styles.cellTotal,
-                hasAnyScore && nineRel > 0 && styles.cellOver,
-                hasAnyScore && nineRel < 0 && styles.cellUnder,
-              ]}>
-              {sectionTotalText}
-            </Text>
+            </View>
+            {cells.map((c, i) => {
+              const cellContent = isBlurred ? (
+                <View style={styles.blurMask} />
+              ) : (
+                <Text
+                  style={[
+                    styles.cellNum,
+                    c.rel !== null && c.rel > 0 && styles.cellOver,
+                    c.rel !== null && c.rel < 0 && styles.cellUnder,
+                    c.strokes === null && styles.cellEmpty,
+                  ]}>
+                  {c.strokes ?? '—'}
+                </Text>
+              );
+
+              if (isEditable && !isBlurred && onCellPress) {
+                return (
+                  <Pressable
+                    key={holes[i].number}
+                    onPress={() => onCellPress(scorer.id, holes[i].number)}
+                    style={styles.editableCell}>
+                    {cellContent}
+                  </Pressable>
+                );
+              }
+              return <Fragment key={holes[i].number}>{cellContent}</Fragment>;
+            })}
+            {isBlurred ? (
+              <View style={[styles.cellTotal, styles.blurMaskTotal]} />
+            ) : (
+              <Text
+                style={[
+                  styles.cellTotal,
+                  hasAnyScore && nineRel > 0 && styles.cellOver,
+                  hasAnyScore && nineRel < 0 && styles.cellUnder,
+                ]}>
+                {sectionTotalText}
+              </Text>
+            )}
           </View>
         );
       })}
@@ -186,9 +269,18 @@ type FinalProps = {
   allHoles: Hole[];
   scorers: Scorer[];
   scores: RoundScore[];
+  blurredScorerIds?: Set<string>;
+  pendingScorerIds?: Set<string>;
 };
 
-function FinalTotals({ styles, allHoles, scorers, scores }: FinalProps) {
+function FinalTotals({
+  styles,
+  allHoles,
+  scorers,
+  scores,
+  blurredScorerIds,
+  pendingScorerIds,
+}: FinalProps) {
   const parTotal = allHoles.reduce((t, h) => t + h.par, 0);
 
   return (
@@ -197,6 +289,8 @@ function FinalTotals({ styles, allHoles, scorers, scores }: FinalProps) {
         <Text style={styles.totalHeadText}>FINAL · Par {parTotal}</Text>
       </View>
       {scorers.map((scorer) => {
+        const isBlurred = !!blurredScorerIds?.has(scorer.id);
+        const isPending = !!pendingScorerIds?.has(scorer.id);
         let totalRel = 0;
         let totalStrokes = 0;
         let holesScored = 0;
@@ -219,15 +313,22 @@ function FinalTotals({ styles, allHoles, scorers, scores }: FinalProps) {
         return (
           <View key={scorer.id} style={styles.totalRow}>
             <View style={[styles.scorerSwatch, { backgroundColor: scorer.color }]} />
-            <Text style={styles.totalName}>{scorer.name}</Text>
-            <Text
-              style={[
-                styles.totalScore,
-                hasAnyScore && totalRel > 0 && styles.cellOver,
-                hasAnyScore && totalRel < 0 && styles.cellUnder,
-              ]}>
-              {status}
+            <Text style={styles.totalName}>
+              {scorer.name}
+              {isPending ? ' ?' : ''}
             </Text>
+            {isBlurred ? (
+              <View style={styles.blurMaskFinal} />
+            ) : (
+              <Text
+                style={[
+                  styles.totalScore,
+                  hasAnyScore && totalRel > 0 && styles.cellOver,
+                  hasAnyScore && totalRel < 0 && styles.cellUnder,
+                ]}>
+                {status}
+              </Text>
+            )}
           </View>
         );
       })}
@@ -258,9 +359,34 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     cellName: {
       width: 54,
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.textBody,
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    editableCell: {
+      flex: 1,
+      backgroundColor: 'rgba(124,179,66,0.10)',
+      borderRadius: 4,
+    },
+    blurMask: {
+      flex: 1,
+      height: 14,
+      borderRadius: 3,
+      backgroundColor: '#f0e6d0',
+      opacity: 0.85,
+    },
+    blurMaskTotal: {
+      backgroundColor: '#f0e6d0',
+      borderRadius: 3,
+      width: 36,
+      height: 14,
+      opacity: 0.85,
+    },
+    blurMaskFinal: {
+      backgroundColor: '#f0e6d0',
+      borderRadius: 3,
+      width: 80,
+      height: 14,
+      opacity: 0.85,
     },
     cellNum: {
       flex: 1,

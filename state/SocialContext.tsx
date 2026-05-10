@@ -32,10 +32,8 @@ import {
 } from 'react';
 
 import { useAccount } from '@/state/AccountContext';
-import { useGolfRound } from '@/state/GolfRoundContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { supabase } from '@/state/supabaseClient';
-import { Round } from '@/types/golf';
 import { FriendRequest, ProfileSummary } from '@/types/social';
 
 type CloudFriendRequestRow = {
@@ -67,11 +65,9 @@ type SocialContextValue = {
   profileCache: Record<string, ProfileSummary>;
 
   searchHandle: (q: string) => Promise<ProfileSummary[]>;
-  sendFriendRequest: (target: ProfileSummary, sourcePlayerId?: string) => Promise<void>;
+  sendFriendRequest: (target: ProfileSummary) => Promise<void>;
   acceptIncomingRequest: (requestId: string) => Promise<{
     newFriendUserId: string;
-    matchedPlayerId: string | null;
-    sharedRounds: Round[];
   } | null>;
   declineIncomingRequest: (requestId: string) => Promise<void>;
 
@@ -89,7 +85,6 @@ function rowToFriendRequest(row: CloudFriendRequestRow, profile?: ProfileSummary
     fromAvatarColor: profile?.avatarColor ?? '#888888',
     toUserId: row.to_user_id,
     toHandle: '',
-    sourcePlayerId: row.source_player_id ?? undefined,
     status: row.status,
     createdAt: row.created_at,
   };
@@ -113,7 +108,6 @@ export function SocialProvider({ children }: PropsWithChildren) {
 
   const { account } = useAccount();
   const { allPlayers, addPlayer } = usePlayers();
-  const { completedRounds } = useGolfRound();
 
   const profileCacheRef = useRef(profileCache);
   profileCacheRef.current = profileCache;
@@ -280,10 +274,28 @@ export function SocialProvider({ children }: PropsWithChildren) {
             return;
           }
           if (newRow && newRow.user_id === meId) {
-            await ensureProfilesCached([newRow.friend_user_id]);
+            const profiles = await ensureProfilesCached([newRow.friend_user_id]);
             setFriends((prev) =>
               prev.includes(newRow.friend_user_id) ? prev : [...prev, newRow.friend_user_id]
             );
+            // Auto-create a roster entry for the new friend if one doesn't
+            // exist. Mirrors the auto-create in acceptIncomingRequest, but
+            // covers the *sender* side (where the recipient's accept arrives
+            // via realtime rather than a direct RPC return value).
+            const profile = profiles[newRow.friend_user_id];
+            if (profile) {
+              const existing = allPlayers.find((p) => p.userId === profile.userId);
+              if (!existing) {
+                addPlayer({
+                  id: `player-${profile.userId}-${Date.now()}`,
+                  nickname: profile.displayName,
+                  displayName: profile.displayName,
+                  handle: profile.handle,
+                  color: profile.avatarColor,
+                  userId: profile.userId,
+                });
+              }
+            }
           }
         }
       )
@@ -292,7 +304,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [account, ensureProfilesCached]);
+  }, [account, ensureProfilesCached, allPlayers, addPlayer]);
 
   const searchHandle = useCallback(
     async (q: string): Promise<ProfileSummary[]> => {
@@ -321,14 +333,14 @@ export function SocialProvider({ children }: PropsWithChildren) {
   );
 
   const sendFriendRequest = useCallback(
-    async (target: ProfileSummary, sourcePlayerId?: string) => {
+    async (target: ProfileSummary) => {
       if (!account) return;
       setProfileCache((prev) => ({ ...prev, [target.userId]: target }));
       const { error } = await supabase.from('friend_requests').insert({
         from_user_id: account.userId,
         to_user_id: target.userId,
         status: 'pending',
-        source_player_id: sourcePlayerId ?? null,
+        source_player_id: null,
       });
       if (error) console.warn('[social] sendFriendRequest:', error);
     },
@@ -347,16 +359,17 @@ export function SocialProvider({ children }: PropsWithChildren) {
         return null;
       }
 
+      // Auto-create a roster entry for the new friend so they show up in
+      // the Friends list immediately. We do NOT auto-merge any existing
+      // unlinked roster entries — that's an explicit user action under the
+      // v6 redesign.
       const newFriendProfile =
         profileCacheRef.current[req.fromUserId] ??
         (await ensureProfilesCached([req.fromUserId]))[req.fromUserId];
 
-      let matchedPlayerId: string | null = null;
       if (newFriendProfile) {
         const existing = allPlayers.find((p) => p.userId === newFriendProfile.userId);
-        if (existing) {
-          matchedPlayerId = existing.id;
-        } else {
+        if (!existing) {
           const newId = `player-${newFriendProfile.userId}-${Date.now()}`;
           addPlayer({
             id: newId,
@@ -366,21 +379,12 @@ export function SocialProvider({ children }: PropsWithChildren) {
             color: newFriendProfile.avatarColor,
             userId: newFriendProfile.userId,
           });
-          matchedPlayerId = newId;
         }
       }
 
-      const sharedRounds: Round[] = matchedPlayerId
-        ? completedRounds.filter((r) => r.ownerId === matchedPlayerId)
-        : [];
-
-      return {
-        newFriendUserId: req.fromUserId,
-        matchedPlayerId,
-        sharedRounds,
-      };
+      return { newFriendUserId: req.fromUserId };
     },
-    [account, incomingRequests, allPlayers, addPlayer, completedRounds, ensureProfilesCached]
+    [account, incomingRequests, allPlayers, addPlayer, ensureProfilesCached]
   );
 
   const declineIncomingRequest = useCallback(

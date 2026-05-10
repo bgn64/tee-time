@@ -1,16 +1,13 @@
 /**
- * Person detail — per-roster-entry view. Shows avatar, name, badge, count of
- * rounds together, recent rounds, and (depending on state) one of:
- *   · "Connect to a friend →" CTA — when signed in, the entry isn't linked,
- *     and isn't the user themselves. Routes into the friend-search flow.
- *   · "REQUEST PENDING" pill — when there's an outgoing pending friend
- *     request whose `sourcePlayerId` matches this entry. The label is
- *     intentionally informational (no cancel-request affordance shipped
- *     in this step; flips to FRIEND on auto-accept).
- *   · Nothing — for YOU, FRIEND, or pre-account UNCLAIMED entries.
+ * Per-person detail.
  *
- * Step 8 also threads the FRIEND chip + @handle inline alongside the
- * UNCLAIMED-vs-FRIEND-vs-YOU badge.
+ * Serves both linked friends and unlinked roster entries. The action card
+ * adapts based on link state:
+ *   - Linked friend: read-only summary + recent rounds.
+ *   - Unlinked entry: read-only summary + recent rounds + "Merge into a
+ *     friend" action that routes to the merge-target picker.
+ *
+ * The default player ("YOU") shows neither action, just the summary.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
@@ -41,7 +38,7 @@ export default function PersonDetailScreen() {
   const { getPlayer, defaultPlayerId } = usePlayers();
   const { completedRounds } = useGolfRound();
   const { account } = useAccount();
-  const { friends, outgoingRequests } = useSocial();
+  const { friends } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -63,18 +60,13 @@ export default function PersonDetailScreen() {
       <View style={styles.notFound}>
         <Text style={styles.notFoundIcon}>👤</Text>
         <Text style={styles.notFoundTitle}>Player not found</Text>
-        <Text style={styles.notFoundBody}>
-          They may have been removed from your roster.
-        </Text>
+        <Text style={styles.notFoundBody}>They may have been removed from your roster.</Text>
       </View>
     );
   }
 
   const isYou = player.id === defaultPlayerId;
   const linked = Boolean(player.userId && friends.includes(player.userId));
-  const pendingRequest = outgoingRequests.find(
-    (r) => r.sourcePlayerId === player.id && r.status === 'pending'
-  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -83,13 +75,11 @@ export default function PersonDetailScreen() {
           <Text style={styles.bigAvatarText}>{player.nickname[0]?.toUpperCase()}</Text>
         </View>
         <Text style={styles.name}>{player.nickname}</Text>
-        {linked && player.handle ? (
-          <Text style={styles.handleLine}>@{player.handle}</Text>
-        ) : null}
+        {linked && player.handle ? <Text style={styles.handleLine}>@{player.handle}</Text> : null}
         <View style={styles.badgeRow}>
           {isYou && <Text style={[styles.badge, styles.badgeYou]}>YOU · DEFAULT PLAYER</Text>}
           {!isYou && linked && <Text style={[styles.badge, styles.badgeFriend]}>FRIEND</Text>}
-          {!isYou && !linked && <Text style={styles.badge}>UNCLAIMED</Text>}
+          {!isYou && !linked && <Text style={styles.badge}>UNLINKED</Text>}
         </View>
       </View>
 
@@ -97,52 +87,41 @@ export default function PersonDetailScreen() {
         <Text style={styles.statNum}>{rounds.length}</Text>
         <Text style={styles.statLabel}>
           {rounds.length === 1
-            ? isYou ? 'round played' : 'round together'
-            : isYou ? 'rounds played' : 'rounds together'}
+            ? isYou
+              ? 'round played'
+              : 'round together'
+            : isYou
+            ? 'rounds played'
+            : 'rounds together'}
         </Text>
       </View>
 
-      {/* Connect-to-a-friend CTA — only when there's an account, this entry
-          isn't already linked, isn't the user, and there's no in-flight
-          outgoing request from this row. */}
-      {!isYou && !linked && account && !pendingRequest && (
-        <View style={styles.connectBlock}>
+      {!isYou && !linked && account && (
+        <View style={styles.actionsCard}>
+          <Text style={styles.actionsHead}>⚙  ACTIONS</Text>
           <Pressable
+            style={styles.primaryBtn}
             onPress={() =>
               router.push({
-                pathname: '/(tabs)/(people)/search',
-                params: { sourcePlayerId: player.id },
+                pathname: '/(tabs)/(people)/merge-target',
+                params: { unlinkedId: player.id },
               })
-            }
-            style={({ pressed }) => [styles.connectBtn, pressed && styles.connectBtnPressed]}>
-            <Text style={styles.connectBtnText}>Connect to a friend  →</Text>
+            }>
+            <Text style={styles.primaryBtnText}>Merge into a friend</Text>
           </Pressable>
-          <Text style={styles.connectExplainer}>
-            Link {player.nickname} to a real account so they can see your shared rounds.
+          <Text style={styles.actionsHelp}>
+            Already friends with this person? Merging gives them this player's history. They'll
+            review each round and confirm or deny.
           </Text>
         </View>
       )}
 
-      {/* Outgoing-pending state — unique to source-rooted requests. */}
-      {!isYou && !linked && pendingRequest && (
-        <View style={styles.pendingBlock}>
-          <Text style={styles.pendingPill}>REQUEST PENDING</Text>
-          <Text style={styles.pendingExplainer}>
-            Sent to <Text style={styles.pendingExplainerEm}>@{pendingRequest.toHandle}</Text>.
-            Once they accept, this entry will link automatically.
-          </Text>
-        </View>
-      )}
-
-      {/* Pre-account UNCLAIMED entries get the original Phase 1 explainer. */}
       {!isYou && !linked && !account && (
-        <View style={styles.connectBlock}>
-          <View style={styles.connectBtnDisabled}>
-            <Text style={styles.connectBtnText}>Connect to a friend  →</Text>
-          </View>
-          <Text style={styles.connectExplainer}>
-            Sign in to link {player.nickname} to a real account. Their shared rounds will appear
-            on both of your histories.
+        <View style={styles.signInBlock}>
+          <Text style={styles.signInTitle}>Sign in to merge</Text>
+          <Text style={styles.signInBody}>
+            Once you sign in, you'll be able to merge {player.nickname} into one of your friends'
+            accounts.
           </Text>
         </View>
       )}
@@ -155,10 +134,7 @@ export default function PersonDetailScreen() {
               key={round.id}
               style={styles.roundRow}
               onPress={() =>
-                router.push({
-                  pathname: '/(tabs)/(rounds)/[id]',
-                  params: { id: round.id },
-                })
+                router.push({ pathname: '/(tabs)/(rounds)/[id]', params: { id: round.id } })
               }>
               <View style={styles.roundInfo}>
                 <Text style={styles.roundCourse} numberOfLines={1}>
@@ -172,9 +148,7 @@ export default function PersonDetailScreen() {
               <Text style={styles.roundChev}>›</Text>
             </Pressable>
           ))}
-          {rounds.length > 5 && (
-            <Text style={styles.moreNote}>+ {rounds.length - 5} more</Text>
-          )}
+          {rounds.length > 5 && <Text style={styles.moreNote}>+ {rounds.length - 5} more</Text>}
         </View>
       )}
     </ScrollView>
@@ -183,14 +157,8 @@ export default function PersonDetailScreen() {
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    content: {
-      padding: 20,
-      paddingBottom: 40,
-    },
+    container: { flex: 1, backgroundColor: colors.background },
+    content: { padding: 20, paddingBottom: 40 },
     profileCard: {
       alignItems: 'center',
       backgroundColor: colors.cardBg,
@@ -207,27 +175,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       justifyContent: 'center',
       marginBottom: 12,
     },
-    bigAvatarText: {
-      color: '#ffffff',
-      fontSize: 30,
-      fontWeight: '800',
-    },
-    name: {
-      fontSize: 22,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
-    handleLine: {
-      fontSize: 13,
-      color: colors.primaryDark,
-      fontWeight: '700',
-      marginTop: 2,
-    },
-    badgeRow: {
-      flexDirection: 'row',
-      gap: 6,
-      marginTop: 8,
-    },
+    bigAvatarText: { color: '#ffffff', fontSize: 30, fontWeight: '800' },
+    name: { fontSize: 22, fontWeight: '800', color: colors.textTitle },
+    handleLine: { fontSize: 13, color: colors.primaryDark, fontWeight: '700', marginTop: 2 },
+    badgeRow: { flexDirection: 'row', gap: 6, marginTop: 8 },
     badge: {
       fontSize: 9,
       fontWeight: '800',
@@ -239,14 +190,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderRadius: 5,
       overflow: 'hidden',
     },
-    badgeYou: {
-      backgroundColor: colors.accent + '22',
-      color: colors.accent,
-    },
-    badgeFriend: {
-      backgroundColor: colors.primary + '22',
-      color: colors.primaryDark,
-    },
+    badgeYou: { backgroundColor: colors.accent + '22', color: colors.accent },
+    badgeFriend: { backgroundColor: colors.primary + '22', color: colors.primaryDark },
     statsCard: {
       flexDirection: 'row',
       alignItems: 'baseline',
@@ -257,88 +202,44 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 14,
       marginBottom: 12,
     },
-    statNum: {
-      fontSize: 24,
+    statNum: { fontSize: 24, fontWeight: '800', color: colors.textTitle },
+    statLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '600' },
+    actionsCard: {
+      backgroundColor: colors.chipBg,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 16,
+    },
+    actionsHead: {
+      fontSize: 10,
       fontWeight: '800',
-      color: colors.textTitle,
-    },
-    statLabel: {
-      fontSize: 12,
+      letterSpacing: 0.6,
       color: colors.textMuted,
-      fontWeight: '600',
+      marginBottom: 6,
     },
-    connectBlock: {
-      marginBottom: 16,
-    },
-    connectBtn: {
-      borderRadius: 12,
-      borderWidth: 1.5,
-      borderColor: colors.primary,
-      paddingVertical: 14,
-      alignItems: 'center',
-      backgroundColor: colors.cardBg,
-    },
-    connectBtnDisabled: {
-      borderRadius: 12,
-      borderWidth: 1.5,
-      borderStyle: 'dashed',
-      borderColor: colors.border,
-      paddingVertical: 14,
-      alignItems: 'center',
-      backgroundColor: colors.cardBg,
-      opacity: 0.7,
-    },
-    connectBtnPressed: {
-      opacity: 0.6,
-    },
-    connectBtnText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.primaryDark,
-    },
-    connectExplainer: {
-      fontSize: 11.5,
-      color: colors.textMuted,
-      lineHeight: 17,
-      textAlign: 'center',
-      paddingHorizontal: 8,
-      marginTop: 8,
-      fontStyle: 'italic',
-    },
-    pendingBlock: {
-      marginBottom: 16,
+    primaryBtn: {
+      backgroundColor: colors.primary,
+      borderRadius: 10,
+      paddingVertical: 11,
       alignItems: 'center',
     },
-    pendingPill: {
+    primaryBtnText: { color: '#ffffff', fontWeight: '800', fontSize: 13 },
+    actionsHelp: {
       fontSize: 11,
-      fontWeight: '800',
-      letterSpacing: 0.7,
-      backgroundColor: '#fff8e7',
-      color: colors.accent,
-      borderWidth: 1,
-      borderColor: '#f5e0b8',
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: 6,
-      overflow: 'hidden',
-    },
-    pendingExplainer: {
-      fontSize: 11.5,
       color: colors.textMuted,
-      lineHeight: 17,
-      textAlign: 'center',
-      paddingHorizontal: 8,
+      lineHeight: 16,
       marginTop: 8,
       fontStyle: 'italic',
     },
-    pendingExplainerEm: {
-      color: colors.primaryDark,
-      fontWeight: '700',
-      fontStyle: 'normal',
+    signInBlock: {
+      backgroundColor: colors.chipBg,
+      borderRadius: 10,
+      padding: 12,
+      marginBottom: 14,
     },
-    recentSection: {
-      marginTop: 8,
-    },
+    signInTitle: { fontSize: 13, fontWeight: '800', color: colors.textTitle, marginBottom: 4 },
+    signInBody: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },
+    recentSection: { marginTop: 8 },
     sectionLabel: {
       fontSize: 10,
       fontWeight: '800',
@@ -356,25 +257,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginBottom: 5,
       gap: 8,
     },
-    roundInfo: {
-      flex: 1,
-      minWidth: 0,
-    },
-    roundCourse: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.textTitle,
-    },
-    roundMeta: {
-      fontSize: 10.5,
-      color: colors.textMuted,
-      marginTop: 2,
-    },
-    roundChev: {
-      fontSize: 18,
-      color: colors.textMuted,
-      opacity: 0.5,
-    },
+    roundInfo: { flex: 1, minWidth: 0 },
+    roundCourse: { fontSize: 13, fontWeight: '700', color: colors.textTitle },
+    roundMeta: { fontSize: 10.5, color: colors.textMuted, marginTop: 2 },
+    roundChev: { fontSize: 18, color: colors.textMuted, opacity: 0.5 },
     moreNote: {
       fontSize: 11,
       color: colors.textMuted,
@@ -390,16 +276,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       padding: 32,
       gap: 8,
     },
-    notFoundIcon: {
-      fontSize: 36,
-      opacity: 0.5,
-      marginBottom: 4,
-    },
-    notFoundTitle: {
-      fontSize: 16,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
+    notFoundIcon: { fontSize: 36, opacity: 0.5, marginBottom: 4 },
+    notFoundTitle: { fontSize: 16, fontWeight: '800', color: colors.textTitle },
     notFoundBody: {
       fontSize: 13,
       color: colors.textMuted,

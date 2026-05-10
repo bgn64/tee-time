@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
@@ -43,9 +44,10 @@ function monthKey(date: Date): string {
   return `${MONTH_LONG[date.getMonth()]} ${date.getFullYear()}`;
 }
 
-function getRoundTotalRelative(round: Round): number {
+function getRoundTotalRelative(round: Round, scorerId?: string): number {
   let total = 0;
   for (const score of round.scores) {
+    if (scorerId && score.scorerId !== scorerId) continue;
     const hole = round.course.holes.find((h) => h.number === score.holeNumber);
     if (hole) total += score.strokes - hole.par;
   }
@@ -60,7 +62,8 @@ function formatScore(rel: number): string {
 
 export default function RoundsListScreen() {
   const { colors } = useTheme();
-  const { completedRounds } = useGolfRound();
+  const { completedRounds, pendingRoundsForMe } = useGolfRound();
+  const { account } = useAccount();
   const { getPlayer } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -71,10 +74,26 @@ export default function RoundsListScreen() {
     right: { kind: 'profile' },
   });
 
+  // "Mine" = rounds I scored OR rounds where I have a confirmed participant
+  // row. Pending-for-me rounds are excluded; they live in the Pending
+  // drilldown instead. Friend-of-participant visibility (which surfaces
+  // rounds I wasn't in at all) is handled by the Feed tab, not here.
+  const minedRounds = useMemo(() => {
+    const pendingIds = new Set(pendingRoundsForMe.map((r) => r.id));
+    return completedRounds.filter((r) => {
+      if (pendingIds.has(r.id)) return false;
+      if (account?.userId && r.ownerUserId === account.userId) return true;
+      if (!account) return true; // anonymous mode — only own rounds visible anyway
+      return !!r.participants?.some(
+        (p) => p.linkedUserId === account.userId && p.status === 'confirmed'
+      );
+    });
+  }, [completedRounds, pendingRoundsForMe, account]);
+
   const filteredRounds = useMemo(() => {
-    if (filter === 'all') return completedRounds;
-    return completedRounds.filter((r) => r.scoringRule === filter);
-  }, [completedRounds, filter]);
+    if (filter === 'all') return minedRounds;
+    return minedRounds.filter((r) => r.scoringRule === filter);
+  }, [minedRounds, filter]);
 
   // Sort newest-first then group into [{ key, rounds }] preserving sort order.
   const grouped = useMemo(() => {
@@ -100,6 +119,20 @@ export default function RoundsListScreen() {
     <View style={styles.container}>
       <View style={styles.fixedTop}>
         <Text style={styles.title}>Rounds</Text>
+
+        {pendingRoundsForMe.length > 0 && (
+          <Pressable
+            onPress={() => router.push('/(tabs)/(rounds)/pending')}
+            style={styles.pendingDrawer}>
+            <Text style={styles.pendingDrawerText}>
+              ⏳  <Text style={styles.pendingDrawerBold}>
+                {pendingRoundsForMe.length} pending
+              </Text>{' '}· friends say you played
+            </Text>
+            <Text style={styles.pendingDrawerChev}>›</Text>
+          </Pressable>
+        )}
+
         <View style={styles.segs}>
           {FILTERS.map((f) => {
             const isActive = filter === f.key;
@@ -134,8 +167,44 @@ export default function RoundsListScreen() {
               <Text style={styles.monthLabel}>{group.key}</Text>
               {group.rounds.map((round) => {
                 const date = getRoundEndDate(round);
-                const totalRel = getRoundTotalRelative(round);
                 const isScramble = round.scoringRule === 'scramble';
+                const isOwner =
+                  !!account?.userId && round.ownerUserId === account.userId;
+
+                // Avatars: prefer cloud-synced participant snapshot (correct
+                // displayName + color across users) over local roster lookup.
+                // Hide still-pending linked rows for non-owner viewers; the
+                // round owner always sees them since they're the one who
+                // entered the score and the round was scored on their device.
+                const avatarSources: { id: string; name: string; color: string }[] =
+                  isScramble && round.teams
+                    ? round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }))
+                    : (round.participants ?? [])
+                        .filter(
+                          (p) => isOwner || p.status === 'confirmed' || !p.linkedUserId
+                        )
+                        .map((p) => ({
+                          id: p.participantKey,
+                          name: p.displayName,
+                          color: p.displayColor || colors.primary,
+                        }));
+
+                // Score chip: in stroke mode show the viewer's own score
+                // relative to par (we're in "Mine" so the viewer is one of
+                // the participants). For scramble, show the total round
+                // relative-to-par across all team scores (no notion of "my
+                // team" vs "their team" in the user's profile yet).
+                let myScorerId: string | undefined;
+                if (!isScramble && account?.userId) {
+                  const myPart = round.participants?.find(
+                    (p) => p.linkedUserId === account.userId
+                  );
+                  myScorerId = myPart?.participantKey;
+                }
+                const totalRel = isScramble
+                  ? getRoundTotalRelative(round)
+                  : getRoundTotalRelative(round, myScorerId);
+
                 return (
                   <Pressable
                     key={round.id}
@@ -157,25 +226,23 @@ export default function RoundsListScreen() {
                     </View>
                     <View style={styles.cardBottom}>
                       <View style={styles.avatars}>
-                        {round.playerIds.slice(0, 4).map((pid, i) => {
-                          const p = getPlayer(pid);
-                          if (!p) return null;
-                          return (
-                            <View
-                              key={pid}
-                              style={[
-                                styles.avatar,
-                                {
-                                  backgroundColor: p.color || colors.primary,
-                                  marginLeft: i === 0 ? 0 : -7,
-                                  zIndex: 10 - i,
-                                  borderColor: colors.cardBg,
-                                },
-                              ]}>
-                              <Text style={styles.avatarText}>{p.nickname[0]}</Text>
-                            </View>
-                          );
-                        })}
+                        {avatarSources.slice(0, 4).map((src, i) => (
+                          <View
+                            key={src.id}
+                            style={[
+                              styles.avatar,
+                              {
+                                backgroundColor: src.color,
+                                marginLeft: i === 0 ? 0 : -7,
+                                zIndex: 10 - i,
+                                borderColor: colors.cardBg,
+                              },
+                            ]}>
+                            <Text style={styles.avatarText}>
+                              {src.name[0]?.toUpperCase()}
+                            </Text>
+                          </View>
+                        ))}
                       </View>
                       <View style={styles.metaRight}>
                         <View
@@ -228,6 +295,19 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textTitle,
       marginBottom: 12,
     },
+    pendingDrawer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: 'rgba(245,158,11,0.12)',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      marginBottom: 10,
+    },
+    pendingDrawerText: { fontSize: 12, color: '#92660d', fontWeight: '700', flex: 1 },
+    pendingDrawerBold: { fontWeight: '800' },
+    pendingDrawerChev: { fontSize: 16, color: '#92660d', opacity: 0.7 },
     segs: {
       flexDirection: 'row',
       gap: 4,

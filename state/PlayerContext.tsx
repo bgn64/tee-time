@@ -60,6 +60,21 @@ type PlayerContextValue = {
   getPlayer: (id: string) => Player | undefined;
   linkPlayer: (playerId: string, link: PlayerLink) => void;
   unlinkPlayer: (playerId: string) => void;
+  /**
+   * Merge an unlinked roster entry into a friend's user account. Calls the
+   * `merge_unlinked_player` RPC. On success the unlinked roster row is
+   * deleted locally and any rounds that referenced it now show the friend
+   * as a pending participant (the friend confirms or denies each one).
+   *
+   * Errors out (returns ok:false) if:
+   *   · You're not friends with the target.
+   *   · The merge would create a duplicate participant on a round (returned
+   *     error message includes the round id).
+   */
+  mergeUnlinkedToFriend: (
+    unlinkedId: string,
+    friendUserId: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
   hydrated: boolean;
 };
 
@@ -324,6 +339,33 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     [cloudUpsertPlayer]
   );
 
+  const mergeUnlinkedToFriend = useCallback(
+    async (
+      unlinkedId: string,
+      friendUserId: string
+    ): Promise<{ ok: true } | { ok: false; error: string }> => {
+      if (!account) {
+        return { ok: false, error: 'Must be signed in to merge.' };
+      }
+      const { error } = await supabase.rpc('merge_unlinked_player', {
+        p_unlinked_local_id: unlinkedId,
+        p_friend_user_id: friendUserId,
+      });
+      if (error) {
+        console.warn('[roster] merge_unlinked_player:', error);
+        return { ok: false, error: error.message };
+      }
+      // Remove the unlinked roster row locally; the rounds-side update will
+      // arrive via realtime on round_participants. Leave any matching roster
+      // row pointing at the friend untouched (it may or may not exist locally
+      // — the caller can add one via SocialContext if needed).
+      setAllPlayers((prev) => prev.filter((p) => p.id !== unlinkedId));
+      setRecentIds((prev) => prev.filter((id) => id !== unlinkedId));
+      return { ok: true };
+    },
+    [account]
+  );
+
   // Sign-in side effect (auto-link default player + push to cloud)
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
@@ -382,6 +424,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
       getPlayer,
       linkPlayer,
       unlinkPlayer,
+      mergeUnlinkedToFriend,
       hydrated,
     }),
     [
@@ -393,6 +436,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
       getPlayer,
       linkPlayer,
       unlinkPlayer,
+      mergeUnlinkedToFriend,
       hydrated,
     ]
   );

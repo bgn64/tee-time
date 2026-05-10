@@ -2,10 +2,10 @@
  * Feed tab — chronological list of friends' completed rounds.
  *
  * Data flow: `completedRounds` from GolfRoundContext already includes any
- * rounds the local user has visibility to (via Phase D's RLS on `rounds`,
- * which surfaces a row whenever a `round_claims` entry exists for the
- * current user). The Feed tab filters that to "rounds I didn't score" —
- * i.e. rounds owned by someone else where I'm a participant.
+ * rounds the local user has visibility to (via the v6 RLS, which uses the
+ * union of friend graphs across confirmed participants). The Feed tab
+ * filters that to "rounds I didn't score and that aren't pending my
+ * confirmation."
  *
  * Sort: most recent first by `completedAt`. Realtime subscriptions pushed
  * by Phase D keep the feed up to date without explicit polling. Pull-to-
@@ -66,9 +66,10 @@ function formatRelativeTime(iso: string): string {
   return `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}`;
 }
 
-function getRoundTotalRelative(round: Round): number {
+function getRoundTotalRelative(round: Round, scorerId?: string): number {
   let total = 0;
   for (const score of round.scores) {
+    if (scorerId && score.scorerId !== scorerId) continue;
     const hole = round.course.holes.find((h) => h.number === score.holeNumber);
     if (hole) total += score.strokes - hole.par;
   }
@@ -85,6 +86,7 @@ export default function FeedScreen() {
   const { colors } = useTheme();
   const { account } = useAccount();
   const { friends } = useSocial();
+  const { profileCache } = useSocial();
   const { completedRounds } = useGolfRound();
   const { allPlayers, defaultPlayerId, getPlayer } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -96,19 +98,29 @@ export default function FeedScreen() {
     right: { kind: 'profile' },
   });
 
-  // Friend rounds = rounds whose owner is *not* my default player. Sort newest
-  // first by completedAt (fall back to startedAt if a row is missing it).
+  // Feed shows rounds where at least one confirmed linked participant is
+  // NOT the current user. That includes friends' solo rounds and any shared
+  // round once another participant has confirmed. Rounds awaiting my own
+  // confirmation are excluded (they live in the Pending drilldown).
+  const { pendingRoundsForMe } = useGolfRound();
   const friendRounds = useMemo(() => {
+    const pendingIds = new Set(pendingRoundsForMe.map((r) => r.id));
     const rows = completedRounds.filter((r) => {
-      const owner = r.ownerId ?? defaultPlayerId;
-      return owner !== defaultPlayerId;
+      if (pendingIds.has(r.id)) return false;
+      const otherConfirmed = r.participants?.some(
+        (p) =>
+          p.linkedUserId &&
+          p.linkedUserId !== account?.userId &&
+          p.status === 'confirmed'
+      );
+      return !!otherConfirmed;
     });
     return [...rows].sort((a, b) => {
       const at = new Date(a.completedAt ?? a.startedAt).getTime();
       const bt = new Date(b.completedAt ?? b.startedAt).getTime();
       return bt - at;
     });
-  }, [completedRounds, defaultPlayerId]);
+  }, [completedRounds, pendingRoundsForMe, account]);
 
   const onRefresh = useCallback(async () => {
     // The cloud-sync effects in GolfRoundContext re-run when `account`
@@ -212,6 +224,8 @@ export default function FeedScreen() {
           getPlayer={getPlayer}
           colors={colors}
           styles={styles}
+          myUserId={account?.userId}
+          profileCache={profileCache}
           onPress={() =>
             router.push({
               pathname: '/(tabs)/(rounds)/[id]',
@@ -231,6 +245,8 @@ type FeedCardProps = {
   getPlayer: (id: string) => Player | undefined;
   colors: ReturnType<typeof useTheme>['colors'];
   styles: ReturnType<typeof makeStyles>;
+  myUserId?: string;
+  profileCache: Record<string, { displayName: string; handle: string; avatarColor: string; userId: string }>;
   onPress: () => void;
 };
 
@@ -242,15 +258,34 @@ function FeedCard({
   colors,
   styles,
   onPress,
+  myUserId,
+  profileCache,
 }: FeedCardProps) {
-  const ownerId = round.ownerId;
-  const owner = ownerId ? getPlayer(ownerId) : undefined;
-  const ownerName = owner?.nickname ?? 'A friend';
-  const ownerHandle = owner?.handle;
-  const ownerColor = owner?.color ?? colors.primary;
+  // Owner display: snapshot from participants if the owner is a confirmed
+  // linked participant; fall back to profile cache; finally to roster.
+  const ownerParticipant = round.participants?.find(
+    (p) => p.linkedUserId === round.ownerUserId && p.status === 'confirmed'
+  );
+  const ownerProfile = round.ownerUserId ? profileCache[round.ownerUserId] : undefined;
+  const ownerLocal = round.ownerId ? getPlayer(round.ownerId) : undefined;
+  const ownerName =
+    ownerParticipant?.displayName ??
+    ownerProfile?.displayName ??
+    ownerLocal?.nickname ??
+    'A friend';
+  const ownerHandle = ownerProfile?.handle ?? ownerLocal?.handle;
+  const ownerColor =
+    ownerParticipant?.displayColor ?? ownerProfile?.avatarColor ?? ownerLocal?.color ?? colors.primary;
   const ownerInitial = ownerName[0]?.toUpperCase() ?? '?';
 
-  const totalRel = getRoundTotalRelative(round);
+  const isScramble = round.scoringRule === 'scramble';
+
+  // Score chip = the round owner's score (in stroke). For scramble we still
+  // show round-total since there's no clear "owner team."
+  const ownerScorerId = isScramble ? undefined : ownerParticipant?.participantKey;
+  const totalRel = ownerScorerId
+    ? getRoundTotalRelative(round, ownerScorerId)
+    : getRoundTotalRelative(round);
   const scoreChipStyle =
     totalRel > 0 ? styles.scoreChipOver : totalRel < 0 ? styles.scoreChipUnder : styles.scoreChipEven;
   const scoreTextStyle =
@@ -261,29 +296,41 @@ function FeedCard({
       : styles.scoreChipTextEven;
 
   const dateLabel = formatRelativeTime(round.completedAt ?? round.startedAt);
-
-  const isScramble = round.scoringRule === 'scramble';
   const holeCount = round.course.holes.length;
 
-  // Build participant strip: up to 4 stacked avatars in playerIds order.
-  const participantPlayers = round.playerIds
-    .map((pid) => allPlayers.find((p) => p.id === pid))
-    .filter((p): p is Player => !!p)
-    .slice(0, 4);
+  // Participant strip + with-line both come from round.participants so the
+  // rendering is consistent across users (no roster lookups). Hide pending
+  // rows from non-owner viewers; the owner always sees them since they
+  // entered the scores.
+  const viewerIsOwner = !!myUserId && round.ownerUserId === myUserId;
+  const visibleParticipants = (round.participants ?? []).filter(
+    (p) => viewerIsOwner || p.status === 'confirmed' || !p.linkedUserId
+  );
+  const stackSources: Array<{ id: string; name: string; color: string }> = isScramble && round.teams
+    ? round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }))
+    : visibleParticipants.map((p) => ({
+        id: p.participantKey,
+        name: p.displayName,
+        color: p.displayColor || colors.primary,
+      }));
 
-  // Other-participants text underneath the strip ("with you, Sarah").
-  // Always include "you" first if the local default player is in the round
-  // (which they always will be — RLS only surfaces rounds you're in).
-  const others = round.playerIds
-    .filter((pid) => pid !== ownerId && pid !== defaultPlayerId)
-    .map((pid) => getPlayer(pid)?.nickname)
-    .filter((n): n is string => !!n);
-  const meIsParticipant = defaultPlayerId
-    ? round.playerIds.includes(defaultPlayerId)
-    : false;
+  const pendingNames = (round.participants ?? [])
+    .filter((p) => p.status === 'pending')
+    .map((p) => `${p.displayName} ?`);
+
+  const others = visibleParticipants
+    .filter(
+      (p) =>
+        p.linkedUserId !== round.ownerUserId &&
+        p.linkedUserId !== myUserId
+    )
+    .map((p) => p.displayName);
+  const meIsParticipant =
+    !!myUserId &&
+    !!round.participants?.some((p) => p.linkedUserId === myUserId && p.status === 'confirmed');
   const withParts: string[] = [];
   if (meIsParticipant) withParts.push('you');
-  withParts.push(...others);
+  withParts.push(...others, ...pendingNames);
   const withText = withParts.length > 0 ? `with ${withParts.join(', ')}` : '';
 
   return (
@@ -321,14 +368,14 @@ function FeedCard({
 
       <View style={styles.cardBottom}>
         <View style={styles.stack}>
-          {participantPlayers.map((p, i) => (
+          {stackSources.slice(0, 4).map((src, i) => (
             <View
-              key={p.id}
+              key={src.id}
               style={[
                 styles.stackAvatar,
-                { backgroundColor: p.color ?? colors.primary, marginLeft: i === 0 ? 0 : -6 },
+                { backgroundColor: src.color, marginLeft: i === 0 ? 0 : -6 },
               ]}>
-              <Text style={styles.stackAvatarText}>{p.nickname[0]?.toUpperCase()}</Text>
+              <Text style={styles.stackAvatarText}>{src.name[0]?.toUpperCase()}</Text>
             </View>
           ))}
         </View>

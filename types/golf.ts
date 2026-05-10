@@ -57,22 +57,49 @@ export type Team = {
 };
 
 /**
- * Per-participant claim status on a Round.
+ * Per-participant confirmation status on a Round.
  *
- *   pending     — claim queued; the participant hasn't acted yet.
- *   claimed     — the participant confirmed they were part of this round.
- *   not-claimed — declined, expired, or otherwise resolved as unclaimed.
+ *   pending    — friend hasn't acted yet on the scorer's claim that they
+ *                played this round. Pre-confirmation the scorer retains full
+ *                edit-rights over the friend's score; the friend's scoreline
+ *                is rendered blurred to other observers.
+ *   confirmed  — friend confirmed (or is the scorer themselves, or is an
+ *                unlinked player whose authority remains with the scorer).
  *
- * The mockup decision (`Section 5` of identity-flow-mockups.html) collapses
- * "rejected" and "never reviewed" into a single `not-claimed` surface so
- * neither side sees argument-prone wording like "Mike rejected your round."
+ * Hard-deleted on deny / leave; there is no separate "denied" status.
  */
-export type ClaimStatus = 'pending' | 'claimed' | 'not-claimed';
+export type ConfirmationStatus = 'pending' | 'confirmed';
+
+/**
+ * One row per (round, scorer). For stroke rounds participants map 1:1 with
+ * players; for scramble there's still one row per player but `teamId` ties
+ * them to the team whose scoreline they share.
+ */
+export type RoundParticipant = {
+  /**
+   * Local Player.id, preserved verbatim across user accounts. It's the key
+   * used in `Round.scores[].scorerId` for stroke rounds.
+   */
+  participantKey: string;
+  /** Set when the participant has been linked to a real account. */
+  linkedUserId?: string;
+  status: ConfirmationStatus;
+  /** Snapshot of the nickname captured at participant-row creation. */
+  displayName: string;
+  displayColor?: string;
+  /** Set in scramble rounds; references `Round.teams[].id`. */
+  teamId?: string;
+};
 
 export type Round = {
   id: string;
   course: Course;
   scoringRule: ScoringRule;
+  /**
+   * Local Player.ids for the round's participants. Preserved for backward
+   * compatibility with code paths that key off it; the canonical participant
+   * list under the v6 redesign is `participants[]`.
+   */
   playerIds: string[];
   // Required when scoringRule === 'scramble'; absent in stroke rounds.
   teams?: Team[];
@@ -81,22 +108,21 @@ export type Round = {
   startedAt: string;
   completedAt?: string;
   /**
-   * The roster Player.id of the user who scored this round. Today this is
-   * always the local default player; once real social sync ships, friends'
-   * rounds will appear in `completedRounds` too with their roster Player.id
-   * here. The bulk-claim sheet uses this field to find rounds a new friend
-   * scored that the local user participated in.
-   *
-   * Optional for backward compat: rounds completed before this field was
-   * introduced are treated as owned by the local default player.
+   * The user_id of the original scorer. Mutable: transfers to a confirmed
+   * linked participant when the original owner leaves the round.
+   */
+  ownerUserId?: string;
+  /**
+   * Local Player.id of the scorer. Convenience pointer for code that wants
+   * to look up the scorer's roster row without joining via ownerUserId.
+   * Optional for in-flight rounds and for cloud-sourced rounds where the
+   * scorer is a friend whose roster row we don't have.
    */
   ownerId?: string;
   /**
-   * Per-participant claim map. Keyed by participant playerId in both stroke
-   * and scramble (a scramble claim is conceptually "yes, I was on this
-   * team"). Only includes entries for participants who were linked friends
-   * at the time the claim was created. Absent on rounds completed before
-   * this field was introduced — treat as "no claims tracked."
+   * One entry per scorer (stroke) or per team-roster-member (scramble).
+   * Drives confirmation banners, blur rendering, and edit-rights logic.
+   * Absent on rounds completed before the v6 redesign.
    */
-  claims?: Record<string, ClaimStatus>;
+  participants?: RoundParticipant[];
 };
