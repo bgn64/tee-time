@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Tee Time master logo mark — "Option C: Elegant tee".
+    Larger ball with dimples + slim anatomically realistic wooden tee
+    (small cup, narrow tapered shaft, pointed tip).
+  -->
+  <circle cx="512" cy="287" r="164" fill="#fefcf8" stroke="#558b2f" stroke-width="32"/>
+
+  <circle cx="451" cy="226" r="13" fill="#558b2f"/>
+  <circle cx="512" cy="215" r="13" fill="#558b2f"/>
+  <circle cx="573" cy="226" r="13" fill="#558b2f"/>
+
+  <circle cx="420" cy="287" r="13" fill="#558b2f"/>
+  <circle cx="481" cy="287" r="13" fill="#558b2f"/>
+  <circle cx="543" cy="287" r="13" fill="#558b2f"/>
+  <circle cx="604" cy="287" r="13" fill="#558b2f"/>
+
+  <circle cx="451" cy="348" r="13" fill="#558b2f"/>
+  <circle cx="512" cy="358" r="13" fill="#558b2f"/>
+  <circle cx="573" cy="348" r="13" fill="#558b2f"/>
+
+  <path d="M 471 471 Q 471 512 497 522" fill="none" stroke="#558b2f" stroke-width="32" stroke-linecap="round"/>
+  <path d="M 527 522 Q 553 512 553 471" fill="none" stroke="#558b2f" stroke-width="32" stroke-linecap="round"/>
+  <line x1="471" y1="471" x2="553" y2="471" stroke="#558b2f" stroke-width="32" stroke-linecap="round"/>
+  <path d="M 497 522 L 508 881 L 512 963 L 516 881 L 527 522"
+        fill="none" stroke="#558b2f" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

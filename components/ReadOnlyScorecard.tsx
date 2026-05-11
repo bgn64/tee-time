@@ -200,8 +200,8 @@ function NineSection({
         const hasAnyScore = holesScored > 0;
         const sectionTotalText = hasAnyScore
           ? holesScored === holes.length
-            ? `${nineStrokes}`
-            : `${nineStrokes}*`
+            ? formatScore(nineRel)
+            : `${formatScore(nineRel)}*`
           : '—';
 
         return (
@@ -224,7 +224,7 @@ function NineSection({
                     c.rel !== null && c.rel < 0 && styles.cellUnder,
                     c.strokes === null && styles.cellEmpty,
                   ]}>
-                  {c.strokes ?? '—'}
+                  {c.rel !== null ? formatScore(c.rel) : '—'}
                 </Text>
               );
 
@@ -303,8 +303,8 @@ function FinalTotals({
         const status = !hasAnyScore
           ? 'No scores yet'
           : holesScored === allHoles.length
-          ? `${totalStrokes} (${formatScore(totalRel)})`
-          : `${totalStrokes} (${formatScore(totalRel)}) · ${holesScored}/${allHoles.length}`;
+          ? formatScore(totalRel)
+          : `${formatScore(totalRel)} · ${holesScored}/${allHoles.length}`;
         return (
           <View key={scorer.id} style={styles.totalRow}>
             <View style={[styles.scorerSwatch, { backgroundColor: scorer.color }]} />

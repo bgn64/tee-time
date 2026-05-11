@@ -1,6 +1,7 @@
 /**
  * Persistent app header. Three slots: left (tab name OR back button),
- * center (the "tee time" logo), and right (profile dot OR ⋯ overflow).
+ * center (the brand mark + "tee time" wordmark), and right (profile dot
+ * OR ⋯ overflow).
  *
  * Slot contents are driven by HeaderContext, which screens populate via
  * the `useScreenHeader` hook.
@@ -10,6 +11,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Logo } from '@/components/Logo';
 import { useHeaderSlots } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 
@@ -26,7 +28,10 @@ export function AppHeader() {
       <View style={styles.row}>
         <View style={styles.leftSlot}>{renderLeft(slots.left, styles)}</View>
         <View pointerEvents="none" style={styles.centerSlot}>
-          <Text style={styles.logo}>tee time</Text>
+          <View style={styles.brand}>
+            <Logo size={22} color={colors.primaryDark} ballFill={colors.cardBg} />
+            <Text style={styles.logo}>tee time</Text>
+          </View>
         </View>
         <View style={styles.rightSlot}>{renderRight(slots.right, styles)}</View>
       </View>
@@ -119,7 +124,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 16,
       fontWeight: '800',
       color: colors.textTitle,
-      letterSpacing: 0.5,
+      letterSpacing: 0.3,
+    },
+    brand: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
     },
     backBtn: {
       flexDirection: 'row',
