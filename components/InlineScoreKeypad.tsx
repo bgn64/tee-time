@@ -1,19 +1,20 @@
 /**
  * Inline score keypad. Sits at the bottom of the round detail when edit
- * mode is on. Three rows:
- *   1. (optional) Player nav — ◀ Name ▶ — only when the viewer can edit
- *      more than one scorer's row.
+ * mode is on. Rows:
+ *   1. (optional) Player picker — one button per editable scorer; the
+ *      active scorer is highlighted in their color. Only renders when
+ *      more than one scorer is editable.
  *   2. Hole nav — ◀ Hole N · Par X ▶ — clamps to [1, maxHole].
  *   3. Quick-pick chips (Eagle / Birdie / Par / Bogey / +2).
  *   4. Stepper (− value +).
  *
  * Quick-picks + stepper write the score for the currently-selected cell;
- * the hole/player arrows move the selection. Tap a cell on the scorecard
- * to jump directly.
+ * the hole arrows and player buttons move the selection. Tap a cell on
+ * the scorecard to jump directly.
  */
 
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { formatScore } from '@/lib/scoring';
 import { useTheme } from '@/state/ThemeContext';
@@ -26,19 +27,18 @@ const QUICK_PICKS: Array<{ label: string; relative: number }> = [
   { label: '+2', relative: 2 },
 ];
 
+type Scorer = { id: string; name: string; color: string };
+
 type Props = {
-  /** Par for the selected hole. */
   par: number;
-  /** Current strokes for the selected cell. */
   strokes: number | null;
-  /** Currently selected hole (1-based). */
   holeNumber: number;
-  /** Last hole number on the course (typically 18). */
   maxHole: number;
   onHoleChange: (next: number) => void;
-  /** Optional player-nav row. Omit when only one scorer is editable. */
-  scorer?: { name: string; color: string; index: number; total: number };
-  onScorerChange?: (delta: 1 | -1) => void;
+  /** All editable scorers; picker only renders when length > 1. */
+  scorers?: Scorer[];
+  selectedScorerId?: string;
+  onScorerSelect?: (id: string) => void;
   onChange: (strokes: number) => void;
 };
 
@@ -48,8 +48,9 @@ export function InlineScoreKeypad({
   holeNumber,
   maxHole,
   onHoleChange,
-  scorer,
-  onScorerChange,
+  scorers,
+  selectedScorerId,
+  onScorerSelect,
   onChange,
 }: Props) {
   const { colors } = useTheme();
@@ -75,25 +76,33 @@ export function InlineScoreKeypad({
   const relative = strokes !== null ? strokes - par : null;
   const canPrevHole = holeNumber > 1;
   const canNextHole = holeNumber < maxHole;
-  const showScorerNav = !!(scorer && onScorerChange && scorer.total > 1);
+  const showScorerPicker = !!(scorers && scorers.length > 1 && onScorerSelect);
 
   return (
     <View style={styles.card}>
-      {showScorerNav && scorer && (
-        <View style={styles.navRow}>
-          <Pressable onPress={() => onScorerChange?.(-1)} style={styles.navArrow}>
-            <Text style={styles.navArrowText}>‹</Text>
-          </Pressable>
-          <View style={styles.navLabelWrap}>
-            <View style={[styles.scorerDot, { backgroundColor: scorer.color }]} />
-            <Text style={styles.navLabel} numberOfLines={1}>
-              {scorer.name}
-            </Text>
-          </View>
-          <Pressable onPress={() => onScorerChange?.(1)} style={styles.navArrow}>
-            <Text style={styles.navArrowText}>›</Text>
-          </Pressable>
-        </View>
+      {showScorerPicker && scorers && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.playerRow}>
+          {scorers.map((s) => {
+            const active = s.id === selectedScorerId;
+            return (
+              <Pressable
+                key={s.id}
+                onPress={() => onScorerSelect?.(s.id)}
+                style={[
+                  styles.playerBtn,
+                  active && { backgroundColor: s.color, borderColor: s.color },
+                ]}>
+                {!active && <View style={[styles.playerDot, { backgroundColor: s.color }]} />}
+                <Text style={[styles.playerBtnText, active && styles.playerBtnTextActive]}>
+                  {s.name}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
       )}
       <View style={styles.navRow}>
         <Pressable
@@ -154,6 +163,32 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       padding: 10,
       marginTop: 6,
     },
+    playerRow: {
+      flexDirection: 'row',
+      gap: 6,
+      paddingHorizontal: 2,
+      paddingBottom: 8,
+    },
+    playerBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.background,
+    },
+    playerDot: { width: 8, height: 8, borderRadius: 4 },
+    playerBtnText: {
+      fontSize: 11.5,
+      fontWeight: '700',
+      color: colors.textTitle,
+    },
+    playerBtnTextActive: {
+      color: '#ffffff',
+    },
     navRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -192,7 +227,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '600',
       color: colors.textMuted,
     },
-    scorerDot: { width: 10, height: 10, borderRadius: 5 },
     chipRow: {
       flexDirection: 'row',
       gap: 6,

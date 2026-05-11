@@ -62,6 +62,10 @@ export default function RoundDetailScreen() {
 
   const [editMode, setEditMode] = useState(false);
   const [selected, setSelected] = useState<{ scorerId: string; holeNumber: number } | null>(null);
+  // Buffer of in-flight edits made while in edit mode, keyed as
+  // `${scorerId}::${holeNumber}`. Flushed on Save, discarded on exit.
+  const [pendingEdits, setPendingEdits] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
 
   const round = completedRounds.find((r) => r.id === id);
 
@@ -96,16 +100,60 @@ export default function RoundDetailScreen() {
     return false;
   }, [round, isOwner, myParticipant, myUserId]);
 
+  // Save = flush buffer to backend, then exit edit mode.
+  const handleSave = useCallback(async () => {
+    if (saving) return;
+    const entries = Object.entries(pendingEdits);
+    if (entries.length === 0 || !round) {
+      setEditMode(false);
+      setSelected(null);
+      setPendingEdits({});
+      return;
+    }
+    setSaving(true);
+    // Filter out edits that match the on-disk value (no-ops).
+    const dirty = entries.filter(([key, strokes]) => {
+      const [scorerId, holeStr] = key.split('::');
+      const holeNumber = Number(holeStr);
+      const existing = round.scores.find(
+        (s) => s.scorerId === scorerId && s.holeNumber === holeNumber
+      );
+      return !existing || existing.strokes !== strokes;
+    });
+    const results = await Promise.all(
+      dirty.map(([key, strokes]) => {
+        const [scorerId, holeStr] = key.split('::');
+        return editHoleScore(round.id, scorerId, Number(holeStr), strokes);
+      })
+    );
+    setSaving(false);
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length > 0) {
+      Alert.alert(
+        'Some edits failed',
+        failed.map((f) => (f.ok ? '' : f.error)).filter(Boolean).join('\n')
+      );
+      return; // Stay in edit mode; user can retry or back out.
+    }
+    setEditMode(false);
+    setSelected(null);
+    setPendingEdits({});
+  }, [pendingEdits, round, editHoleScore, saving]);
+
   useScreenHeader({
     left: { kind: 'back', label: 'Rounds', onPress: () => router.back() },
     right: canEditAnything
       ? {
           kind: 'action',
-          label: editMode ? 'Done' : 'Edit',
+          label: editMode ? (saving ? 'Saving…' : 'Save') : 'Edit',
           active: editMode,
           onPress: () => {
-            setEditMode((m) => !m);
-            setSelected(null);
+            if (editMode) {
+              handleSave();
+            } else {
+              setEditMode(true);
+              setPendingEdits({});
+            }
           },
         }
       : { kind: 'profile' },
@@ -212,15 +260,36 @@ export default function RoundDetailScreen() {
   const selectedHole = selected
     ? round.course.holes.find((h) => h.number === selected.holeNumber)
     : undefined;
+  // Build a merged scores view (round.scores + pendingEdits) so the
+  // scorecard and selectedScore lookup both reflect unsaved edits.
+  const displayRound = useMemo(() => {
+    if (!editMode || Object.keys(pendingEdits).length === 0) return round;
+    const overrideMap = new Map<string, number>();
+    for (const [key, strokes] of Object.entries(pendingEdits)) overrideMap.set(key, strokes);
+    const merged = round.scores.map((s) => {
+      const key = `${s.scorerId}::${s.holeNumber}`;
+      if (overrideMap.has(key)) return { ...s, strokes: overrideMap.get(key)! };
+      return s;
+    });
+    // Append entries for cells that previously had no score row at all.
+    for (const [key, strokes] of overrideMap.entries()) {
+      const [scorerId, holeStr] = key.split('::');
+      const holeNumber = Number(holeStr);
+      if (!merged.find((s) => s.scorerId === scorerId && s.holeNumber === holeNumber)) {
+        merged.push({ scorerId, holeNumber, strokes });
+      }
+    }
+    return { ...round, scores: merged };
+  }, [round, editMode, pendingEdits]);
+
   const selectedScore = selected
-    ? round.scores.find(
+    ? displayRound.scores.find(
         (s) => s.scorerId === selected.scorerId && s.holeNumber === selected.holeNumber
       )
     : undefined;
   const selectedScorerIdx = selected
     ? editableScorerList.findIndex((s) => s.id === selected.scorerId)
     : -1;
-  const selectedScorer = selectedScorerIdx >= 0 ? editableScorerList[selectedScorerIdx] : null;
 
   const handleHoleChange = useCallback(
     (next: number) => {
@@ -230,35 +299,23 @@ export default function RoundDetailScreen() {
     [selected]
   );
 
-  const handleScorerChange = useCallback(
-    (delta: 1 | -1) => {
-      if (!selected || editableScorerList.length === 0) return;
-      const idx = editableScorerList.findIndex((s) => s.id === selected.scorerId);
-      if (idx < 0) return;
-      const nextIdx =
-        (idx + delta + editableScorerList.length) % editableScorerList.length;
-      setSelected({
-        scorerId: editableScorerList[nextIdx].id,
-        holeNumber: selected.holeNumber,
-      });
+  const handleScorerSelect = useCallback(
+    (id: string) => {
+      setSelected((prev) =>
+        prev ? { scorerId: id, holeNumber: prev.holeNumber } : { scorerId: id, holeNumber: 1 }
+      );
     },
-    [selected, editableScorerList]
+    []
   );
 
+  // Keypad writes go to the buffer only; flushed on Save.
   const handleKeypadChange = useCallback(
-    async (strokes: number) => {
+    (strokes: number) => {
       if (!selected) return;
-      const result = await editHoleScore(
-        round.id,
-        selected.scorerId,
-        selected.holeNumber,
-        strokes
-      );
-      if (!result.ok) {
-        Alert.alert('Edit failed', result.error);
-      }
+      const key = `${selected.scorerId}::${selected.holeNumber}`;
+      setPendingEdits((prev) => ({ ...prev, [key]: strokes }));
     },
-    [selected, editHoleScore, round.id]
+    [selected]
   );
 
   return (
@@ -295,7 +352,7 @@ export default function RoundDetailScreen() {
       )}
 
       <ReadOnlyScorecard
-        round={round}
+        round={displayRound}
         editableScorerIds={editMode ? editableScorerIds : undefined}
         blurredScorerIds={blurredScorerIds}
         pendingScorerIds={pendingScorerIds}
@@ -330,17 +387,9 @@ export default function RoundDetailScreen() {
           holeNumber={selected?.holeNumber ?? 1}
           maxHole={maxHole}
           onHoleChange={handleHoleChange}
-          scorer={
-            selectedScorer
-              ? {
-                  name: selectedScorer.name,
-                  color: selectedScorer.color,
-                  index: selectedScorerIdx,
-                  total: editableScorerList.length,
-                }
-              : undefined
-          }
-          onScorerChange={editableScorerList.length > 1 ? handleScorerChange : undefined}
+          scorers={editableScorerList}
+          selectedScorerId={selected?.scorerId}
+          onScorerSelect={handleScorerSelect}
           onChange={handleKeypadChange}
         />
       )}
