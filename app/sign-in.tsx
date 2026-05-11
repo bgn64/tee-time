@@ -21,13 +21,14 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+
+import { showAlert } from '@/lib/dialog';
 
 import { isValidHandle, useAccount } from '@/state/AccountContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -73,7 +74,7 @@ export default function SignInScreen() {
     const result = await sendMagicCode(email);
     setSubmitting(false);
     if (!result.ok) {
-      Alert.alert('Could not send code', result.error);
+      showAlert('Could not send code', result.error);
       return;
     }
     setStep('code');
@@ -84,7 +85,7 @@ export default function SignInScreen() {
     const result = await verifyMagicCode(code);
     setSubmitting(false);
     if (!result.ok) {
-      Alert.alert('Invalid code', result.error);
+      showAlert('Invalid code', result.error);
       return;
     }
     // Auth state listener will move step to 'handle' or 'done'.
@@ -92,7 +93,7 @@ export default function SignInScreen() {
 
   const onCompleteProfile = async () => {
     if (!isValidHandle(handle)) {
-      Alert.alert(
+      showAlert(
         'Invalid handle',
         'Handles are 3-20 characters, start with a letter, and can include lowercase letters, numbers, dots, and underscores.'
       );
@@ -102,7 +103,7 @@ export default function SignInScreen() {
     const result = await completeProfile(handle);
     setSubmitting(false);
     if (!result.ok) {
-      Alert.alert('Could not create profile', result.error);
+      showAlert('Could not create profile', result.error);
       return;
     }
     // refreshFromSession will populate account → step flips to 'done'.

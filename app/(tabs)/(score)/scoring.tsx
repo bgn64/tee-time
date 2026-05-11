@@ -11,7 +11,7 @@
  */
 
 import { useFocusEffect, router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ConfirmAbandonSheet } from '@/components/ConfirmAbandonSheet';
@@ -84,9 +84,17 @@ export default function ScoringScreen() {
     [currentRound, setHoleScore]
   );
 
+  // Defensive: bounce back to tab root if the round disappeared. Run via
+  // useEffect so navigation happens after the render completes; calling
+  // router.replace inline during render warns about updating a navigator
+  // mid-render.
+  useEffect(() => {
+    if (!currentRound) {
+      router.replace('/(tabs)/(score)');
+    }
+  }, [currentRound]);
+
   if (!currentRound) {
-    // Defensive: bounce back to tab root if the round disappeared.
-    router.replace('/(tabs)/(score)');
     return null;
   }
 

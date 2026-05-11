@@ -12,8 +12,9 @@
 
 import { router } from 'expo-router';
 import { useEffect, useMemo } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { confirm } from '@/lib/dialog';
 import { useAccount } from '@/state/AccountContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
@@ -47,21 +48,16 @@ export default function AccountScreen() {
 
   const initial = account.displayName[0]?.toUpperCase() ?? '?';
 
-  const onSignOut = () => {
-    Alert.alert(
-      'Sign out?',
-      'Your local rounds and roster stay on this device. You can sign in again any time.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign out',
-          style: 'destructive',
-          onPress: () => {
-            signOut();
-          },
-        },
-      ]
-    );
+  const onSignOut = async () => {
+    const ok = await confirm({
+      title: 'Sign out?',
+      message:
+        'Your local rounds and roster stay on this device. You can sign in again any time.',
+      confirmLabel: 'Sign out',
+      destructive: true,
+    });
+    if (!ok) return;
+    signOut();
   };
 
   return (

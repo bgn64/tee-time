@@ -1,86 +1,15 @@
 /**
- * Seed course data — stands in for the global catalog in the prototype.
+ * Course seed data.
+ *
+ * Empty since the v7 catalog import — courses now flow from the cloud
+ * `courses` table (catalog rows ingested from OpenGolfAPI plus user-owned
+ * customs). The local seed is kept as an empty array so that pre-cloud-
+ * hydration renders show a clean state with no fake placeholder courses.
+ *
+ * Anonymous (signed-out) sessions therefore see an empty course list and
+ * must sign in to access the catalog.
  */
 
 import { Course } from '@/types/golf';
 
-export const recentCourses: Course[] = [
-  {
-    id: 'pine-ridge',
-    name: 'Pine Ridge Golf Club',
-    location: 'Seattle, WA',
-    source: 'catalog',
-    holes: [
-      { number: 1, par: 4, yardage: 390 },
-      { number: 2, par: 3, yardage: 162 },
-      { number: 3, par: 5, yardage: 521 },
-      { number: 4, par: 4, yardage: 408 },
-      { number: 5, par: 4, yardage: 376 },
-      { number: 6, par: 3, yardage: 181 },
-      { number: 7, par: 5, yardage: 548 },
-      { number: 8, par: 4, yardage: 414 },
-      { number: 9, par: 4, yardage: 397 },
-      { number: 10, par: 4, yardage: 402 },
-      { number: 11, par: 5, yardage: 535 },
-      { number: 12, par: 3, yardage: 174 },
-      { number: 13, par: 4, yardage: 389 },
-      { number: 14, par: 4, yardage: 421 },
-      { number: 15, par: 5, yardage: 557 },
-      { number: 16, par: 3, yardage: 156 },
-      { number: 17, par: 4, yardage: 433 },
-      { number: 18, par: 4, yardage: 445 },
-    ],
-  },
-  {
-    id: 'cedar-hills',
-    name: 'Cedar Hills',
-    location: 'Bellevue, WA',
-    source: 'catalog',
-    holes: [
-      { number: 1, par: 4, yardage: 372 },
-      { number: 2, par: 4, yardage: 401 },
-      { number: 3, par: 3, yardage: 148 },
-      { number: 4, par: 5, yardage: 512 },
-      { number: 5, par: 4, yardage: 388 },
-      { number: 6, par: 4, yardage: 429 },
-      { number: 7, par: 3, yardage: 171 },
-      { number: 8, par: 5, yardage: 540 },
-      { number: 9, par: 4, yardage: 396 },
-      { number: 10, par: 4, yardage: 410 },
-      { number: 11, par: 3, yardage: 165 },
-      { number: 12, par: 5, yardage: 528 },
-      { number: 13, par: 4, yardage: 383 },
-      { number: 14, par: 4, yardage: 417 },
-      { number: 15, par: 3, yardage: 190 },
-      { number: 16, par: 5, yardage: 560 },
-      { number: 17, par: 4, yardage: 406 },
-      { number: 18, par: 4, yardage: 438 },
-    ],
-  },
-  {
-    id: 'harbor-links',
-    name: 'Harbor Links',
-    location: 'Tacoma, WA',
-    source: 'catalog',
-    holes: [
-      { number: 1, par: 5, yardage: 530 },
-      { number: 2, par: 4, yardage: 384 },
-      { number: 3, par: 4, yardage: 407 },
-      { number: 4, par: 3, yardage: 172 },
-      { number: 5, par: 4, yardage: 399 },
-      { number: 6, par: 5, yardage: 551 },
-      { number: 7, par: 3, yardage: 158 },
-      { number: 8, par: 4, yardage: 421 },
-      { number: 9, par: 4, yardage: 392 },
-      { number: 10, par: 4, yardage: 404 },
-      { number: 11, par: 3, yardage: 177 },
-      { number: 12, par: 5, yardage: 545 },
-      { number: 13, par: 4, yardage: 375 },
-      { number: 14, par: 4, yardage: 430 },
-      { number: 15, par: 5, yardage: 566 },
-      { number: 16, par: 3, yardage: 169 },
-      { number: 17, par: 4, yardage: 411 },
-      { number: 18, par: 4, yardage: 447 },
-    ],
-  },
-];
+export const recentCourses: Course[] = [];

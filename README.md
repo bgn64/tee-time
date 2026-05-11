@@ -2,7 +2,7 @@
 
 A mobile golf scoring app built with **Expo + React Native + TypeScript**. This README is the entry point for new developers and agents working in this codebase.
 
-> **Note:** Sections of this README still describe the early prototype phase. Persistence (Supabase), accounts, friend graph, and a real test suite have all since shipped. The v6 redesign migrated the round model from per-claim status to per-participant confirmation. Read `final.md` for the current status and `supabase/migrations/006_redesign.sql` for the canonical backend.
+> **Note:** Sections of this README still describe the early prototype phase. Persistence (Supabase), accounts, friend graph, and a real test suite have all since shipped. The v7 simplification dropped the v6 per-participant confirmation model — a Round now belongs solely to its scorer. Read `final.md` for the current status and `supabase/migrations/007_scorecard_model.sql` for the canonical backend.
 
 ## Quick start
 
@@ -44,8 +44,8 @@ npx supabase start          # boots local stack on http://127.0.0.1:54321
 npm run test:db              # runs the suite serially against the local stack
 ```
 
-- Test files: `supabase/tests/*.test.ts` covering RPC happy paths (`rpc-happy.test.ts`), authz/error rejections (`rpc-errors.test.ts`), trigger lifecycle and cascade rules (`triggers.test.ts`), and RLS visibility (`rls.test.ts`).
-- Fixtures: `supabase/tests/fixtures.ts` exposes `createTestUser`, `befriend`, `seedRound`, and `cleanupAll`. `cleanupAll` deletes every `auth.users` row (which cascades to all app tables) and runs in `beforeEach`.
+- Test files: `supabase/tests/*.test.ts` covering owner-CRUD happy paths (`rpc-happy.test.ts`), non-owner write rejections (`rpc-errors.test.ts`), schema invariants (`triggers.test.ts`), and RLS visibility (`rls.test.ts`).
+- Fixtures: `supabase/tests/fixtures.ts` exposes `createTestUser`, `befriend`, `seedScorecard`, and `cleanupAll`. `cleanupAll` deletes every `auth.users` row (which cascades to all app tables) and runs in `beforeEach`.
 - Tests run serially (`--runInBand`) because they share a single Postgres instance and a single auth space.
 - If the local stack is wedged or you want a clean slate: `npx supabase db reset` re-applies all migrations from scratch.
 
@@ -247,8 +247,16 @@ Note `scorerId` is polymorphic: in stroke rounds it's a player id; in scramble r
 
 All shared types live in `types/golf.ts`. Read this file before designing any change that touches courses, players, rounds, or scoring.
 
+### Terminology
+
+The backend uses the following names; UI text keeps the more colloquial "Round" verb across the board.
+
+- **Course** — the physical place + hole layout (par, yardage). The course's hole information lives on `Course.holes`; we never call that a "scorecard" anywhere in code or UI.
+- **Round** (real-world) — the actual event of playing a course on a given date with some set of human players. Multiple users can independently record their own version. Today an opaque cross-card identifier (`Scorecard.roundId`) holds the link; tap-to-link / retroactive-link UX and the import flow are future work.
+- **Scorecard** — one user's owned record of scores for a Round. The database table is `scorecards`; the TypeScript type is `Round` (kept for UI consistency). The scorer is its sole owner: only they can edit any scoreline or delete it, and only their own scoreline counts toward their stats.
+
 ```ts
-type Player = { id; name; color?; /* userId? — reserved for future accounts */ };
+type Player = { id; nickname; displayName?; handle?; color?; userId? };
 
 type Hole = { number; par; yardage? };
 type Course = { id; name; location; holes; source: 'catalog' | 'custom' };
@@ -263,23 +271,38 @@ type RoundScore = {
   strokes;
 };
 
+type RoundParticipant = {
+  participantKey;            // local Player.id on the scorer's device
+  linkedUserId?;             // set when the participant has a real account
+  teamId?;                   // set in scramble rounds
+  unlinkedDisplayName?;      // snapshot, populated ONLY when linkedUserId is absent
+  unlinkedDisplayColor?;     // snapshot, populated ONLY when linkedUserId is absent
+};
+
 type Round = {
   id;
   course;
   scoringRule;
-  playerIds;         // every participant in the round, flat
-  teams?;            // required when scoringRule === 'scramble'
+  playerIds;                 // local Player.ids, redundant with participants[].participantKey
+  teams?;                    // required when scoringRule === 'scramble'
   currentHoleNumber;
   scores;
   startedAt;
   completedAt?;
+  ownerUserId?;              // the scorer; sole owner of the Round
+  participants;              // inline jsonb; one entry per named player
+  roundId?;                  // cross-scorecard real-world id; NULL until linked
+  mentionedUserIds;          // linked user_ids on the card; informational (not RLS)
 };
 ```
 
-Two design choices to internalize:
+Design choices to internalize:
 
-1. **References, not embedding.** `Round.playerIds: string[]` resolves through `getPlayer(id)` from `PlayerContext`. If a player is renamed, every round (active and historical) sees the new name. This is forward-compatible with eventual account claiming.
-2. **Polymorphic `scorerId`.** A `RoundScore` doesn't know whether it scores a player or a team — that's determined by `Round.scoringRule`. This lets stroke and scramble share the same score-storage shape and most of the same UI helpers (`getScorerTotalRelative`).
+1. **A Round belongs to its scorer.** RLS is `owner OR friend-of-owner`. Other named players have no edit-rights, no stats credit, no opportunity to confirm/deny. If a named friend wants the scores to count for them, they score the round themselves (or, future feature, import the scoreline).
+2. **Live name/color rendering for linked participants.** `lib/participantIdentity.ts:resolveParticipantIdentity` is the single resolver every UI surface uses. Linked participants render live from the current profile (the viewer's account / `SocialContext.profileCache` / roster fallback). Unlinked participants have no live source, so their name/color is snapshotted on the participant row at scorecard-creation time.
+3. **References, not embedding for Players.** `Player`s are looked up via `PlayerContext`. If a player is renamed locally, every Round (active and historical) sees the new name. Linked participants resolve to their account's current displayName.
+4. **Polymorphic `scorerId`.** A `RoundScore` doesn't know whether it scores a player or a team — that's determined by `Round.scoringRule`. Stroke and scramble share the same score-storage shape and most of the same UI helpers (`getScorerTotalRelative`).
+5. **`mentioned_user_ids` is informational.** It's a denorm of linked participants' user_ids, used by the feed's "with you" line and (future) "Rounds I'm named in" import discovery. It does NOT drive RLS visibility.
 
 ## Round lifecycle
 
@@ -340,17 +363,61 @@ Conventions:
 - **Screens are functional + hook-based.** The first thing a screen does is call its hooks (`useTheme`, `useGolfRound`, `useScreenHeader`, etc.), then derive locals, then render. No class components.
 - **File header comments.** Most screens and contexts open with a short JSDoc-style block describing their role and any non-obvious behavior (e.g. "header chrome: left = SCORE, right = ⋯ overflow"). Match the style when adding new files.
 
+## Course catalog
+
+The `courses` table is shared between two row kinds, distinguished by the
+`source` column:
+
+- **`opengolf`** — global, read-only catalog ingested from
+  [OpenGolfAPI](https://courses.opengolfapi.org/) under the ODbL 1.0
+  license. ~14k US courses. `owner_user_id IS NULL`. RLS allows every
+  authenticated user to `SELECT`; writes flow through the service role
+  via `scripts/ingest-opengolf.ts`.
+- **`custom`** — private to the owning user. `owner_user_id` is set,
+  full CRUD via RLS.
+
+Ids are namespaced (`opengolf:<uuid>` vs `custom:<ts>-<rand>`) so the
+two never collide.
+
+### Refreshing the catalog
+
+```bash
+# One-time setup: add to .env.local (NEVER commit)
+# SUPABASE_URL=...
+# SUPABASE_SERVICE_ROLE_KEY=...
+
+npm run ingest:opengolf        # downloads + upserts ~14k catalog rows
+```
+
+Cached CSV lives under `.cache/opengolf/`; delete it to force a fresh
+download. Re-running is idempotent — the upsert keys on `id`.
+
+### Attribution
+
+ODbL requires attribution. The string `"Course data from OpenGolfAPI,
+ODbL"` lives in `lib/attribution.ts` and is rendered on the round
+detail screen (for opengolf-sourced rounds) and on the You → About
+page. Don't remove either.
+
+### Future enrichment (lazy)
+
+The bulk dataset doesn't include tees, slope, rating, or per-tee
+yardages — those are exposed by the OpenGolfAPI REST endpoints
+`/v1/courses/:id/tees` and `/v1/courses/:id/holes`. The schema already
+has `tees jsonb` and per-hole `yardages` ready to absorb them; wire a
+lazy fetch into the round-start path when you actually need them.
+
 ## What's not built yet
 
 These are deliberately deferred. Don't add them without an explicit conversation — the schema is designed to absorb them later.
 
-- **Persistence.** Roster, courses, and round history disappear on app restart.
-- **Accounts / friends.** `Player.userId?: string` is reserved for when accounts arrive. The eventual claim flow is documented in earlier design conversations.
-- **Scorecard.** `app/(tabs)/(score)/scorecard.tsx` is a stub. The plan: a read-only grid of holes × scorers, theme- and format-aware.
+- **Real-world Round linking.** `Scorecard.roundId` is added but no UX populates it. Tap-to-link or retroactive-link features will use it to tie multiple scorecards to the same real-world play.
+- **Scoreline import.** A named friend will be able to pull their own scoreline off another user's Scorecard onto a new Scorecard they own. The imported Scorecard inherits the source's `roundId` so the two automatically share a verifiable real-world Round.
+- **Verified scores.** Once two Scorecards share a `roundId`, matching scorelines between them can be marked verified. No code yet; the schema accommodates it via the shared identifier.
 - **More scoring rules.** Best-ball and match play were considered and intentionally dropped from v1. Adding either means a new `ScoringRule` value and parallel UI work in Player Config and Scoring.
 - **Player movement between teams.** Today, to move a player from Team 2 to Team 1 you remove and re-add. A "Move to…" affordance is on the wishlist.
 - **User-editable team names.** Auto-named `Team 1` / `Team 2` / … for now.
-- **Course catalog.** Seeded from `data/courses.ts`. A real catalog (search, geolocation, ratings) is out of scope.
+- **Live in-progress rounds.** Only completed rounds sync.
 
 ## Other docs
 

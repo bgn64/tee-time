@@ -1,11 +1,23 @@
 # Tee Time — implementation status & follow-ups
 
+> **v7 simplification (current).** A Round now belongs solely to its
+> scorer. The v6 per-participant confirmation model, the unlinked→friend
+> merge flow, and all six v6-era RPCs (`confirm_participation`,
+> `deny_participation`, `leave_round`, `update_score`,
+> `merge_unlinked_player`, `user_can_see_round`) are gone. Scorecards live
+> in the `scorecards` table (renamed from `rounds`); RLS is
+> owner-or-friend-of-owner; participants are inline jsonb owned solely by
+> the scorer; the `round_id` column is added (nullable) for future
+> cross-scorecard linking. Migration `007_scorecard_model.sql` is the
+> canonical end-state. **Every v6 follow-up below is obsolete.**
+
 > Snapshot at the end of Path A's phases A-F, plus the v6 round-confirmation
 > + merge redesign. Phase G (deployment) is the only remaining item from
 > the original Path A plan; everything else listed below is *optional polish*
 > or *future feature work* worth tracking so it doesn't fall through the
 > cracks. Items marked **[OBSOLETED BY v6]** were superseded by migration
-> 006 and the participant-based round model.
+> 006 and the participant-based round model; items relating to confirmation
+> / merge / pending UI are now **further** obsoleted by v7.
 
 ---
 

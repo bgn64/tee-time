@@ -1,9 +1,12 @@
 /**
- * Tier 2 — RPC error / authorization tests. Each one drives the RPC into
- * an unauthorized or invalid state and asserts the expected error.
+ * Tier 2 — write-rejection tests for the v7 owner-only scorecard model.
+ *
+ * Under v7 every scoreline mutation is plain CRUD gated by RLS to the
+ * scorecard's owner. These tests drive a non-owner client at update/delete
+ * and verify the policy denies the write.
  */
 
-import { admin, befriend, cleanupAll, createTestUser, seedRound } from './fixtures';
+import { admin, befriend, cleanupAll, createTestUser, seedScorecard } from './fixtures';
 
 beforeEach(async () => {
   await cleanupAll();
@@ -13,163 +16,90 @@ afterAll(async () => {
   await cleanupAll();
 });
 
-describe('confirm_participation', () => {
-  test('errors when caller has no pending row', async () => {
-    const a = await createTestUser('a-cf-err');
-    const roundId = await seedRound({ owner: a });
+describe('scorecards UPDATE', () => {
+  test('non-friend stranger cannot UPDATE the scorecard', async () => {
+    const a = await createTestUser('a-up-stranger');
+    const c = await createTestUser('c-up-stranger');
+    const id = await seedScorecard({ owner: a });
 
-    const { error } = await a.client.rpc('confirm_participation', {
-      p_round_id: roundId,
-    });
-    expect(error).not.toBeNull();
-    expect(error!.message).toContain('no pending');
+    const { data, error } = await c.client
+      .from('scorecards')
+      .update({ scores: [{ scorerId: 'user', holeNumber: 1, strokes: 9 }] })
+      .eq('id', id)
+      .select();
+
+    // RLS denial either errors or returns no rows.
+    expect(error === null ? (data?.length ?? 0) === 0 : true).toBe(true);
+
+    const { data: cur } = await admin
+      .from('scorecards')
+      .select('scores')
+      .eq('id', id)
+      .single();
+    expect(cur!.scores).toEqual([]);
   });
-});
 
-describe('deny_participation', () => {
-  test('errors when caller has no pending row', async () => {
-    const a = await createTestUser('a-dn-err');
-    const roundId = await seedRound({ owner: a });
-
-    const { error } = await a.client.rpc('deny_participation', {
-      p_round_id: roundId,
-    });
-    expect(error).not.toBeNull();
-    expect(error!.message).toContain('no pending');
-  });
-});
-
-describe('update_score', () => {
-  test('rejects unauthorized scorer (non-participant trying to edit)', async () => {
-    const a = await createTestUser('a-us-rej');
-    const b = await createTestUser('b-us-rej');
+  test('friend-of-owner cannot UPDATE the scorecard', async () => {
+    const a = await createTestUser('a-up-friend');
+    const b = await createTestUser('b-up-friend');
     await befriend(a, b);
-    const roundId = await seedRound({ owner: a });
-
-    // B is friends with A but isn't on the round; B tries to write A's
-    // scoreline.
-    const { error } = await b.client.rpc('update_score', {
-      p_round_id: roundId,
-      p_scorer_id: 'user',
-      p_hole: 1,
-      p_strokes: 4,
-    });
-    expect(error).not.toBeNull();
-  });
-
-  test('rejects strokes < 1', async () => {
-    const a = await createTestUser('a-us-low');
-    const roundId = await seedRound({ owner: a });
-
-    const { error } = await a.client.rpc('update_score', {
-      p_round_id: roundId,
-      p_scorer_id: 'user',
-      p_hole: 1,
-      p_strokes: 0,
-    });
-    expect(error).not.toBeNull();
-  });
-});
-
-describe('merge_unlinked_player', () => {
-  test('errors when caller is not friends with target', async () => {
-    const a = await createTestUser('a-merge-nofriend');
-    const b = await createTestUser('b-merge-nofriend');
-    // Note: NO befriend() call.
-
-    await admin.from('roster_players').insert({
-      owner_user_id: a.userId,
-      id: 'dad',
-      nickname: 'Dad',
-      color: '#aabbcc',
-      linked_user_id: null,
-    });
-
-    const { error } = await a.client.rpc('merge_unlinked_player', {
-      p_unlinked_local_id: 'dad',
-      p_friend_user_id: b.userId,
-    });
-    expect(error).not.toBeNull();
-    expect(error!.message).toContain('friends');
-  });
-
-  test('errors on uniqueness conflict (round already has the friend)', async () => {
-    const a = await createTestUser('a-merge-uniq');
-    const b = await createTestUser('b-merge-uniq');
-    await befriend(a, b);
-
-    // A's roster has both an unlinked "Mike" and the linked friend B.
-    await admin.from('roster_players').insert({
-      owner_user_id: a.userId,
-      id: 'mike',
-      nickname: 'Mike',
-      color: '#aabbcc',
-      linked_user_id: null,
-    });
-
-    // Round contains BOTH the unlinked Mike AND linked B.
-    const roundId = await seedRound({
+    const id = await seedScorecard({
       owner: a,
-      others: [
-        { participantKey: 'mike', nickname: 'Mike', status: 'confirmed' },
-        { user: b, status: 'confirmed', participantKey: 'b-key' },
-      ],
+      others: [{ user: b, participantKey: 'b-key' }],
     });
 
-    const { error } = await a.client.rpc('merge_unlinked_player', {
-      p_unlinked_local_id: 'mike',
-      p_friend_user_id: b.userId,
-    });
-    expect(error).not.toBeNull();
-    expect(error!.message).toContain('duplicate participant');
-    // Round and roster should be untouched after error.
-    const { data: roster } = await admin
-      .from('roster_players')
-      .select('*')
-      .eq('owner_user_id', a.userId)
-      .eq('id', 'mike');
-    expect(roster).toHaveLength(1);
-    void roundId;
-  });
+    const { data, error } = await b.client
+      .from('scorecards')
+      .update({ scores: [{ scorerId: 'b-key', holeNumber: 1, strokes: 4 }] })
+      .eq('id', id)
+      .select();
+    expect(error === null ? (data?.length ?? 0) === 0 : true).toBe(true);
 
-  test('errors when merging into yourself', async () => {
-    const a = await createTestUser('a-merge-self');
-
-    await admin.from('roster_players').insert({
-      owner_user_id: a.userId,
-      id: 'past-me',
-      nickname: 'Past Me',
-      color: '#aabbcc',
-      linked_user_id: null,
-    });
-
-    const { error } = await a.client.rpc('merge_unlinked_player', {
-      p_unlinked_local_id: 'past-me',
-      p_friend_user_id: a.userId,
-    });
-    expect(error).not.toBeNull();
-    expect(error!.message).toContain('yourself');
+    const { data: cur } = await admin
+      .from('scorecards')
+      .select('scores')
+      .eq('id', id)
+      .single();
+    expect(cur!.scores).toEqual([]);
   });
 });
 
-describe('leave_round', () => {
-  test('is a no-op when caller has no participation in the round', async () => {
-    const a = await createTestUser('a-lr-noop-a');
-    const b = await createTestUser('b-lr-noop-b');
+describe('scorecards DELETE', () => {
+  test('non-owner cannot DELETE the scorecard', async () => {
+    const a = await createTestUser('a-del-rej');
+    const b = await createTestUser('b-del-rej');
     await befriend(a, b);
-    const roundId = await seedRound({ owner: a });
+    const id = await seedScorecard({
+      owner: a,
+      others: [{ user: b, participantKey: 'b-key' }],
+    });
 
-    // B has no participant row on this round.
-    const { error } = await b.client.rpc('leave_round', { p_round_id: roundId });
-    // RPC returns void without raising.
-    expect(error).toBeNull();
+    await b.client.from('scorecards').delete().eq('id', id);
 
-    // Round and A's participant row are unchanged.
-    const { data: parts } = await admin
-      .from('round_participants')
-      .select('*')
-      .eq('round_id', roundId);
-    expect(parts).toHaveLength(1);
-    expect(parts![0].linked_user_id).toBe(a.userId);
+    const { data } = await admin.from('scorecards').select('id').eq('id', id);
+    expect(data).toHaveLength(1);
+  });
+});
+
+describe('scorecards INSERT', () => {
+  test('user cannot insert a scorecard owned by someone else', async () => {
+    const a = await createTestUser('a-ins-rej');
+    const b = await createTestUser('b-ins-rej');
+
+    const { error } = await b.client.from('scorecards').insert({
+      id: 'forged',
+      owner_user_id: a.userId,
+      course_snapshot: { id: 'tc', name: 'X', location: '', source: 'custom', holes: [] },
+      scoring_rule: 'stroke',
+      player_ids: ['user'],
+      teams: null,
+      scores: [],
+      participants: [{ participantKey: 'user', linkedUserId: a.userId }],
+      mentioned_user_ids: [a.userId],
+      current_hole_number: 1,
+      started_at: new Date().toISOString(),
+      completed_at: new Date().toISOString(),
+    });
+    expect(error).not.toBeNull();
   });
 });

@@ -32,6 +32,8 @@ function makeRound(overrides: Partial<Round> = {}): Round {
     currentHoleNumber: 1,
     scores: [],
     startedAt: '2026-05-01T10:00:00Z',
+    participants: [],
+    mentionedUserIds: [],
     ...overrides,
   };
 }
@@ -230,59 +232,64 @@ describe('replaceScore', () => {
 // ---------- buildRoundTitle ----------
 
 describe('buildRoundTitle', () => {
-  test('"Round" when no confirmed linked participants exist (stroke)', () => {
+  const resolveName = (id: string): string =>
+    ({ u1: 'Mike', u2: 'Ben', u3: 'Sarah' } as Record<string, string>)[id] ?? 'Friend';
+
+  test('"Round" when no linked participants exist (stroke)', () => {
     const r = makeRound({ participants: [] });
     expect(buildRoundTitle(r)).toBe('Round');
   });
 
-  test('"X played" with one confirmed linked participant', () => {
+  test('"X played" with one linked participant', () => {
     const r = makeRound({
-      participants: [
-        { participantKey: 'a', linkedUserId: 'u1', status: 'confirmed', displayName: 'Mike' },
-      ],
+      participants: [{ participantKey: 'a', linkedUserId: 'u1' }],
     });
-    expect(buildRoundTitle(r)).toBe('Mike played');
+    expect(buildRoundTitle(r, undefined, resolveName)).toBe('Mike played');
   });
 
   test('replaces own name with "you" when myUserId matches', () => {
     const r = makeRound({
-      participants: [
-        { participantKey: 'a', linkedUserId: 'u1', status: 'confirmed', displayName: 'Ben' },
-      ],
+      participants: [{ participantKey: 'a', linkedUserId: 'u1' }],
     });
-    expect(buildRoundTitle(r, 'u1')).toBe('you played');
+    expect(buildRoundTitle(r, 'u1', resolveName)).toBe('you played');
   });
 
-  test('"X and Y played" with two confirmed', () => {
+  test('"X and Y played" with two linked', () => {
     const r = makeRound({
       participants: [
-        { participantKey: 'a', linkedUserId: 'u1', status: 'confirmed', displayName: 'Mike' },
-        { participantKey: 'b', linkedUserId: 'u2', status: 'confirmed', displayName: 'Ben' },
+        { participantKey: 'a', linkedUserId: 'u1' },
+        { participantKey: 'b', linkedUserId: 'u2' },
       ],
     });
-    expect(buildRoundTitle(r)).toBe('Mike and Ben played');
+    expect(buildRoundTitle(r, undefined, resolveName)).toBe('Mike and Ben played');
   });
 
-  test('Oxford-style join with three+ confirmed', () => {
+  test('Oxford-style join with three+ linked', () => {
     const r = makeRound({
       participants: [
-        { participantKey: 'a', linkedUserId: 'u1', status: 'confirmed', displayName: 'Mike' },
-        { participantKey: 'b', linkedUserId: 'u2', status: 'confirmed', displayName: 'Ben' },
-        { participantKey: 'c', linkedUserId: 'u3', status: 'confirmed', displayName: 'Sarah' },
+        { participantKey: 'a', linkedUserId: 'u1' },
+        { participantKey: 'b', linkedUserId: 'u2' },
+        { participantKey: 'c', linkedUserId: 'u3' },
       ],
     });
-    expect(buildRoundTitle(r)).toBe('Mike, Ben, and Sarah played');
+    expect(buildRoundTitle(r, undefined, resolveName)).toBe('Mike, Ben, and Sarah played');
   });
 
-  test('excludes pending and unlinked participants', () => {
+  test('excludes unlinked participants', () => {
     const r = makeRound({
       participants: [
-        { participantKey: 'a', linkedUserId: 'u1', status: 'confirmed', displayName: 'Mike' },
-        { participantKey: 'b', linkedUserId: 'u2', status: 'pending', displayName: 'Ben' },
-        { participantKey: 'c', status: 'confirmed', displayName: 'Dad' }, // unlinked
+        { participantKey: 'a', linkedUserId: 'u1' },
+        { participantKey: 'c', unlinkedDisplayName: 'Dad' },
       ],
     });
-    expect(buildRoundTitle(r)).toBe('Mike played');
+    expect(buildRoundTitle(r, undefined, resolveName)).toBe('Mike played');
+  });
+
+  test('falls back to "Friend" when no resolver is supplied', () => {
+    const r = makeRound({
+      participants: [{ participantKey: 'a', linkedUserId: 'u1' }],
+    });
+    expect(buildRoundTitle(r)).toBe('Friend played');
   });
 
   test('"Red vs Blue" for scramble with two teams', () => {

@@ -12,9 +12,11 @@
 
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Alert, DevSettings, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { DevSettings, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ComingSoon } from '@/components/ComingSoon';
+import { OPENGOLF_ATTRIBUTION, OPENGOLF_ATTRIBUTION_URL } from '@/lib/attribution';
+import { confirm } from '@/lib/dialog';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { clearAll } from '@/state/persistence';
 import { useTheme } from '@/state/ThemeContext';
@@ -28,33 +30,18 @@ export default function AboutScreen() {
     right: { kind: 'profile' },
   });
 
-  const handleReset = () => {
-    Alert.alert(
-      'Reset all data?',
-      'This wipes the saved roster, courses, rounds, theme, account, and friends, then reloads the app. Dev-only.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset',
-          style: 'destructive',
-          onPress: async () => {
-            await clearAll();
-            DevSettings.reload();
-          },
-        },
-      ]
-    );
+  const handleReset = async () => {
+    const ok = await confirm({
+      title: 'Reset all data?',
+      message:
+        'This wipes the saved roster, courses, rounds, theme, account, and friends, then reloads the app. Dev-only.',
+      confirmLabel: 'Reset',
+      destructive: true,
+    });
+    if (!ok) return;
+    await clearAll();
+    DevSettings.reload();
   };
-
-  if (!__DEV__) {
-    return (
-      <ComingSoon
-        icon="ⓘ"
-        title="About Tee Time"
-        body="Version, credits, and the changelog will appear here once there's a story to tell."
-      />
-    );
-  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -64,16 +51,28 @@ export default function AboutScreen() {
         body="Version, credits, and the changelog will appear here once there's a story to tell."
       />
 
-      <View style={styles.devSection}>
-        <Text style={styles.devLabel}>DEVELOPER</Text>
-        <Pressable style={styles.dangerButton} onPress={handleReset}>
-          <Text style={styles.dangerButtonText}>Reset all data</Text>
+      <View style={styles.dataSourcesSection}>
+        <Text style={styles.sectionLabel}>DATA SOURCES</Text>
+        <Pressable
+          style={styles.attribLink}
+          onPress={() => Linking.openURL(OPENGOLF_ATTRIBUTION_URL)}>
+          <Text style={styles.attribText}>{OPENGOLF_ATTRIBUTION}</Text>
+          <Text style={styles.attribUrl}>{OPENGOLF_ATTRIBUTION_URL}</Text>
         </Pressable>
-        <Text style={styles.devHint}>
-          Wipes persisted local storage and reloads. Cloud data on Supabase is
-          unaffected; sign in again to re-download.
-        </Text>
       </View>
+
+      {__DEV__ && (
+        <View style={styles.devSection}>
+          <Text style={styles.sectionLabel}>DEVELOPER</Text>
+          <Pressable style={styles.dangerButton} onPress={handleReset}>
+            <Text style={styles.dangerButtonText}>Reset all data</Text>
+          </Pressable>
+          <Text style={styles.devHint}>
+            Wipes persisted local storage and reloads. Cloud data on Supabase is
+            unaffected; sign in again to re-download.
+          </Text>
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -95,12 +94,42 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderWidth: 1,
       borderColor: colors.border,
     },
+    dataSourcesSection: {
+      marginHorizontal: 20,
+      marginTop: 16,
+      padding: 16,
+      borderRadius: 14,
+      backgroundColor: colors.cardBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    sectionLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: colors.textMuted,
+      letterSpacing: 0.8,
+      marginBottom: 10,
+    },
     devLabel: {
       fontSize: 10,
       fontWeight: '800',
       color: colors.textMuted,
       letterSpacing: 0.8,
       marginBottom: 10,
+    },
+    attribLink: {
+      paddingVertical: 4,
+    },
+    attribText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textTitle,
+    },
+    attribUrl: {
+      fontSize: 11,
+      color: colors.primaryDark,
+      marginTop: 2,
+      fontWeight: '600',
     },
     dangerButton: {
       backgroundColor: '#dc2626',

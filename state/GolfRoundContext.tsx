@@ -1,6 +1,6 @@
 /**
  * Provides in-memory + AsyncStorage-persisted golf round state, plus the
- * Supabase wiring for the new (v6) participant-based round model.
+ * Supabase wiring for the v7 scorecard-owned round model.
  *
  * Persisted: `courses`, `currentRound`, `completedRounds` — survive app restarts.
  * Not persisted (transient): `pendingSelectedCourseId`.
@@ -8,18 +8,18 @@
  * `hydrated` is exposed so the root layout can wait for storage reads before
  * un-blocking the splash screen.
  *
- * Cloud model (post-006 redesign):
- *   · `rounds` row carries owner_user_id, course_snapshot, scoring_rule,
- *     player_ids (jsonb string[] of local participant_keys), player_user_ids
- *     (uuid[]; recomputed by trigger from confirmed linked participants),
- *     teams, scores, started_at/completed_at, owner_participant_key.
- *   · `round_participants` rows describe each scoring line; their
- *     confirmation_status drives the new confirm/deny flow.
+ * Cloud model (post-007 redesign):
+ *   · A `scorecards` row carries owner_user_id, course_snapshot,
+ *     scoring_rule, player_ids (jsonb string[] of local participant keys),
+ *     teams, scores, participants (jsonb), mentioned_user_ids (uuid[]
+ *     informational denorm), round_id (nullable cross-card identifier),
+ *     and started_at/completed_at.
+ *   · Visibility = owner OR friend-of-owner. There is no separate
+ *     participants table; named players are inline jsonb owned solely by
+ *     the scorer.
  *
- * All mutations on participants flow through RPCs (confirm_participation,
- * deny_participation, leave_round, update_score). Direct row writes are
- * only used to insert participant rows when a round is being completed
- * by the owner.
+ * All mutations are plain CRUD under owner-only RLS. No RPCs survive
+ * from the v6 model.
  */
 
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -31,8 +31,8 @@ import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { usePlayers } from '@/state/PlayerContext';
 import { supabase } from '@/state/supabaseClient';
 import {
-  ConfirmationStatus,
   Course,
+  Hole,
   Round,
   RoundParticipant,
   RoundScore,
@@ -64,9 +64,26 @@ type GolfRoundContextValue = {
   completeCurrentRound: () => void;
   abandonCurrentRound: () => void;
   /**
-   * Mutate one (scorerId, hole) entry on a completed round. Optimistically
-   * patches local state, then calls update_score; on RPC failure the change
-   * is rolled back. Edit-rights are enforced server-side.
+   * Apply a batch of (scorerId, hole, strokes) edits to a completed Round.
+   * Computes the next `scores` array client-side from the current local
+   * state + all edits, then optimistically updates local state and issues
+   * a single owner UPDATE. On failure the change is rolled back. RLS
+   * gates the write to the owner.
+   *
+   * Always prefer this over multiple `editHoleScore` calls — concurrent
+   * single-edit calls race each other and clobber state.
+   */
+  commitScoreEdits: (
+    roundId: string,
+    edits: Array<{ scorerId: string; holeNumber: number; strokes: number }>
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /**
+   * Mutate one (scorerId, hole) entry on a completed Round. Optimistically
+   * patches local state, then issues a plain owner UPDATE; on failure the
+   * change is rolled back. RLS gates the write to the owner.
+   *
+   * Note: NOT safe to call concurrently for multiple holes on the same
+   * round — use `commitScoreEdits` for batches.
    */
   editHoleScore: (
     roundId: string,
@@ -74,17 +91,37 @@ type GolfRoundContextValue = {
     holeNumber: number,
     strokes: number
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
-  /** Confirm the caller's pending participation in a round. */
-  confirmParticipation: (roundId: string) => Promise<void>;
-  /** Deny the caller's pending participation in a round. */
-  denyParticipation: (roundId: string) => Promise<void>;
-  /** Remove the caller from a round (or leave-as-owner). */
-  leaveRound: (roundId: string) => Promise<void>;
   /**
-   * Rounds where the *current user* has a pending participant row.
-   * Surfaced by the new Pending sub-section in the Rounds tab.
+   * Delete a Round entirely. Owner-only via RLS. Drops the row everywhere
+   * (the owner's history, all friends' feeds).
    */
-  pendingRoundsForMe: Round[];
+  deleteRound: (roundId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /**
+   * Server-side course search across the OpenGolf catalog. Returns up to
+   * `limit` matches ordered by name. Local custom courses are NOT
+   * included — the caller filters its own roster separately so the
+   * remote query stays cacheable.
+   */
+  searchCatalogCourses: (query: string, limit?: number) => Promise<Course[]>;
+  /**
+   * Insert a freshly-picked catalog course into the local `courses` cache
+   * so it shows up as a recent / startable course. Idempotent.
+   */
+  rememberCatalogCourse: (course: Course) => void;
+  /**
+   * Ensure the given catalog course has its scorecard populated. Fast-
+   * paths to a no-op if the course already has holes. Otherwise hits
+   * the upstream OpenGolfAPI for the canonical scorecard, writes it
+   * into the shared catalog row via the enrich_catalog_course RPC, and
+   * returns the enriched `Course`. On any failure returns ok:false with
+   * an error message; the caller decides whether to fall back to a
+   * create-course flow.
+   *
+   * Custom courses pass through unchanged (already user-authored).
+   */
+  ensureCourseScorecard: (
+    course: Course
+  ) => Promise<{ ok: true; course: Course } | { ok: false; error: string }>;
   hydrated: boolean;
 };
 
@@ -154,7 +191,9 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     const prev = prevAccountUserIdRef.current;
     const curr = account?.userId ?? null;
     if (prev !== null && curr === null) {
-      setCourses((prevCourses) => prevCourses.filter((c) => c.source === 'catalog'));
+      // Clear all locally-cached courses; both customs (account-specific)
+      // and any catalog rows the previous user had interacted with.
+      setCourses([]);
       setCompletedRounds([]);
       setCurrentRound(null);
       cloudCoursesSyncedAccountRef.current = null;
@@ -163,7 +202,41 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     prevAccountUserIdRef.current = curr;
   }, [account, accountHydrated, hydrated]);
 
-  // -- Cloud sync for courses (custom courses only) --
+  // ===========================================================================
+  // Courses cloud sync (customs only; catalog comes via on-demand search)
+  // ===========================================================================
+  /**
+   * Translate a raw cloud row into the local Course shape.
+   */
+  const cloudCourseRowToLocal = useCallback((row: any): Course => {
+    const city: string | undefined = row.city ?? undefined;
+    const state: string | undefined = row.state ?? undefined;
+    const location = [city, state].filter((v) => v && v.length > 0).join(', ');
+    return {
+      id: row.id,
+      name: row.name,
+      location,
+      holes: row.holes ?? [],
+      source: row.source,
+      city,
+      state,
+      country: row.country ?? undefined,
+      address: row.address ?? undefined,
+      postalCode: row.postal_code ?? undefined,
+      latitude: row.latitude ?? undefined,
+      longitude: row.longitude ?? undefined,
+      courseType: row.course_type ?? undefined,
+      totalPar: row.total_par ?? undefined,
+      totalYardage: row.total_yardage ?? undefined,
+      yearBuilt: row.year_built ?? undefined,
+      architect: row.architect ?? undefined,
+      phone: row.phone ?? undefined,
+      website: row.website ?? undefined,
+      tees: row.tees ?? [],
+      sourceExternalId: row.source_external_id ?? undefined,
+    };
+  }, []);
+
   const cloudUpsertCourse = useCallback(
     async (course: Course) => {
       if (!account) return;
@@ -172,14 +245,32 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         .from('courses')
         .upsert(
           {
-            owner_user_id: account.userId,
             id: course.id,
+            owner_user_id: account.userId,
+            source: 'custom',
             name: course.name,
-            location: course.location,
+            // Custom courses store the user-typed location verbatim into
+            // `city` so it round-trips on read. We don't try to parse
+            // "Seattle, WA" into city+state — keep it simple.
+            city: course.location || null,
+            state: null,
+            country: course.country ?? null,
+            address: course.address ?? null,
+            postal_code: course.postalCode ?? null,
+            latitude: course.latitude ?? null,
+            longitude: course.longitude ?? null,
+            course_type: course.courseType ?? null,
+            hole_count: course.holes.length,
+            total_par: course.totalPar ?? course.holes.reduce((t, h) => t + h.par, 0),
+            total_yardage: course.totalYardage ?? null,
+            year_built: course.yearBuilt ?? null,
+            architect: course.architect ?? null,
+            phone: course.phone ?? null,
+            website: course.website ?? null,
             holes: course.holes,
-            source: course.source,
+            tees: course.tees ?? [],
           },
-          { onConflict: 'owner_user_id,id' }
+          { onConflict: 'id' }
         );
       if (error) console.warn('[courses] upsert failed:', error);
     },
@@ -192,13 +283,15 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       const { error } = await supabase
         .from('courses')
         .delete()
-        .eq('owner_user_id', account.userId)
-        .eq('id', courseId);
+        .eq('id', courseId)
+        .eq('owner_user_id', account.userId);
       if (error) console.warn('[courses] delete failed:', error);
     },
     [account]
   );
 
+  // Initial pull: only user-owned customs. Catalog discovery happens via
+  // searchCatalogCourses on demand.
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
     if (!account) {
@@ -211,53 +304,40 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     const ownerUserId = account.userId;
 
     const sync = async () => {
-      const { data: cloudRowsRaw, error } = await supabase
+      const { data, error } = await supabase
         .from('courses')
-        .select('id, name, location, holes, source')
+        .select('*')
         .eq('owner_user_id', ownerUserId);
-
       if (error) {
         console.warn('[courses] initial sync pull failed:', error);
         return;
       }
       if (cancelled) return;
 
-      const cloudRows = (cloudRowsRaw ?? []) as Array<{
-        id: string;
-        name: string;
-        location: string | null;
-        holes: any;
-        source: 'catalog' | 'custom';
-      }>;
-      const cloudById = new Map(cloudRows.map((r) => [r.id, r]));
-      const localSnapshot = coursesRef.current;
+      const cloudRows = (data ?? []) as any[];
+      const cloudById = new Map(cloudRows.map((r) => [r.id as string, r]));
 
+      // Merge: cloud customs win for matching ids. Local-only customs
+      // get pushed to cloud. Any locally-cached catalog rows (not in this
+      // pull's owner-scoped result) are preserved so picks survive
+      // reloads even though we don't sync the catalog.
+      const localSnapshot = coursesRef.current;
       const merged: Course[] = [];
-      const seenIds = new Set<string>();
+      const seen = new Set<string>();
       for (const local of localSnapshot) {
         const cloud = cloudById.get(local.id);
         if (cloud) {
-          merged.push({
-            id: cloud.id,
-            name: cloud.name,
-            location: cloud.location ?? '',
-            holes: cloud.holes,
-            source: cloud.source,
-          });
-          seenIds.add(cloud.id);
-        } else {
+          merged.push(cloudCourseRowToLocal(cloud));
+          seen.add(cloud.id);
+        } else if (local.source === 'opengolf') {
+          merged.push(local);
+        } else if (local.source === 'custom') {
           merged.push(local);
         }
       }
       for (const cloud of cloudRows) {
-        if (seenIds.has(cloud.id)) continue;
-        merged.push({
-          id: cloud.id,
-          name: cloud.name,
-          location: cloud.location ?? '',
-          holes: cloud.holes,
-          source: cloud.source,
-        });
+        if (seen.has(cloud.id)) continue;
+        merged.push(cloudCourseRowToLocal(cloud));
       }
 
       if (cancelled) return;
@@ -266,19 +346,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       const localOnlyCustom = localSnapshot.filter(
         (c) => c.source === 'custom' && !cloudById.has(c.id)
       );
-      if (localOnlyCustom.length > 0) {
-        const { error: pushError } = await supabase.from('courses').upsert(
-          localOnlyCustom.map((c) => ({
-            owner_user_id: ownerUserId,
-            id: c.id,
-            name: c.name,
-            location: c.location,
-            holes: c.holes,
-            source: c.source,
-          })),
-          { onConflict: 'owner_user_id,id' }
-        );
-        if (pushError) console.warn('[courses] initial sync push failed:', pushError);
+      for (const c of localOnlyCustom) {
+        await cloudUpsertCourse(c);
       }
 
       cloudCoursesSyncedAccountRef.current = ownerUserId;
@@ -288,118 +357,245 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     return () => {
       cancelled = true;
     };
-  }, [account, hydrated, accountHydrated]);
+  }, [account, hydrated, accountHydrated, cloudCourseRowToLocal, cloudUpsertCourse]);
+
+  // Catalog search (server-side, no client-side preload).
+  const searchCatalogCourses = useCallback(
+    async (query: string, limit: number = 20): Promise<Course[]> => {
+      const trimmed = query.trim();
+      if (trimmed.length < 2) return [];
+      // ilike with %...% works on the trigram index we created in 008. We
+      // bias to authenticated catalog rows only — local customs are
+      // filtered in the UI from `courses` directly.
+      const { data, error } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('source', 'opengolf')
+        .ilike('name', `%${trimmed}%`)
+        .order('name')
+        .limit(limit);
+      if (error) {
+        console.warn('[courses] catalog search failed:', error);
+        return [];
+      }
+      return (data ?? []).map(cloudCourseRowToLocal);
+    },
+    [cloudCourseRowToLocal]
+  );
+
+  const rememberCatalogCourse = useCallback((course: Course) => {
+    if (course.source !== 'opengolf') return;
+    setCourses((prev) => {
+      const i = prev.findIndex((c) => c.id === course.id);
+      if (i === -1) return [...prev, course];
+      // Already present: merge — keep the locally-cached holes/tees if
+      // they're already populated (avoids regressing a previously
+      // enriched copy with stale empty data).
+      const existing = prev[i];
+      const merged: Course = {
+        ...existing,
+        ...course,
+        holes: existing.holes.length > 0 ? existing.holes : course.holes,
+        tees:
+          existing.tees && existing.tees.length > 0 ? existing.tees : course.tees ?? [],
+      };
+      const next = prev.slice();
+      next[i] = merged;
+      return next;
+    });
+  }, []);
+
+  // Lazy scorecard enrichment for catalog courses. The bulk-export
+  // scorecards are unreliable (see migration 009 for context), so we
+  // fetch them from the live REST API on first use and persist the
+  // result back to the shared `courses` row via the
+  // `enrich_catalog_course` RPC. Subsequent picks of the same course
+  // by anyone skip the network round-trip.
+  const ensureCourseScorecard = useCallback(
+    async (
+      course: Course
+    ): Promise<{ ok: true; course: Course } | { ok: false; error: string }> => {
+      if (course.source !== 'opengolf') return { ok: true, course };
+      if (course.holes && course.holes.length > 0) return { ok: true, course };
+
+      const externalId =
+        course.sourceExternalId ??
+        (course.id.startsWith('opengolf:') ? course.id.slice('opengolf:'.length) : null);
+      if (!externalId) {
+        return { ok: false, error: 'Catalog course is missing its OpenGolf id.' };
+      }
+
+      let payload: any;
+      try {
+        const res = await fetch(`https://api.opengolfapi.org/v1/courses/${externalId}`);
+        if (!res.ok) {
+          return {
+            ok: false,
+            error: `OpenGolfAPI returned HTTP ${res.status}.`,
+          };
+        }
+        payload = await res.json();
+      } catch (err: any) {
+        return { ok: false, error: err?.message ?? 'Network error contacting OpenGolfAPI.' };
+      }
+
+      const rawScorecard: any[] = Array.isArray(payload?.scorecard) ? payload.scorecard : [];
+      if (rawScorecard.length === 0) {
+        return {
+          ok: false,
+          error: 'OpenGolfAPI returned no scorecard for this course.',
+        };
+      }
+
+      const holes: Hole[] = rawScorecard
+        .map((entry) => {
+          const number = Number(entry.hole_number ?? entry.hole);
+          const par = Number(entry.par);
+          if (!Number.isFinite(number) || !Number.isFinite(par)) return null;
+          const hcpRaw = entry.handicap_index ?? entry.handicap;
+          const handicapIndex =
+            hcpRaw != null && Number.isFinite(Number(hcpRaw)) ? Number(hcpRaw) : undefined;
+          return {
+            number,
+            par,
+            ...(handicapIndex !== undefined ? { handicapIndex } : {}),
+          } as Hole;
+        })
+        .filter((h): h is Hole => h !== null)
+        .sort((a, b) => a.number - b.number);
+
+      if (holes.length === 0) {
+        return {
+          ok: false,
+          error: 'OpenGolfAPI scorecard entries were unreadable.',
+        };
+      }
+
+      // Trust the API's holes_count / par_total over our bulk-derived
+      // values, both of which were broken upstream. Fall back to the
+      // computed sums from the scorecard itself when the API doesn't
+      // ship those fields.
+      const computedTotalPar = holes.reduce((t, h) => t + h.par, 0);
+      const apiHoleCount = Number(payload?.holes_count);
+      const apiTotalPar = Number(payload?.par_total);
+      const enrichedHoleCount = Number.isFinite(apiHoleCount) ? apiHoleCount : holes.length;
+      const enrichedTotalPar = Number.isFinite(apiTotalPar) ? apiTotalPar : computedTotalPar;
+
+      const enriched: Course = {
+        ...course,
+        holes,
+        totalPar: enrichedTotalPar,
+      };
+
+      // Write back to the shared catalog row. Best-effort: if the RPC
+      // fails (offline, RLS misconfig, etc.) we still return the
+      // locally-enriched course so the user can play their round.
+      if (account) {
+        const { error } = await supabase.rpc('enrich_catalog_course', {
+          p_id: course.id,
+          p_holes: holes,
+          p_tees: course.tees ?? [],
+          p_hole_count: enrichedHoleCount,
+          p_total_par: enrichedTotalPar,
+        });
+        if (error) {
+          console.warn('[courses] enrich_catalog_course RPC failed:', error);
+        }
+      }
+
+      // Update local cache so re-picking the same course is instant.
+      setCourses((prev) => prev.map((c) => (c.id === enriched.id ? enriched : c)));
+
+      return { ok: true, course: enriched };
+    },
+    [account]
+  );
 
   // ===========================================================================
-  // Round / participant sync
+  // Scorecards cloud sync
   // ===========================================================================
 
-  type CloudRoundRow = {
+  type CloudScorecardRow = {
     id: string;
     owner_user_id: string;
-    owner_participant_key: string | null;
     course_snapshot: Course;
     scoring_rule: ScoringRule;
     player_ids: string[];
-    player_user_ids: string[];
     teams: Team[] | null;
     scores: RoundScore[];
+    participants: RoundParticipant[];
+    mentioned_user_ids: string[];
+    round_id: string | null;
     current_hole_number: number;
     started_at: string;
     completed_at: string | null;
   };
 
-  type CloudParticipantRow = {
-    round_id: string;
-    participant_key: string;
-    linked_user_id: string | null;
-    confirmation_status: ConfirmationStatus;
-    display_name: string;
-    display_color: string | null;
-    team_id: string | null;
-  };
-
-  const cloudToLocalRound = useCallback(
-    (row: CloudRoundRow, participants: CloudParticipantRow[]): Round => {
-      const ownerLocal = playerRosterRef.current.find((p) => p.userId === row.owner_user_id);
-      return {
-        id: row.id,
-        course: row.course_snapshot,
-        scoringRule: row.scoring_rule,
-        playerIds: row.player_ids,
-        teams: row.teams ?? undefined,
-        currentHoleNumber: row.current_hole_number,
-        scores: row.scores ?? [],
-        startedAt: row.started_at,
-        completedAt: row.completed_at ?? undefined,
-        ownerUserId: row.owner_user_id,
-        ownerId: ownerLocal?.id ?? row.owner_participant_key ?? undefined,
-        participants: participants.map((p) => ({
-          participantKey: p.participant_key,
-          linkedUserId: p.linked_user_id ?? undefined,
-          status: p.confirmation_status,
-          displayName: p.display_name,
-          displayColor: p.display_color ?? undefined,
-          teamId: p.team_id ?? undefined,
-        })),
-      };
-    },
-    []
-  );
+  const cloudToLocalRound = useCallback((row: CloudScorecardRow): Round => {
+    return {
+      id: row.id,
+      course: row.course_snapshot,
+      scoringRule: row.scoring_rule,
+      playerIds: row.player_ids,
+      teams: row.teams ?? undefined,
+      currentHoleNumber: row.current_hole_number,
+      scores: row.scores ?? [],
+      startedAt: row.started_at,
+      completedAt: row.completed_at ?? undefined,
+      ownerUserId: row.owner_user_id,
+      participants: row.participants ?? [],
+      mentionedUserIds: row.mentioned_user_ids ?? [],
+      roundId: row.round_id ?? undefined,
+    };
+  }, []);
 
   /**
-   * Build participant rows for a freshly completed round, using the local
-   * roster to capture display names and link state. The owner's row is
-   * created server-side via the seed_owner_participant trigger; we only
-   * push rows for the *other* participants.
+   * Build the participants[] inline jsonb for a freshly completed Round
+   * from the local roster. Linked participants get NO snapshot
+   * (name/color render live from profile); unlinked participants snapshot
+   * the nickname and color captured at completion time.
    */
-  const buildParticipantRows = useCallback(
-    (round: Round, ownerUserId: string): Array<{
-      round_id: string;
-      participant_key: string;
-      linked_user_id: string | null;
-      confirmation_status: ConfirmationStatus;
-      display_name: string;
-      display_color: string | null;
-      team_id: string | null;
-    }> => {
-      const rows: Array<{
-        round_id: string;
-        participant_key: string;
-        linked_user_id: string | null;
-        confirmation_status: ConfirmationStatus;
-        display_name: string;
-        display_color: string | null;
-        team_id: string | null;
-      }> = [];
+  const buildParticipants = useCallback((round: Round): RoundParticipant[] => {
+    const teamForPlayer = (playerId: string): string | undefined => {
+      if (!round.teams) return undefined;
+      return round.teams.find((t) => t.playerIds.includes(playerId))?.id;
+    };
 
-      // Resolve teamId by searching round.teams[*].playerIds.
-      const teamForPlayer = (playerId: string): string | null => {
-        if (!round.teams) return null;
-        const team = round.teams.find((t) => t.playerIds.includes(playerId));
-        return team?.id ?? null;
-      };
+    const out: RoundParticipant[] = [];
+    for (const playerId of round.playerIds) {
+      const p = playerRosterRef.current.find((q) => q.id === playerId);
+      if (!p) continue;
+      const linkedUserId =
+        p.userId && UUID_REGEX.test(p.userId) ? p.userId : undefined;
+      const teamId = teamForPlayer(playerId);
 
-      for (const playerId of round.playerIds) {
-        const p = playerRosterRef.current.find((q) => q.id === playerId);
-        if (!p) continue;
-        const isOwner = p.userId === ownerUserId;
-        if (isOwner) continue; // owner row seeded by trigger
-
-        const linkedUserId =
-          p.userId && UUID_REGEX.test(p.userId) ? p.userId : null;
-
-        rows.push({
-          round_id: round.id,
-          participant_key: playerId,
-          linked_user_id: linkedUserId,
-          confirmation_status: linkedUserId ? 'pending' : 'confirmed',
-          display_name: p.nickname,
-          display_color: p.color ?? null,
-          team_id: teamForPlayer(playerId),
+      if (linkedUserId) {
+        out.push({
+          participantKey: playerId,
+          linkedUserId,
+          teamId,
+        });
+      } else {
+        out.push({
+          participantKey: playerId,
+          teamId,
+          unlinkedDisplayName: p.nickname,
+          unlinkedDisplayColor: p.color,
         });
       }
-      return rows;
+    }
+    return out;
+  }, []);
+
+  const buildMentionedUserIds = useCallback(
+    (participants: RoundParticipant[]): string[] => {
+      const out: string[] = [];
+      for (const p of participants) {
+        if (p.linkedUserId && !out.includes(p.linkedUserId)) {
+          out.push(p.linkedUserId);
+        }
+      }
+      return out;
     },
     []
   );
@@ -409,55 +605,29 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       if (!account) return;
       const ownerUserId = account.userId;
 
-      // The owner_participant_key is the local Player.id of the scorer in
-      // their own roster. We send it so the server's seed trigger creates
-      // an owner participant row whose key matches the scoreboard's
-      // `scorerId` for stroke rounds.
-      const ownerLocalId = round.ownerId ?? defaultPlayerId ?? '';
-
-      const playerUserIds: string[] = [];
-      for (const pid of round.playerIds) {
-        const p = playerRosterRef.current.find((q) => q.id === pid);
-        if (p?.userId && UUID_REGEX.test(p.userId)) {
-          playerUserIds.push(p.userId);
-        }
-      }
-
-      const { data: roundData, error: roundErr } = await supabase
-        .from('rounds')
+      const { error } = await supabase
+        .from('scorecards')
         .upsert(
           {
             id: round.id,
             owner_user_id: ownerUserId,
-            owner_participant_key: ownerLocalId || null,
             course_snapshot: round.course,
             scoring_rule: round.scoringRule,
             player_ids: round.playerIds,
-            player_user_ids: playerUserIds,
             teams: round.teams ?? null,
             scores: round.scores,
+            participants: round.participants,
+            mentioned_user_ids: round.mentionedUserIds,
+            round_id: round.roundId ?? null,
             current_hole_number: round.currentHoleNumber,
             started_at: round.startedAt,
             completed_at: round.completedAt ?? null,
           },
           { onConflict: 'id' }
-        )
-        .select();
-      if (roundErr) {
-        console.warn('[rounds] upsert failed:', roundErr);
-        return;
-      }
-      void roundData;
-
-      const participantRows = buildParticipantRows(round, ownerUserId);
-      if (participantRows.length > 0) {
-        const { error: pErr } = await supabase
-          .from('round_participants')
-          .upsert(participantRows, { onConflict: 'round_id,participant_key' });
-        if (pErr) console.warn('[rounds] participant upsert failed:', pErr);
-      }
+        );
+      if (error) console.warn('[scorecards] upsert failed:', error);
     },
-    [account, defaultPlayerId, buildParticipantRows]
+    [account]
   );
 
   // Initial pull.
@@ -473,32 +643,15 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     const ownerUserId = account.userId;
 
     const sync = async () => {
-      const [{ data: roundsData, error: roundsErr }, { data: pData, error: pErr }] =
-        await Promise.all([
-          supabase.from('rounds').select('*'),
-          supabase.from('round_participants').select('*'),
-        ]);
-
-      if (roundsErr) {
-        console.warn('[rounds] initial sync rounds pull failed:', roundsErr);
-        return;
-      }
-      if (pErr) {
-        console.warn('[rounds] initial sync participants pull failed:', pErr);
+      const { data, error } = await supabase.from('scorecards').select('*');
+      if (error) {
+        console.warn('[scorecards] initial sync pull failed:', error);
         return;
       }
       if (cancelled) return;
 
-      const rounds = (roundsData ?? []) as CloudRoundRow[];
-      const participants = (pData ?? []) as CloudParticipantRow[];
-      const byRound = new Map<string, CloudParticipantRow[]>();
-      for (const p of participants) {
-        const arr = byRound.get(p.round_id) ?? [];
-        arr.push(p);
-        byRound.set(p.round_id, arr);
-      }
-
-      const cloudById = new Map(rounds.map((r) => [r.id, r]));
+      const rows = (data ?? []) as CloudScorecardRow[];
+      const cloudById = new Map(rows.map((r) => [r.id, r]));
       const localSnapshot = completedRoundsRef.current;
 
       const merged: Round[] = [];
@@ -506,22 +659,34 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       for (const local of localSnapshot) {
         const cloud = cloudById.get(local.id);
         if (cloud) {
-          merged.push(cloudToLocalRound(cloud, byRound.get(cloud.id) ?? []));
+          merged.push(cloudToLocalRound(cloud));
           seen.add(cloud.id);
-        } else {
+          continue;
+        }
+        // Local round not in cloud. Two valid cases keep it:
+        //   · Round we own and haven't pushed yet → kept for the upsert
+        //     below.
+        //   · Anonymous-mode round (no ownerUserId) → kept as local-only
+        //     history that this account will eventually adopt.
+        // Anything else (a friend-owned round we cached previously) is
+        // stale — the friend deleted it or RLS no longer grants access.
+        // Drop it so the local cache reconverges with the server.
+        if (!local.ownerUserId || local.ownerUserId === ownerUserId) {
           merged.push(local);
         }
       }
-      for (const cloud of rounds) {
+      for (const cloud of rows) {
         if (seen.has(cloud.id)) continue;
-        merged.push(cloudToLocalRound(cloud, byRound.get(cloud.id) ?? []));
+        merged.push(cloudToLocalRound(cloud));
       }
 
       if (cancelled) return;
       setCompletedRounds(merged);
 
-      // Push local-only rounds (and their participant rows).
-      const localOnly = localSnapshot.filter((r) => !cloudById.has(r.id));
+      // Push local-only rounds owned by this account up to cloud.
+      const localOnly = localSnapshot.filter(
+        (r) => !cloudById.has(r.id) && r.ownerUserId === ownerUserId
+      );
       for (const r of localOnly) {
         await cloudUpsertRound(r);
       }
@@ -535,15 +700,15 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     };
   }, [account, hydrated, accountHydrated, cloudToLocalRound, cloudUpsertRound]);
 
-  // Realtime subscriptions for rounds + round_participants.
+  // Realtime: scorecards table only. Inline participants ride along.
   useEffect(() => {
     if (!account) return;
 
     const channel = supabase
-      .channel('rounds-and-participants')
+      .channel('scorecards-stream')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'rounds' },
+        { event: '*', schema: 'public', table: 'scorecards' },
         (payload) => {
           if (payload.eventType === 'DELETE') {
             const oldId = (payload.old as { id?: string })?.id;
@@ -551,55 +716,15 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             setCompletedRounds((prev) => prev.filter((r) => r.id !== oldId));
             return;
           }
-          const row = payload.new as CloudRoundRow;
-          (async () => {
-            const { data: pRows } = await supabase
-              .from('round_participants')
-              .select('*')
-              .eq('round_id', row.id);
-            const merged = cloudToLocalRound(row, (pRows ?? []) as CloudParticipantRow[]);
-            setCompletedRounds((prev) => {
-              const i = prev.findIndex((r) => r.id === merged.id);
-              if (i === -1) return [merged, ...prev];
-              const next = prev.slice();
-              next[i] = merged;
-              return next;
-            });
-          })();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'round_participants' },
-        (payload) => {
-          const newRow = payload.new as CloudParticipantRow | undefined;
-          const oldRow = payload.old as CloudParticipantRow | undefined;
-          const roundId = newRow?.round_id ?? oldRow?.round_id;
-          const participantKey = newRow?.participant_key ?? oldRow?.participant_key;
-          if (!roundId || !participantKey) return;
-
-          setCompletedRounds((prev) =>
-            prev.map((r) => {
-              if (r.id !== roundId) return r;
-              const list = r.participants ? [...r.participants] : [];
-              const i = list.findIndex((p) => p.participantKey === participantKey);
-              if (payload.eventType === 'DELETE') {
-                if (i !== -1) list.splice(i, 1);
-              } else if (newRow) {
-                const next: RoundParticipant = {
-                  participantKey: newRow.participant_key,
-                  linkedUserId: newRow.linked_user_id ?? undefined,
-                  status: newRow.confirmation_status,
-                  displayName: newRow.display_name,
-                  displayColor: newRow.display_color ?? undefined,
-                  teamId: newRow.team_id ?? undefined,
-                };
-                if (i === -1) list.push(next);
-                else list[i] = next;
-              }
-              return { ...r, participants: list };
-            })
-          );
+          const row = payload.new as CloudScorecardRow;
+          const merged = cloudToLocalRound(row);
+          setCompletedRounds((prev) => {
+            const i = prev.findIndex((r) => r.id === merged.id);
+            if (i === -1) return [merged, ...prev];
+            const next = prev.slice();
+            next[i] = merged;
+            return next;
+          });
         }
       )
       .subscribe();
@@ -609,62 +734,6 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     };
   }, [account, cloudToLocalRound]);
 
-  // -- RPC wrappers --
-  const callConfirm = useCallback(
-    async (roundId: string) => {
-      if (!account) return;
-      const { error } = await supabase.rpc('confirm_participation', { p_round_id: roundId });
-      if (error) console.warn('[rounds] confirm_participation:', error);
-    },
-    [account]
-  );
-
-  const callDeny = useCallback(
-    async (roundId: string) => {
-      if (!account) return;
-      const { error } = await supabase.rpc('deny_participation', { p_round_id: roundId });
-      if (error) console.warn('[rounds] deny_participation:', error);
-    },
-    [account]
-  );
-
-  const callLeave = useCallback(
-    async (roundId: string) => {
-      if (!account) return;
-      const { error } = await supabase.rpc('leave_round', { p_round_id: roundId });
-      if (error) console.warn('[rounds] leave_round:', error);
-    },
-    [account]
-  );
-
-  const callUpdateScore = useCallback(
-    async (roundId: string, scorerId: string, hole: number, strokes: number) => {
-      if (!account) return { ok: true as const };
-      const { error } = await supabase.rpc('update_score', {
-        p_round_id: roundId,
-        p_scorer_id: scorerId,
-        p_hole: hole,
-        p_strokes: strokes,
-      });
-      if (error) {
-        console.warn('[rounds] update_score:', error);
-        return { ok: false as const, error: error.message };
-      }
-      return { ok: true as const };
-    },
-    [account]
-  );
-
-  // -- Derived state --
-  const pendingRoundsForMe = useMemo(() => {
-    if (!account) return [];
-    return completedRounds.filter((r) =>
-      r.participants?.some(
-        (p) => p.linkedUserId === account.userId && p.status === 'pending'
-      )
-    );
-  }, [completedRounds, account]);
-
   const value = useMemo<GolfRoundContextValue>(
     () => ({
       completedRounds,
@@ -673,7 +742,6 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       pendingSelectedCourseId,
       setPendingSelectedCourseId,
       hydrated,
-      pendingRoundsForMe,
       addCourse: (course) => {
         setCourses((prev) => [...prev, course]);
         void cloudUpsertCourse(course);
@@ -707,8 +775,9 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           currentHoleNumber: 1,
           scores: [],
           startedAt: new Date().toISOString(),
-          ownerId: defaultPlayerId ?? undefined,
           ownerUserId: account?.userId,
+          participants: [],
+          mentionedUserIds: [],
         });
       },
       setHoleScore: (scorerId, holeNumber, relativeScore) => {
@@ -769,39 +838,15 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           if (!round) {
             throw new Error('Cannot complete a round when no current round exists.');
           }
-
-          // Build a local participants array so the round shows up correctly
-          // before the cloud round-trip completes. Mirrors the rules used by
-          // buildParticipantRows on the server side.
-          const teamForPlayer = (playerId: string): string | undefined => {
-            if (!round.teams) return undefined;
-            return round.teams.find((t) => t.playerIds.includes(playerId))?.id;
-          };
-          const ownerUserId = account?.userId;
-          const localParticipants: RoundParticipant[] = [];
-          for (const playerId of round.playerIds) {
-            const p = playerRoster.find((q) => q.id === playerId);
-            if (!p) continue;
-            const isOwner = ownerUserId && p.userId === ownerUserId;
-            const linkedUserId =
-              p.userId && UUID_REGEX.test(p.userId) ? p.userId : undefined;
-            localParticipants.push({
-              participantKey: playerId,
-              linkedUserId,
-              status: isOwner || !linkedUserId ? 'confirmed' : 'pending',
-              displayName: p.nickname,
-              displayColor: p.color,
-              teamId: teamForPlayer(playerId),
-            });
-          }
-
+          const participants = buildParticipants(round);
+          const mentionedUserIds = buildMentionedUserIds(participants);
           const completedRound: Round = {
             ...round,
             completedAt: new Date().toISOString(),
             ownerUserId: account?.userId,
-            participants: localParticipants,
+            participants,
+            mentionedUserIds,
           };
-
           setCompletedRounds((rounds) => [completedRound, ...rounds]);
           void cloudUpsertRound(completedRound);
           return null;
@@ -813,63 +858,92 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       editHoleScore: async (roundId, scorerId, holeNumber, strokes) => {
         const safeStrokes = Math.max(1, strokes);
         const previous = completedRoundsRef.current.find((r) => r.id === roundId);
+        if (!previous) {
+          return { ok: false, error: 'Round not found in local history.' };
+        }
+        const nextScores = replaceScore(previous.scores, {
+          scorerId,
+          holeNumber,
+          strokes: safeStrokes,
+        });
         // Optimistic update.
         setCompletedRounds((rounds) =>
-          rounds.map((r) =>
-            r.id === roundId
-              ? {
-                  ...r,
-                  scores: replaceScore(r.scores, { scorerId, holeNumber, strokes: safeStrokes }),
-                }
-              : r
-          )
+          rounds.map((r) => (r.id === roundId ? { ...r, scores: nextScores } : r))
         );
-        const result = await callUpdateScore(roundId, scorerId, holeNumber, safeStrokes);
-        if (!result.ok && previous) {
+        if (!account) return { ok: true };
+        const { error } = await supabase
+          .from('scorecards')
+          .update({ scores: nextScores })
+          .eq('id', roundId);
+        if (error) {
+          console.warn('[scorecards] update_score failed:', error);
           // Roll back.
           setCompletedRounds((rounds) =>
             rounds.map((r) => (r.id === roundId ? previous : r))
           );
+          return { ok: false, error: error.message };
         }
-        return result;
+        return { ok: true };
       },
-      confirmParticipation: async (roundId) => {
-        if (!account) return;
-        // Optimistic local: flip caller's row to confirmed.
+      commitScoreEdits: async (roundId, edits) => {
+        if (edits.length === 0) return { ok: true };
+        const previous = completedRoundsRef.current.find((r) => r.id === roundId);
+        if (!previous) {
+          return { ok: false, error: 'Round not found in local history.' };
+        }
+        // Fold every edit into a single next-scores array so concurrent
+        // edits across multiple holes can't clobber one another.
+        let nextScores = previous.scores;
+        for (const e of edits) {
+          nextScores = replaceScore(nextScores, {
+            scorerId: e.scorerId,
+            holeNumber: e.holeNumber,
+            strokes: Math.max(1, e.strokes),
+          });
+        }
         setCompletedRounds((rounds) =>
-          rounds.map((r) => {
-            if (r.id !== roundId || !r.participants) return r;
-            return {
-              ...r,
-              participants: r.participants.map((p) =>
-                p.linkedUserId === account.userId ? { ...p, status: 'confirmed' } : p
-              ),
-            };
-          })
+          rounds.map((r) => (r.id === roundId ? { ...r, scores: nextScores } : r))
         );
-        await callConfirm(roundId);
+        if (!account) return { ok: true };
+        const { data, error } = await supabase
+          .from('scorecards')
+          .update({ scores: nextScores })
+          .eq('id', roundId)
+          .select();
+        if (error) {
+          console.warn('[scorecards] commit_score_edits failed:', error);
+          setCompletedRounds((rounds) =>
+            rounds.map((r) => (r.id === roundId ? previous : r))
+          );
+          return { ok: false, error: error.message };
+        }
+        if (!data || data.length === 0) {
+          // Owner-only RLS denied (or row missing). Roll back.
+          setCompletedRounds((rounds) =>
+            rounds.map((r) => (r.id === roundId ? previous : r))
+          );
+          return { ok: false, error: 'Update returned no rows.' };
+        }
+        return { ok: true };
       },
-      denyParticipation: async (roundId) => {
-        if (!account) return;
-        // Optimistic local: drop caller's row entirely.
-        setCompletedRounds((rounds) =>
-          rounds.map((r) => {
-            if (r.id !== roundId || !r.participants) return r;
-            return {
-              ...r,
-              participants: r.participants.filter(
-                (p) => p.linkedUserId !== account.userId
-              ),
-            };
-          })
-        );
-        await callDeny(roundId);
-      },
-      leaveRound: async (roundId) => {
-        // Optimistic local: drop the round from history.
+      deleteRound: async (roundId) => {
+        const previous = completedRoundsRef.current.find((r) => r.id === roundId);
+        // Optimistic local removal.
         setCompletedRounds((rounds) => rounds.filter((r) => r.id !== roundId));
-        await callLeave(roundId);
+        if (!account) return { ok: true };
+        const { error } = await supabase.from('scorecards').delete().eq('id', roundId);
+        if (error) {
+          console.warn('[scorecards] delete failed:', error);
+          if (previous) {
+            setCompletedRounds((rounds) => [previous, ...rounds]);
+          }
+          return { ok: false, error: error.message };
+        }
+        return { ok: true };
       },
+      searchCatalogCourses,
+      rememberCatalogCourse,
+      ensureCourseScorecard,
     }),
     [
       completedRounds,
@@ -877,17 +951,16 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       currentRound,
       pendingSelectedCourseId,
       hydrated,
-      playerRoster,
       defaultPlayerId,
       account,
-      pendingRoundsForMe,
+      buildParticipants,
+      buildMentionedUserIds,
       cloudUpsertCourse,
       cloudDeleteCourse,
       cloudUpsertRound,
-      callConfirm,
-      callDeny,
-      callLeave,
-      callUpdateScore,
+      searchCatalogCourses,
+      rememberCatalogCourse,
+      ensureCourseScorecard,
     ]
   );
 

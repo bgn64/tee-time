@@ -32,6 +32,7 @@ import {
 } from 'react';
 
 import { useAccount } from '@/state/AccountContext';
+import { useGolfRound } from '@/state/GolfRoundContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { supabase } from '@/state/supabaseClient';
 import { FriendRequest, ProfileSummary } from '@/types/social';
@@ -70,6 +71,13 @@ type SocialContextValue = {
     newFriendUserId: string;
   } | null>;
   declineIncomingRequest: (requestId: string) => Promise<void>;
+
+  /**
+   * Best-effort prefetch of profile rows into `profileCache`. Idempotent and
+   * silent on failure. Surfaces so screens that render participant chips
+   * for arbitrary linked user_ids can warm the cache up front.
+   */
+  ensureProfilesCached: (userIds: string[]) => Promise<Record<string, ProfileSummary>>;
 
   hydrated: boolean;
 };
@@ -399,6 +407,22 @@ export function SocialProvider({ children }: PropsWithChildren) {
     [account]
   );
 
+  // Pre-warm profileCache for every linked participant mentioned on a
+  // visible Round so the v7 live-render resolver has data without each UI
+  // surface fetching on demand.
+  const { completedRounds } = useGolfRound();
+  useEffect(() => {
+    if (!account) return;
+    const ids = new Set<string>();
+    for (const r of completedRounds) {
+      for (const uid of r.mentionedUserIds ?? []) ids.add(uid);
+      if (r.ownerUserId) ids.add(r.ownerUserId);
+    }
+    ids.delete(account.userId);
+    if (ids.size === 0) return;
+    void ensureProfilesCached([...ids]);
+  }, [completedRounds, account, ensureProfilesCached]);
+
   const value = useMemo<SocialContextValue>(
     () => ({
       friends,
@@ -409,6 +433,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
       sendFriendRequest,
       acceptIncomingRequest,
       declineIncomingRequest,
+      ensureProfilesCached,
       hydrated,
     }),
     [
@@ -420,6 +445,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
       sendFriendRequest,
       acceptIncomingRequest,
       declineIncomingRequest,
+      ensureProfilesCached,
       hydrated,
     ]
   );

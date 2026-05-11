@@ -3,8 +3,7 @@
  *
  * Pushed when the People-tab "Unlinked players" drawer-link is tapped.
  * Read-only list of roster entries that have no `userId` set. Tap a row →
- * the per-person detail screen, which surfaces the "Merge into a friend"
- * action under the v6 redesign.
+ * the per-person detail screen.
  *
  * No add affordance — copy points users back to the Score flow's player
  * picker for creating new unlinked entries.
@@ -90,7 +89,8 @@ export default function UnlinkedPlayersScreen() {
         <View style={styles.hintCard}>
           <Text style={styles.hintText}>
             ℹ Add unlinked players from the <Text style={styles.hintBold}>Score</Text> flow when
-            picking who's playing. Already friends with someone? Tap their unlinked entry to merge.
+            picking who's playing. These entries are local labels only — they don't count
+            toward anyone else's stats.
           </Text>
         </View>
       </ScrollView>

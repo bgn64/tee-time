@@ -1,20 +1,24 @@
 /**
  * Course Selection — root of the Score tab when no round is active.
  *
- * Three-tab structure (All / Recents / Custom) with search across all
- * courses; tab labels gain count badges while a search query is active so
- * the user can pivot between scopes without retyping. The active tab still
- * scopes the visible result list. The "+ Create" CTA lives at the bottom
- * (muted by default, prominent on no-results) and pre-fills the new-course
- * form's name field with the search query.
+ * v2 simplification: greeting prompt + single search bar + short recents
+ * list. Tapping a row selects the course and navigates straight to player
+ * config — no separate "Next" step. When recents exceed the inline cap, a
+ * "More from recent history" button opens a bottom sheet with the full
+ * list. Typing in the search bar replaces recents with live search
+ * results across the entire course catalog. A "+ Create custom course"
+ * row is appended as the LAST item in search results (so on no-results it
+ * sits right under the search bar and funnels the user to the create
+ * flow).
  *
- * Custom courses carry a ⋯ button that opens CourseActionsSheet (Edit / Delete).
- * Catalog courses don't expose those actions; they're read-only.
+ * Custom courses carry a ⋯ button that opens CourseActionsSheet
+ * (Edit / Delete). Catalog courses are read-only.
  */
 
 import { Link, router, useFocusEffect } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,19 +28,16 @@ import {
 } from 'react-native';
 
 import { CourseActionsSheet } from '@/components/CourseActionsSheet';
+import { RecentCoursesSheet, RecentCourseEntry } from '@/components/RecentCoursesSheet';
+import { confirm } from '@/lib/dialog';
+import { distanceMiles, formatMiles } from '@/lib/geo';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
+import { useLocation } from '@/state/LocationContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Course, Round } from '@/types/golf';
 
-type TabKey = 'all' | 'recents' | 'custom';
-
-const TAB_ORDER: TabKey[] = ['all', 'recents', 'custom'];
-const TAB_LABEL: Record<TabKey, string> = {
-  all: 'All',
-  recents: 'Recents',
-  custom: 'Custom',
-};
+const INLINE_RECENT_LIMIT = 4;
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -67,15 +68,6 @@ function formatRelative(iso: string): string {
   return `${Math.floor(days / 365)} years ago`;
 }
 
-function matchesQuery(course: Course, query: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  return (
-    course.name.toLowerCase().includes(q) ||
-    course.location.toLowerCase().includes(q)
-  );
-}
-
 export default function CourseSelectionScreen() {
   const { colors } = useTheme();
   const {
@@ -84,42 +76,38 @@ export default function CourseSelectionScreen() {
     pendingSelectedCourseId,
     setPendingSelectedCourseId,
     removeCourse,
+    currentRound,
+    searchCatalogCourses,
+    rememberCatalogCourse,
+    ensureCourseScorecard,
   } = useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [selectedCourseId, setSelectedCourseId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<TabKey>('all');
   const [query, setQuery] = useState<string>('');
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const [actionsCourseId, setActionsCourseId] = useState<string | null>(null);
+  const [remoteHits, setRemoteHits] = useState<Course[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [loadingCourseId, setLoadingCourseId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const queryGenRef = useRef(0);
 
   useScreenHeader({
     left: { kind: 'text', text: 'SCORE' },
     right: { kind: 'profile' },
   });
 
-  // After saving a course (create or edit), new-course.tsx parks the affected
-  // course id in context. Consume it here on focus: jump to All, pre-select,
-  // and clear any active search.
+  // Clear any pending selection left behind by the create-course flow.
   useFocusEffect(
     useCallback(() => {
       if (pendingSelectedCourseId) {
-        setSelectedCourseId(pendingSelectedCourseId);
-        setActiveTab('all');
         setQuery('');
         setPendingSelectedCourseId(null);
       }
     }, [pendingSelectedCourseId, setPendingSelectedCourseId])
   );
 
-  // Resume an in-progress round whenever the Score tab focuses with a
-  // currentRound present. Two scenarios this covers:
-  //   1. Cold launch with a persisted round — Score is the default tab
-  //      (see (tabs)/_layout.tsx), so this effect fires immediately and
-  //      drops the user straight into /scoring instead of course selection.
-  //   2. Mid-session navigation — user is on /scoring, switches to another
-  //      tab, then taps Score again. The stack would otherwise return to
-  //      this index; this jump keeps them in the round.
-  const { currentRound } = useGolfRound();
+  // Resume an in-progress round when the Score tab gains focus.
   useFocusEffect(
     useCallback(() => {
       if (currentRound) {
@@ -128,10 +116,8 @@ export default function CourseSelectionScreen() {
     }, [currentRound])
   );
 
-  // Decorate each course with last-played, then sort: most-recently played
-  // first, courses never played fall to the bottom alphabetically. Done once
-  // at the All level; subset filters reuse this ordering.
-  const decoratedAll = useMemo(() => {
+  // Decorate + sort every locally-known course by most-recent play.
+  const decoratedAll = useMemo<RecentCourseEntry[]>(() => {
     return courses
       .map((course) => ({ course, lastPlayedAt: lastPlayedAt(course.id, completedRounds) }))
       .sort((a, b) => {
@@ -144,59 +130,166 @@ export default function CourseSelectionScreen() {
       });
   }, [courses, completedRounds]);
 
-  const filtered = useMemo(() => {
-    const all = decoratedAll.filter((entry) => matchesQuery(entry.course, query));
-    return {
-      all,
-      recents: all.filter((entry) => entry.lastPlayedAt !== null),
-      custom: all.filter((entry) => entry.course.source === 'custom'),
-    };
-  }, [decoratedAll, query]);
+  // Recents = locally-known courses that have actually been played + any
+  // custom courses the user created (whether played yet or not). Custom
+  // courses without a played round are surfaced so the user can find
+  // their own creations without the search dance.
+  const recents = useMemo(
+    () =>
+      decoratedAll.filter(
+        (entry) => entry.lastPlayedAt !== null || entry.course.source === 'custom'
+      ),
+    [decoratedAll]
+  );
 
-  const visibleList = filtered[activeTab];
   const searchActive = query.trim().length > 0;
-  const noResults = searchActive && visibleList.length === 0;
 
-  function handleNext() {
-    if (!selectedCourseId) return;
+  // Local matches (customs + already-cached opengolf rows) feed instant
+  // results while the remote query is in flight. Customs the user owns
+  // never appear in the remote query (RLS scopes `source = 'opengolf'`)
+  // so we must overlay them locally.
+  const localHits = useMemo(() => {
+    if (!searchActive) return [];
+    const q = query.trim().toLowerCase();
+    return decoratedAll.filter((entry) =>
+      [entry.course.name, entry.course.location]
+        .filter(Boolean)
+        .some((s) => s.toLowerCase().includes(q))
+    );
+  }, [decoratedAll, query, searchActive]);
+
+  // Remote catalog search, debounced.
+  useEffect(() => {
+    if (!searchActive) {
+      setRemoteHits([]);
+      setSearching(false);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    setSearching(true);
+    const gen = ++queryGenRef.current;
+    debounceRef.current = setTimeout(async () => {
+      const results = await searchCatalogCourses(query.trim(), 25);
+      if (gen !== queryGenRef.current) return; // a newer query superseded us
+      setRemoteHits(results);
+      setSearching(false);
+    }, 220);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, searchActive, searchCatalogCourses]);
+
+  // Merge local + remote results, dedupe by course id, customs first.
+  // When location coords are available we sort by distance ascending
+  // (un-located courses fall to the end). Otherwise keep alpha-ish order.
+  const { coords: userCoords } = useLocation();
+  const distanceFor = useCallback(
+    (course: Course): number | null => {
+      if (!userCoords) return null;
+      if (
+        course.latitude == null ||
+        course.longitude == null ||
+        !Number.isFinite(course.latitude) ||
+        !Number.isFinite(course.longitude)
+      ) {
+        return null;
+      }
+      return distanceMiles(userCoords, {
+        latitude: course.latitude,
+        longitude: course.longitude,
+      });
+    },
+    [userCoords]
+  );
+
+  const searchEntries = useMemo<RecentCourseEntry[]>(() => {
+    const out: RecentCourseEntry[] = [];
+    const seen = new Set<string>();
+    for (const entry of localHits) {
+      if (seen.has(entry.course.id)) continue;
+      seen.add(entry.course.id);
+      out.push(entry);
+    }
+    for (const course of remoteHits) {
+      if (seen.has(course.id)) continue;
+      seen.add(course.id);
+      out.push({ course, lastPlayedAt: lastPlayedAt(course.id, completedRounds) });
+    }
+    if (userCoords) {
+      out.sort((a, b) => {
+        const da = distanceFor(a.course);
+        const db = distanceFor(b.course);
+        if (da == null && db == null) return 0;
+        if (da == null) return 1;
+        if (db == null) return -1;
+        return da - db;
+      });
+    }
+    return out;
+  }, [localHits, remoteHits, completedRounds, userCoords, distanceFor]);
+
+  const visibleList: RecentCourseEntry[] = searchActive
+    ? searchEntries
+    : recents.slice(0, INLINE_RECENT_LIMIT);
+
+  // Helper: build a holes[] payload for new-course.tsx prefill (URL
+  // search params support only string values, so we JSON-encode).
+  function prefillParamsFor(course: Course): Record<string, string> {
+    return {
+      prefillName: course.name,
+      prefillLocation: course.location,
+      ...(course.holes.length > 0
+        ? { prefillHoles: JSON.stringify(course.holes) }
+        : {}),
+    };
+  }
+
+  async function selectCourse(course: Course) {
+    if (loadingCourseId) return; // another tap in flight
+
+    // Custom courses are user-authored and always complete.
+    if (course.source === 'custom') {
+      router.push({
+        pathname: '/(tabs)/(score)/players',
+        params: { courseId: course.id },
+      });
+      return;
+    }
+
+    // Catalog row: cache + ensure we have a scorecard.
+    rememberCatalogCourse(course);
+
+    if (course.holes && course.holes.length > 0) {
+      router.push({
+        pathname: '/(tabs)/(score)/players',
+        params: { courseId: course.id },
+      });
+      return;
+    }
+
+    setLoadingCourseId(course.id);
+    const result = await ensureCourseScorecard(course);
+    setLoadingCourseId(null);
+
+    if (!result.ok) {
+      const ok = await confirm({
+        title: "Couldn't load this course's scorecard",
+        message: `${result.error}\n\nWould you like to create a custom version with the pars you know?`,
+        confirmLabel: 'Create custom',
+      });
+      if (!ok) return;
+      router.push({
+        pathname: '/(tabs)/(score)/new-course',
+        params: prefillParamsFor(course),
+      });
+      return;
+    }
+
     router.push({
-      pathname: '/(tabs)/(score)/player-config',
-      params: { courseId: selectedCourseId },
+      pathname: '/(tabs)/(score)/players',
+      params: { courseId: result.course.id },
     });
   }
-
-  function emptyMessage(): { icon: string; title: string; body: string } {
-    if (noResults) {
-      return {
-        icon: '🔍',
-        title: `No matches for "${query.trim()}"`,
-        body: "Don't see your course? Add it to your custom library.",
-      };
-    }
-    if (activeTab === 'recents') {
-      return {
-        icon: '⏱️',
-        title: 'No recent rounds',
-        body: "Courses you've played will show up here, sorted by most recent.",
-      };
-    }
-    if (activeTab === 'custom') {
-      return {
-        icon: '⛳',
-        title: 'No custom courses yet',
-        body: 'Courses you create will live here, separate from the global catalog.',
-      };
-    }
-    return {
-      icon: '⛳',
-      title: 'No courses yet',
-      body: 'Start by creating one below.',
-    };
-  }
-
-  const createLabel = searchActive
-    ? `+ Create "${query.trim()}"`
-    : '+ Create new course';
 
   const sheetCourse = actionsCourseId
     ? courses.find((c) => c.id === actionsCourseId)
@@ -225,110 +318,136 @@ export default function CourseSelectionScreen() {
             </Pressable>
           )}
         </View>
-
-        <View style={styles.tabs}>
-          {TAB_ORDER.map((tab) => {
-            const isActive = activeTab === tab;
-            const count = filtered[tab].length;
-            return (
-              <Pressable
-                key={tab}
-                style={[styles.tab, isActive && styles.tabActive]}
-                onPress={() => setActiveTab(tab)}>
-                <Text style={[styles.tabText, isActive && styles.tabTextActive]}>
-                  {TAB_LABEL[tab]}
-                  {searchActive && (
-                    <Text style={[styles.tabCount, isActive && styles.tabCountActive]}>
-                      {' '}
-                      {count}
-                    </Text>
-                  )}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
       </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled">
-        {visibleList.length === 0 ? (
+        {!searchActive && recents.length === 0 ? (
           <View style={styles.emptyWrap}>
-            {(() => {
-              const e = emptyMessage();
-              return (
-                <>
-                  <Text style={styles.emptyIcon}>{e.icon}</Text>
-                  <Text style={styles.emptyTitle}>{e.title}</Text>
-                  <Text style={styles.emptyBody}>{e.body}</Text>
-                </>
-              );
-            })()}
+            <Text style={styles.emptyIcon}>⛳</Text>
+            <Text style={styles.emptyTitle}>No rounds played yet</Text>
+            <Text style={styles.emptyBody}>
+              Search for a course above to start your first round.
+            </Text>
           </View>
         ) : (
-          visibleList.map(({ course, lastPlayedAt: lp }) => {
-            const isSelected = course.id === selectedCourseId;
-            const totalPar = course.holes.reduce((t, h) => t + h.par, 0);
-            const isCustom = course.source === 'custom';
-            return (
-              <Pressable
-                key={course.id}
-                onPress={() => setSelectedCourseId(course.id)}
-                style={[styles.courseCard, isSelected && styles.courseCardSelected]}>
-                <View style={styles.courseCardBody}>
-                  <View style={styles.nameRow}>
-                    <Text style={styles.courseName} numberOfLines={1}>
-                      {course.name}
-                    </Text>
-                    {isCustom && <Text style={styles.sourceBadge}>CUSTOM</Text>}
-                  </View>
-                  <Text style={styles.courseMeta}>
-                    {course.location ? `${course.location} · ` : ''}
-                    {course.holes.length} holes · Par {totalPar}
-                  </Text>
-                  {lp && (
-                    <Text style={styles.courseRecent}>Played {formatRelative(lp)}</Text>
-                  )}
-                </View>
-                {isCustom && (
-                  <Pressable
-                    style={({ pressed }) => [styles.menuBtn, pressed && styles.menuBtnPressed]}
-                    hitSlop={8}
-                    onPress={() => setActionsCourseId(course.id)}
-                    accessibilityLabel={`Actions for ${course.name}`}>
-                    <Text style={styles.menuGlyph}>⋯</Text>
-                  </Pressable>
-                )}
-              </Pressable>
-            );
-          })
-        )}
+          <>
+            {!searchActive && recents.length > 0 && (
+              <Text style={styles.sectionLabel}>RECENT</Text>
+            )}
+            {searchActive && (
+              <Text style={styles.sectionLabel}>
+                SEARCH RESULTS
+                {searchEntries.length > 0 ? ` · ${searchEntries.length}` : ''}
+                {searching ? ' · …' : ''}
+                {userCoords && searchEntries.length > 0 ? ' · NEAREST FIRST' : ''}
+              </Text>
+            )}
 
-        {/* Inline Create row — always rendered as the last list item. Mirrors
-            the "+ Add Player" pattern in player-config: discoverable mid-list
-            and consistent in style across empty/non-empty states. */}
-        <Link
-          href={{
-            pathname: '/(tabs)/(score)/new-course',
-            params: searchActive ? { prefillName: query.trim() } : {},
-          }}
-          asChild>
-          <Pressable style={styles.createBtn}>
-            <Text style={styles.createBtnText}>{createLabel}</Text>
-          </Pressable>
-        </Link>
+            {visibleList.map(({ course, lastPlayedAt: lp }) => {
+              const enriched = course.holes.length > 0;
+              const totalPar = enriched ? course.holes.reduce((t, h) => t + h.par, 0) : null;
+              const holeCountText = enriched ? `${course.holes.length} holes` : '';
+              const parText = enriched && totalPar !== null ? `Par ${totalPar}` : '';
+              const metaSegments = [course.location, holeCountText, parText].filter(
+                (s) => s && s.length > 0
+              );
+              const isCustom = course.source === 'custom';
+              const isLoading = loadingCourseId === course.id;
+              const distanceMi = distanceFor(course);
+              return (
+                <Pressable
+                  key={course.id}
+                  onPress={() => selectCourse(course)}
+                  disabled={isLoading || loadingCourseId !== null}
+                  style={[styles.courseCard, isLoading && styles.courseCardLoading]}>
+                  <View style={styles.courseCardBody}>
+                    <View style={styles.nameRow}>
+                      <Text style={styles.courseName} numberOfLines={1}>
+                        {course.name}
+                      </Text>
+                      {isCustom && <Text style={styles.sourceBadge}>CUSTOM</Text>}
+                    </View>
+                    {metaSegments.length > 0 && (
+                      <Text style={styles.courseMeta} numberOfLines={1}>
+                        {metaSegments.join(' · ')}
+                      </Text>
+                    )}
+                    {lp && (
+                      <Text style={styles.courseRecent}>Played {formatRelative(lp)}</Text>
+                    )}
+                  </View>
+                  {isLoading ? (
+                    <ActivityIndicator color={colors.primary} />
+                  ) : (
+                    <>
+                      {distanceMi !== null && (
+                        <Text style={styles.distanceBadge}>{formatMiles(distanceMi)}</Text>
+                      )}
+                      {isCustom && (
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.menuBtn,
+                            pressed && styles.menuBtnPressed,
+                          ]}
+                        hitSlop={8}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          setActionsCourseId(course.id);
+                        }}
+                        accessibilityLabel={`Actions for ${course.name}`}>
+                        <Text style={styles.menuGlyph}>⋯</Text>
+                      </Pressable>
+                      )}
+                    </>
+                  )}
+                </Pressable>
+              );
+            })}
+
+            {/* Inline "more recents" — only when there are more recents than
+                fit and we're not in search mode. */}
+            {!searchActive && recents.length > INLINE_RECENT_LIMIT && (
+              <Pressable style={styles.moreBtn} onPress={() => setDrawerOpen(true)}>
+                <Text style={styles.moreBtnText}>
+                  More from recent history ▾
+                </Text>
+              </Pressable>
+            )}
+
+            {/* Create-custom-course CTA — only renders while searching. Lives
+                as the LAST entry in the result list so that on no-results it
+                sits right under the search bar and funnels the user
+                straight into the create flow. */}
+            {searchActive && (
+              <Link
+                href={{
+                  pathname: '/(tabs)/(score)/new-course',
+                  params: { prefillName: query.trim() },
+                }}
+                asChild>
+                <Pressable style={styles.createBtn}>
+                  <Text style={styles.createBtnText}>
+                    + Create "{query.trim()}" as a custom course
+                  </Text>
+                </Pressable>
+              </Link>
+            )}
+          </>
+        )}
       </ScrollView>
 
-      <View style={styles.footer}>
-        <Pressable
-          style={[styles.nextBtn, !selectedCourseId && styles.nextBtnDisabled]}
-          onPress={handleNext}
-          disabled={!selectedCourseId}>
-          <Text style={styles.nextBtnText}>Next →</Text>
-        </Pressable>
-      </View>
+      <RecentCoursesSheet
+        visible={drawerOpen}
+        entries={recents}
+        onClose={() => setDrawerOpen(false)}
+        onSelect={(courseId) => {
+          const found = recents.find((e) => e.course.id === courseId)?.course;
+          if (found) selectCourse(found);
+        }}
+      />
 
       <CourseActionsSheet
         visible={actionsCourseId !== null}
@@ -343,7 +462,6 @@ export default function CourseSelectionScreen() {
         }}
         onDelete={() => {
           if (!actionsCourseId) return;
-          if (selectedCourseId === actionsCourseId) setSelectedCourseId('');
           removeCourse(actionsCourseId);
         }}
       />
@@ -385,7 +503,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderWidth: 1,
       paddingHorizontal: 12,
       paddingVertical: 9,
-      marginBottom: 10,
+      marginBottom: 4,
     },
     searchBoxActive: {
       borderColor: colors.primary,
@@ -406,49 +524,22 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
       paddingHorizontal: 4,
     },
-    tabs: {
-      flexDirection: 'row',
-      gap: 4,
-      backgroundColor: colors.chipBg,
-      borderRadius: 12,
-      padding: 4,
-      marginBottom: 8,
-    },
-    tab: {
-      flex: 1,
-      alignItems: 'center',
-      paddingVertical: 8,
-      borderRadius: 8,
-    },
-    tabActive: {
-      backgroundColor: colors.cardBg,
-    },
-    tabText: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.textMuted,
-    },
-    tabTextActive: {
-      color: colors.textTitle,
-    },
-    tabCount: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: colors.textMuted,
-      opacity: 0.75,
-    },
-    tabCountActive: {
-      color: colors.primaryDark,
-      opacity: 0.9,
-    },
     scroll: {
       flex: 1,
     },
     scrollContent: {
       padding: 20,
-      paddingTop: 8,
-      paddingBottom: 20,
+      paddingTop: 14,
+      paddingBottom: 32,
       flexGrow: 1,
+    },
+    sectionLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.8,
+      color: colors.textMuted,
+      marginBottom: 8,
+      marginLeft: 2,
     },
     courseCard: {
       flexDirection: 'row',
@@ -463,10 +554,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       padding: 14,
       gap: 6,
     },
-    courseCardSelected: {
-      borderLeftColor: colors.accent,
-      borderColor: colors.accent,
-      backgroundColor: colors.chipBg,
+    courseCardLoading: {
+      opacity: 0.7,
+    },
+    distanceBadge: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.primaryDark,
+      marginLeft: 6,
+      minWidth: 36,
+      textAlign: 'right',
     },
     courseCardBody: {
       flex: 1,
@@ -522,6 +619,34 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       letterSpacing: -1,
       lineHeight: 22,
     },
+    moreBtn: {
+      alignItems: 'center',
+      borderColor: colors.border,
+      borderRadius: 10,
+      borderStyle: 'dashed',
+      borderWidth: 1,
+      paddingVertical: 11,
+      marginTop: 4,
+    },
+    moreBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
+    createBtn: {
+      alignItems: 'center',
+      borderColor: colors.border,
+      borderRadius: 12,
+      borderStyle: 'dashed',
+      borderWidth: 1.5,
+      paddingVertical: 12,
+      marginTop: 4,
+    },
+    createBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
     emptyWrap: {
       alignItems: 'center',
       gap: 6,
@@ -546,43 +671,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       textAlign: 'center',
       lineHeight: 17,
       maxWidth: 240,
-    },
-    footer: {
-      paddingHorizontal: 20,
-      paddingTop: 8,
-      paddingBottom: 20,
-      backgroundColor: colors.background,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      gap: 10,
-    },
-    createBtn: {
-      alignItems: 'center',
-      borderColor: colors.border,
-      borderRadius: 12,
-      borderStyle: 'dashed',
-      borderWidth: 1.5,
-      paddingVertical: 12,
-      marginTop: 4,
-    },
-    createBtnText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.textMuted,
-    },
-    nextBtn: {
-      alignItems: 'center',
-      backgroundColor: colors.primary,
-      borderRadius: 22,
-      paddingVertical: 14,
-    },
-    nextBtnDisabled: {
-      opacity: 0.4,
-    },
-    nextBtnText: {
-      color: '#ffffff',
-      fontSize: 15,
-      fontWeight: '800',
     },
   });
 }

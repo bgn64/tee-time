@@ -57,8 +57,10 @@ function buildHoles(pars: number[], yardages: (number | null)[]): Hole[] {
 }
 
 export default function CourseFormScreen() {
-  const { prefillName, courseId } = useLocalSearchParams<{
+  const { prefillName, prefillLocation, prefillHoles, courseId } = useLocalSearchParams<{
     prefillName?: string;
+    prefillLocation?: string;
+    prefillHoles?: string;
     courseId?: string;
   }>();
   const { colors } = useTheme();
@@ -74,12 +76,37 @@ export default function CourseFormScreen() {
 
   const isEditMode = Boolean(editingCourse);
 
+  // Decode the optional prefilled holes blob. Best-effort: if it's
+  // malformed we just fall back to defaults.
+  const prefilledHoles = useMemo<Hole[] | null>(() => {
+    if (!prefillHoles) return null;
+    try {
+      const parsed = JSON.parse(prefillHoles);
+      if (!Array.isArray(parsed)) return null;
+      const cleaned = parsed
+        .map((h: any) => {
+          const number = Number(h.number);
+          const par = Number(h.par);
+          if (!Number.isFinite(number) || !Number.isFinite(par)) return null;
+          return { number, par } as Hole;
+        })
+        .filter((h): h is Hole => h !== null);
+      return cleaned.length > 0 ? cleaned : null;
+    } catch {
+      return null;
+    }
+  }, [prefillHoles]);
+
   const [name, setName] = useState<string>(() => editingCourse?.name ?? prefillName ?? '');
-  const [location, setLocation] = useState<string>(() => editingCourse?.location ?? '');
+  const [location, setLocation] = useState<string>(
+    () => editingCourse?.location ?? prefillLocation ?? ''
+  );
   const [pars, setPars] = useState<number[]>(() =>
-    Array.from({ length: HOLE_COUNT }, (_, i) =>
-      editingCourse?.holes[i]?.par ?? DEFAULT_PAR
-    )
+    Array.from({ length: HOLE_COUNT }, (_, i) => {
+      if (editingCourse) return editingCourse.holes[i]?.par ?? DEFAULT_PAR;
+      const prefilled = prefilledHoles?.find((h) => h.number === i + 1);
+      return prefilled?.par ?? DEFAULT_PAR;
+    })
   );
   const [yardages, setYardages] = useState<(number | null)[]>(() =>
     Array.from({ length: HOLE_COUNT }, (_, i) =>
@@ -124,7 +151,10 @@ export default function CourseFormScreen() {
       });
       setPendingSelectedCourseId(editingCourse.id);
     } else {
-      const newId = `course-${Date.now()}`;
+      // Prefixed namespace avoids collisions with catalog ids like
+      // 'opengolf:<uuid>'. Math.random() suffix added for uniqueness if
+      // the user creates two courses in the same millisecond.
+      const newId = `custom:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       addCourse({
         id: newId,
         name: name.trim(),

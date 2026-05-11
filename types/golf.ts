@@ -1,5 +1,19 @@
 /**
- * Shared golf domain types used by the scoring prototype.
+ * Shared golf domain types.
+ *
+ * v7 model: a Round is one user's owned record of play (the artifact stored
+ * server-side as a row in the `scorecards` table). The scorer is its sole
+ * owner. Other named players are informational; they have no edit-rights,
+ * no stats credit, no confirm/deny step, no blur. A future "import"
+ * feature will let a named friend pull a scoreline onto their own Round.
+ *
+ * Two Rounds may be linked to the same real-world play via a shared
+ * `roundId` string (the cross-scorecard identifier). Today no UX populates
+ * this; it's reserved for tap-to-link or retroactive-link features later.
+ *
+ * Courses come from two sources (see `Course.source`):
+ *   · 'opengolf' — global catalog ingested from OpenGolfAPI (ODbL).
+ *   · 'custom'   — user-defined entries, private to the owning account.
  */
 
 export type Player = {
@@ -24,20 +38,79 @@ export type Player = {
   userId?: string;
 };
 
+/**
+ * A tee box on a course. Populated for catalog courses via the lazy
+ * `/v1/courses/:id/tees` enrichment. Custom courses leave `tees` empty
+ * unless the user manually adds tee entries.
+ */
+export type Tee = {
+  /** Stable tee id (per-course namespace). */
+  id: string;
+  /** Display name (e.g. "Blue", "Black", "Forward"). */
+  name: string;
+  /** CSS-style hex color used for tee marker icons. Optional. */
+  color?: string;
+  /** USGA slope rating. */
+  slope?: number;
+  /** USGA course rating. */
+  rating?: number;
+  /** Sum of yardages across all holes for this tee. */
+  totalYardage?: number;
+  /** USGA tee gender designation if applicable. */
+  gender?: 'M' | 'F';
+};
+
 export type Hole = {
   number: number;
   par: number;
+  /** Single-tee yardage (legacy single-tee model). */
   yardage?: number;
+  /** USGA handicap index 1-18 (lower = harder). Optional. */
+  handicapIndex?: number;
+  /**
+   * Per-tee yardages keyed by `Tee.id`. Populated by lazy enrichment for
+   * catalog courses that have tee data published.
+   */
+  yardages?: Record<string, number>;
 };
 
-export type CourseSource = 'catalog' | 'custom';
+/**
+ * Course source provenance.
+ *   'opengolf' — global catalog, read-only.
+ *   'custom'   — user-owned, full CRUD.
+ */
+export type CourseSource = 'opengolf' | 'custom';
 
 export type Course = {
   id: string;
   name: string;
+  /**
+   * Display-ready location string, e.g. "Seattle, WA". For catalog rows
+   * we compose this from `city` + `state`; for customs the user types it
+   * directly.
+   */
   location: string;
   holes: Hole[];
   source: CourseSource;
+
+  // ---- Optional metadata (catalog populates; customs may or may not) ----
+  city?: string;
+  state?: string;
+  country?: string;
+  address?: string;
+  postalCode?: string;
+  latitude?: number;
+  longitude?: number;
+  courseType?: string;
+  totalPar?: number;
+  totalYardage?: number;
+  yearBuilt?: number;
+  architect?: string;
+  phone?: string;
+  website?: string;
+  tees?: Tee[];
+  /** The OpenGolfAPI UUID for catalog rows. Stable across re-imports. */
+  sourceExternalId?: string;
 };
 
 export type ScoringRule = 'stroke' | 'scramble';
@@ -57,38 +130,32 @@ export type Team = {
 };
 
 /**
- * Per-participant confirmation status on a Round.
+ * One entry per player named on a Round. Owned exclusively by the Round's
+ * scorer; other named players cannot edit, confirm, or deny anything about
+ * it. There is no participation status.
  *
- *   pending    — friend hasn't acted yet on the scorer's claim that they
- *                played this round. Pre-confirmation the scorer retains full
- *                edit-rights over the friend's score; the friend's scoreline
- *                is rendered blurred to other observers.
- *   confirmed  — friend confirmed (or is the scorer themselves, or is an
- *                unlinked player whose authority remains with the scorer).
- *
- * Hard-deleted on deny / leave; there is no separate "denied" status.
- */
-export type ConfirmationStatus = 'pending' | 'confirmed';
-
-/**
- * One row per (round, scorer). For stroke rounds participants map 1:1 with
- * players; for scramble there's still one row per player but `teamId` ties
- * them to the team whose scoreline they share.
+ * Display name/color resolution:
+ *   - Linked entries (`linkedUserId` set) render LIVE from the current
+ *     profile (via `lib/participantIdentity.ts`). No snapshot fields are
+ *     populated.
+ *   - Unlinked entries have no profile to resolve against; their name and
+ *     color are snapshotted at Round-creation time onto
+ *     `unlinkedDisplayName` / `unlinkedDisplayColor`.
  */
 export type RoundParticipant = {
   /**
-   * Local Player.id, preserved verbatim across user accounts. It's the key
-   * used in `Round.scores[].scorerId` for stroke rounds.
+   * Local Player.id on the scorer's device. Used as the `scorerId` key in
+   * `RoundScore.scorerId` for stroke rounds.
    */
   participantKey: string;
   /** Set when the participant has been linked to a real account. */
   linkedUserId?: string;
-  status: ConfirmationStatus;
-  /** Snapshot of the nickname captured at participant-row creation. */
-  displayName: string;
-  displayColor?: string;
   /** Set in scramble rounds; references `Round.teams[].id`. */
   teamId?: string;
+  /** Snapshot, populated only when `linkedUserId` is absent. */
+  unlinkedDisplayName?: string;
+  /** Snapshot, populated only when `linkedUserId` is absent. */
+  unlinkedDisplayColor?: string;
 };
 
 export type Round = {
@@ -96,9 +163,8 @@ export type Round = {
   course: Course;
   scoringRule: ScoringRule;
   /**
-   * Local Player.ids for the round's participants. Preserved for backward
-   * compatibility with code paths that key off it; the canonical participant
-   * list under the v6 redesign is `participants[]`.
+   * Local Player.ids for every named participant. Kept as a redundant
+   * client-side convenience; the canonical list is `participants[]`.
    */
   playerIds: string[];
   // Required when scoringRule === 'scramble'; absent in stroke rounds.
@@ -108,21 +174,27 @@ export type Round = {
   startedAt: string;
   completedAt?: string;
   /**
-   * The user_id of the original scorer. Mutable: transfers to a confirmed
-   * linked participant when the original owner leaves the round.
+   * The user_id of the scorer. Immutable for the lifetime of the Round.
+   * Account deletion cascades and drops the Round.
    */
   ownerUserId?: string;
   /**
-   * Local Player.id of the scorer. Convenience pointer for code that wants
-   * to look up the scorer's roster row without joining via ownerUserId.
-   * Optional for in-flight rounds and for cloud-sourced rounds where the
-   * scorer is a friend whose roster row we don't have.
-   */
-  ownerId?: string;
-  /**
    * One entry per scorer (stroke) or per team-roster-member (scramble).
-   * Drives confirmation banners, blur rendering, and edit-rights logic.
-   * Absent on rounds completed before the v6 redesign.
+   * Drives the participants strip, the with-you line on the feed card, and
+   * the cross-device live-name resolver.
    */
-  participants?: RoundParticipant[];
+  participants: RoundParticipant[];
+  /**
+   * Cross-Round real-world identifier. Two Rounds with the same `roundId`
+   * represent independent scorecards of the same physical play. NULL by
+   * default; reserved for future linking/import features.
+   */
+  roundId?: string;
+  /**
+   * User-ids of every linked participant on this Round. Informational
+   * denormalization for the feed "with you" line and (future) "Rounds I'm
+   * named in" discovery. NOT used for RLS — visibility is owner-or-friend-
+   * of-owner only.
+   */
+  mentionedUserIds: string[];
 };

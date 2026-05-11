@@ -38,7 +38,7 @@ function getRoundEndDate(round: Round): Date {
 
 export default function RoundsListScreen() {
   const { colors } = useTheme();
-  const { completedRounds, pendingRoundsForMe } = useGolfRound();
+  const { completedRounds } = useGolfRound();
   const { account } = useAccount();
   const { getPlayer } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -50,21 +50,14 @@ export default function RoundsListScreen() {
     right: { kind: 'profile' },
   });
 
-  // "Mine" = rounds I scored OR rounds where I have a confirmed participant
-  // row. Pending-for-me rounds are excluded; they live in the Pending
-  // drilldown instead. Friend-of-participant visibility (which surfaces
-  // rounds I wasn't in at all) is handled by the Feed tab, not here.
+  // "Mine" = rounds I scored. The v7 model has no shared-ownership concept;
+  // rounds where I'm merely named (but didn't score) live on the feed only.
   const minedRounds = useMemo(() => {
-    const pendingIds = new Set(pendingRoundsForMe.map((r) => r.id));
     return completedRounds.filter((r) => {
-      if (pendingIds.has(r.id)) return false;
-      if (account?.userId && r.ownerUserId === account.userId) return true;
-      if (!account) return true; // anonymous mode — only own rounds visible anyway
-      return !!r.participants?.some(
-        (p) => p.linkedUserId === account.userId && p.status === 'confirmed'
-      );
+      if (account?.userId) return r.ownerUserId === account.userId;
+      return !r.ownerUserId;
     });
-  }, [completedRounds, pendingRoundsForMe, account]);
+  }, [completedRounds, account]);
 
   const filteredRounds = useMemo(() => {
     if (filter === 'all') return minedRounds;
@@ -95,19 +88,6 @@ export default function RoundsListScreen() {
     <View style={styles.container}>
       <View style={styles.fixedTop}>
         <Text style={styles.title}>Rounds</Text>
-
-        {pendingRoundsForMe.length > 0 && (
-          <Pressable
-            onPress={() => router.push('/(tabs)/(rounds)/pending')}
-            style={styles.pendingDrawer}>
-            <Text style={styles.pendingDrawerText}>
-              ⏳  <Text style={styles.pendingDrawerBold}>
-                {pendingRoundsForMe.length} pending
-              </Text>{' '}· friends say you played
-            </Text>
-            <Text style={styles.pendingDrawerChev}>›</Text>
-          </Pressable>
-        )}
 
         <View style={styles.segs}>
           {FILTERS.map((f) => {
@@ -144,26 +124,30 @@ export default function RoundsListScreen() {
               {group.rounds.map((round) => {
                 const date = getRoundEndDate(round);
                 const isScramble = round.scoringRule === 'scramble';
-                const isOwner =
-                  !!account?.userId && round.ownerUserId === account.userId;
 
-                // Avatars: prefer cloud-synced participant snapshot (correct
-                // displayName + color across users) over local roster lookup.
-                // Hide still-pending linked rows for non-owner viewers; the
-                // round owner always sees them since they're the one who
-                // entered the score and the round was scored on their device.
+                // Avatars rendered live via the participantIdentity resolver.
+                // Unlinked entries fall back to their snapshot fields. For
+                // scramble rounds we still use the team chips.
                 const avatarSources: { id: string; name: string; color: string }[] =
                   isScramble && round.teams
                     ? round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }))
-                    : (round.participants ?? [])
-                        .filter(
-                          (p) => isOwner || p.status === 'confirmed' || !p.linkedUserId
-                        )
-                        .map((p) => ({
-                          id: p.participantKey,
-                          name: p.displayName,
-                          color: p.displayColor || colors.primary,
-                        }));
+                    : (round.participants ?? []).map((p) => {
+                        const id = p.linkedUserId ?? p.participantKey;
+                        if (p.linkedUserId) {
+                          const rosterMatch = getPlayer(p.participantKey);
+                          return {
+                            id,
+                            name:
+                              rosterMatch?.displayName ?? rosterMatch?.nickname ?? 'Friend',
+                            color: rosterMatch?.color ?? colors.primary,
+                          };
+                        }
+                        return {
+                          id,
+                          name: p.unlinkedDisplayName ?? 'Player',
+                          color: p.unlinkedDisplayColor ?? colors.primary,
+                        };
+                      });
 
                 // Score chip: in stroke mode show the viewer's own score
                 // relative to par (we're in "Mine" so the viewer is one of
@@ -271,19 +255,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textTitle,
       marginBottom: 12,
     },
-    pendingDrawer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: 'rgba(245,158,11,0.12)',
-      borderRadius: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      marginBottom: 10,
-    },
-    pendingDrawerText: { fontSize: 12, color: '#92660d', fontWeight: '700', flex: 1 },
-    pendingDrawerBold: { fontWeight: '800' },
-    pendingDrawerChev: { fontSize: 16, color: '#92660d', opacity: 0.7 },
     segs: {
       flexDirection: 'row',
       gap: 4,

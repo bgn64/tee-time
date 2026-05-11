@@ -1,20 +1,15 @@
 /**
  * Per-person detail.
  *
- * Serves both linked friends and unlinked roster entries. The action card
- * adapts based on link state:
- *   - Linked friend: read-only summary + recent rounds.
- *   - Unlinked entry: read-only summary + recent rounds + "Merge into a
- *     friend" action that routes to the merge-target picker.
- *
- * The default player ("YOU") shows neither action, just the summary.
+ * Serves both linked friends and unlinked roster entries. Read-only summary
+ * + recent rounds. The default player ("YOU") gets a slightly different
+ * label but the layout is the same.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
@@ -37,7 +32,6 @@ export default function PersonDetailScreen() {
   const { colors } = useTheme();
   const { getPlayer, defaultPlayerId } = usePlayers();
   const { completedRounds } = useGolfRound();
-  const { account } = useAccount();
   const { friends } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -95,36 +89,6 @@ export default function PersonDetailScreen() {
             : 'rounds together'}
         </Text>
       </View>
-
-      {!isYou && !linked && account && (
-        <View style={styles.actionsCard}>
-          <Text style={styles.actionsHead}>⚙  ACTIONS</Text>
-          <Pressable
-            style={styles.primaryBtn}
-            onPress={() =>
-              router.push({
-                pathname: '/(tabs)/(people)/merge-target',
-                params: { unlinkedId: player.id },
-              })
-            }>
-            <Text style={styles.primaryBtnText}>Merge into a friend</Text>
-          </Pressable>
-          <Text style={styles.actionsHelp}>
-            Already friends with this person? Merging gives them this player's history. They'll
-            review each round and confirm or deny.
-          </Text>
-        </View>
-      )}
-
-      {!isYou && !linked && !account && (
-        <View style={styles.signInBlock}>
-          <Text style={styles.signInTitle}>Sign in to merge</Text>
-          <Text style={styles.signInBody}>
-            Once you sign in, you'll be able to merge {player.nickname} into one of your friends'
-            accounts.
-          </Text>
-        </View>
-      )}
 
       {rounds.length > 0 && (
         <View style={styles.recentSection}>

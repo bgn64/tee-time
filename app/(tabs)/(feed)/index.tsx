@@ -57,27 +57,18 @@ export default function FeedScreen() {
 
   // Feed shows rounds where at least one confirmed linked participant is
   // NOT the current user. That includes friends' solo rounds and any shared
-  // round once another participant has confirmed. Rounds awaiting my own
-  // confirmation are excluded (they live in the Pending drilldown).
-  const { pendingRoundsForMe } = useGolfRound();
+  // Feed: every Round visible to the viewer that isn't owned by them.
+  // RLS already restricts visibility to owner-or-friend-of-owner, so the
+  // remaining rows are friend-owned. Sort by completedAt desc.
   const friendRounds = useMemo(() => {
-    const pendingIds = new Set(pendingRoundsForMe.map((r) => r.id));
-    const rows = completedRounds.filter((r) => {
-      if (pendingIds.has(r.id)) return false;
-      const otherConfirmed = r.participants?.some(
-        (p) =>
-          p.linkedUserId &&
-          p.linkedUserId !== account?.userId &&
-          p.status === 'confirmed'
-      );
-      return !!otherConfirmed;
-    });
+    const myId = account?.userId;
+    const rows = completedRounds.filter((r) => r.ownerUserId && r.ownerUserId !== myId);
     return [...rows].sort((a, b) => {
       const at = new Date(a.completedAt ?? a.startedAt).getTime();
       const bt = new Date(b.completedAt ?? b.startedAt).getTime();
       return bt - at;
     });
-  }, [completedRounds, pendingRoundsForMe, account]);
+  }, [completedRounds, account]);
 
   const onRefresh = useCallback(async () => {
     // The cloud-sync effects in GolfRoundContext re-run when `account`
@@ -218,28 +209,28 @@ function FeedCard({
   myUserId,
   profileCache,
 }: FeedCardProps) {
-  // Owner display: snapshot from participants if the owner is a confirmed
-  // linked participant; fall back to profile cache; finally to roster.
-  const ownerParticipant = round.participants?.find(
-    (p) => p.linkedUserId === round.ownerUserId && p.status === 'confirmed'
-  );
+  // Owner display: live from profileCache for linked friends; fall back to
+  // local roster if cache misses. Snapshots only exist on unlinked
+  // participant rows (not the owner — the owner is always linked).
   const ownerProfile = round.ownerUserId ? profileCache[round.ownerUserId] : undefined;
-  const ownerLocal = round.ownerId ? getPlayer(round.ownerId) : undefined;
+  const ownerLocal = round.ownerUserId
+    ? allPlayers.find((p) => p.userId === round.ownerUserId)
+    : undefined;
   const ownerName =
-    ownerParticipant?.displayName ??
-    ownerProfile?.displayName ??
-    ownerLocal?.nickname ??
-    'A friend';
+    ownerProfile?.displayName ?? ownerLocal?.displayName ?? ownerLocal?.nickname ?? 'A friend';
   const ownerHandle = ownerProfile?.handle ?? ownerLocal?.handle;
   const ownerColor =
-    ownerParticipant?.displayColor ?? ownerProfile?.avatarColor ?? ownerLocal?.color ?? colors.primary;
+    ownerProfile?.avatarColor ?? ownerLocal?.color ?? colors.primary;
   const ownerInitial = ownerName[0]?.toUpperCase() ?? '?';
 
   const isScramble = round.scoringRule === 'scramble';
 
   // Score chip = the round owner's score (in stroke). For scramble we still
   // show round-total since there's no clear "owner team."
-  const ownerScorerId = isScramble ? undefined : ownerParticipant?.participantKey;
+  const ownerParticipantKey = (round.participants ?? []).find(
+    (p) => p.linkedUserId === round.ownerUserId
+  )?.participantKey;
+  const ownerScorerId = isScramble ? undefined : ownerParticipantKey;
   const totalRel = ownerScorerId
     ? getRoundTotalRelative(round, ownerScorerId)
     : getRoundTotalRelative(round);
@@ -255,39 +246,54 @@ function FeedCard({
   const dateLabel = formatRelativeTime(round.completedAt ?? round.startedAt);
   const holeCount = round.course.holes.length;
 
-  // Participant strip + with-line both come from round.participants so the
-  // rendering is consistent across users (no roster lookups). Hide pending
-  // rows from non-owner viewers; the owner always sees them since they
-  // entered the scores.
-  const viewerIsOwner = !!myUserId && round.ownerUserId === myUserId;
-  const visibleParticipants = (round.participants ?? []).filter(
-    (p) => viewerIsOwner || p.status === 'confirmed' || !p.linkedUserId
-  );
-  const stackSources: Array<{ id: string; name: string; color: string }> = isScramble && round.teams
-    ? round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }))
-    : visibleParticipants.map((p) => ({
-        id: p.participantKey,
-        name: p.displayName,
-        color: p.displayColor || colors.primary,
-      }));
+  // Participant strip & with-line: in v7 every named participant is shown
+  // (no blur, no pending). Linked entries render live from profile cache;
+  // unlinked entries fall back to their snapshot fields.
+  const resolveParticipantName = (
+    p: { linkedUserId?: string; unlinkedDisplayName?: string }
+  ): string => {
+    if (p.linkedUserId) {
+      if (myUserId && p.linkedUserId === myUserId) return 'you';
+      const prof = profileCache[p.linkedUserId];
+      if (prof) return prof.displayName;
+      const local = allPlayers.find((q) => q.userId === p.linkedUserId);
+      return local?.displayName ?? local?.nickname ?? 'Friend';
+    }
+    return p.unlinkedDisplayName ?? 'Player';
+  };
+  const resolveParticipantColor = (
+    p: { linkedUserId?: string; unlinkedDisplayColor?: string }
+  ): string => {
+    if (p.linkedUserId) {
+      const prof = profileCache[p.linkedUserId];
+      if (prof) return prof.avatarColor;
+      const local = allPlayers.find((q) => q.userId === p.linkedUserId);
+      return local?.color ?? colors.primary;
+    }
+    return p.unlinkedDisplayColor ?? colors.primary;
+  };
 
-  const pendingNames = (round.participants ?? [])
-    .filter((p) => p.status === 'pending')
-    .map((p) => `${p.displayName} ?`);
+  const stackSources: Array<{ id: string; name: string; color: string }> =
+    isScramble && round.teams
+      ? round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }))
+      : (round.participants ?? []).map((p) => ({
+          id: p.linkedUserId ?? p.participantKey,
+          name: resolveParticipantName(p),
+          color: resolveParticipantColor(p),
+        }));
 
-  const others = visibleParticipants
+  // "with Y, Z" — exclude the owner; include "you" first if the viewer is
+  // named on the round.
+  const meIsMentioned =
+    !!myUserId && (round.mentionedUserIds ?? []).includes(myUserId);
+  const otherNames = (round.participants ?? [])
     .filter(
-      (p) =>
-        p.linkedUserId !== round.ownerUserId &&
-        p.linkedUserId !== myUserId
+      (p) => p.linkedUserId !== round.ownerUserId && p.linkedUserId !== myUserId
     )
-    .map((p) => p.displayName);
-  const meIsParticipant =
-    !!myUserId &&
-    !!round.participants?.some((p) => p.linkedUserId === myUserId && p.status === 'confirmed');
+    .map(resolveParticipantName);
   const withParts: string[] = [];
-  if (meIsParticipant) withParts.push('you');
-  withParts.push(...others, ...pendingNames);
+  if (meIsMentioned) withParts.push('you');
+  withParts.push(...otherNames);
   const withText = withParts.length > 0 ? `with ${withParts.join(', ')}` : '';
 
   return (

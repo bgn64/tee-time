@@ -127,25 +127,34 @@ export function replaceScore(scores: RoundScore[], nextScore: RoundScore): Round
  *   - "Red vs Blue" for scramble.
  *   - "you played" / "X played" / "X and Y played" / "X, Y, and Z played" for stroke,
  *     replacing the viewer's name with "you" when `myUserId` matches.
- *   - "Round" if no confirmed linked participants exist.
+ *   - "Round" if no linked participants exist.
  *
- * Only confirmed linked participants count toward the title — pending and
- * unlinked participants are excluded so the title acts as the round's
- * "broadcast headline."
+ * Only linked participants count toward the title — unlinked participants
+ * are excluded so the title acts as the round's "broadcast headline."
+ *
+ * `resolveName` is consulted to look up the live displayName for a linked
+ * user_id (the viewer's profileCache + roster, typically). When unset or
+ * returning undefined, the participant is rendered as "Friend".
  */
-export function buildRoundTitle(round: Round, myUserId?: string): string {
+export function buildRoundTitle(
+  round: Round,
+  myUserId?: string,
+  resolveName?: (linkedUserId: string) => string | undefined
+): string {
   if (round.scoringRule === 'scramble') {
     if (!round.teams || round.teams.length === 0) return 'Round';
     return round.teams.map((t) => t.name).join(' vs ');
   }
-  const confirmed: string[] =
+  const names: string[] =
     round.participants
-      ?.filter((p: RoundParticipant) => p.linkedUserId && p.status === 'confirmed')
+      ?.filter((p: RoundParticipant) => !!p.linkedUserId)
       .map((p: RoundParticipant) =>
-        p.linkedUserId === myUserId ? 'you' : p.displayName
+        p.linkedUserId === myUserId
+          ? 'you'
+          : resolveName?.(p.linkedUserId!) ?? 'Friend'
       ) ?? [];
-  if (confirmed.length === 0) return 'Round';
-  if (confirmed.length === 1) return `${confirmed[0]} played`;
-  if (confirmed.length === 2) return `${confirmed[0]} and ${confirmed[1]} played`;
-  return `${confirmed.slice(0, -1).join(', ')}, and ${confirmed[confirmed.length - 1]} played`;
+  if (names.length === 0) return 'Round';
+  if (names.length === 1) return `${names[0]} played`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} played`;
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]} played`;
 }

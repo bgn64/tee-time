@@ -1,7 +1,6 @@
 /**
  * Rounds tab stack.
- *   - index    — Mine list (with optional Pending drawer-link at top)
- *   - pending  — drilldown of rounds awaiting the user's confirmation
+ *   - index    — Mine list
  *   - [id]     — round detail
  */
 
@@ -11,9 +10,7 @@ export default function RoundsLayout() {
   return (
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
-      <Stack.Screen name="pending" />
       <Stack.Screen name="[id]" />
     </Stack>
   );
 }
-
