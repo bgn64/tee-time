@@ -28,7 +28,7 @@
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { InlineScoreKeypad } from '@/components/InlineScoreKeypad';
@@ -129,15 +129,13 @@ export default function RoundDetailScreen() {
   let editableScorerIds = new Set<string>();
   let blurredScorerIds = new Set<string>();
   let pendingScorerIds = new Set<string>();
+  // Ordered editable-scorer list, used to drive the keypad's player nav.
+  const editableScorerList: Array<{ id: string; name: string; color: string }> = [];
 
   if (!isScramble) {
     for (const p of round.participants ?? []) {
       if (p.status === 'pending') {
         pendingScorerIds.add(p.participantKey);
-        // Blur only for observers. The pending participant sees their own
-        // row un-blurred (they're learning what's been claimed), and the
-        // round owner sees it un-blurred so they can review/edit before
-        // the friend confirms.
         const viewerIsTheParticipant =
           myParticipant && myParticipant.participantKey === p.participantKey;
         if (!viewerIsTheParticipant && !isOwner) {
@@ -145,24 +143,27 @@ export default function RoundDetailScreen() {
         }
       }
     }
-    // Editable rows for the viewer.
     if (myParticipant && myParticipant.status === 'confirmed') {
       editableScorerIds.add(myParticipant.participantKey);
     }
-    // Owner can also edit any unlinked rows on their round.
     if (isOwner) {
       for (const p of round.participants ?? []) {
         if (!p.linkedUserId) editableScorerIds.add(p.participantKey);
-        // And edit pending linked rows (not yet confirmed).
         if (p.linkedUserId && p.status === 'pending') {
           editableScorerIds.add(p.participantKey);
         }
       }
     }
+    for (const p of round.participants ?? []) {
+      if (editableScorerIds.has(p.participantKey)) {
+        editableScorerList.push({
+          id: p.participantKey,
+          name: p.displayName,
+          color: p.displayColor ?? colors.primary,
+        });
+      }
+    }
   } else {
-    // Scramble: per-team. A team is blurred for observers iff no team member
-    // is confirmed. A team is editable by the viewer iff (viewer is a
-    // confirmed member) OR (viewer is owner AND no team member is confirmed).
     const teams = round.teams ?? [];
     for (const team of teams) {
       const members = (round.participants ?? []).filter((p) => p.teamId === team.id);
@@ -171,8 +172,6 @@ export default function RoundDetailScreen() {
         (m) => m.status === 'confirmed' && m.linkedUserId === myUserId
       );
       if (!anyConfirmed) {
-        // Team's score is the work of an as-yet-unconfirmed group; mark
-        // pending (so name shows ?) and blur for everyone except the owner.
         pendingScorerIds.add(team.id);
         if (!isOwner) {
           blurredScorerIds.add(team.id);
@@ -180,14 +179,27 @@ export default function RoundDetailScreen() {
       }
       if (iAmConfirmedMember || (!anyConfirmed && isOwner)) {
         editableScorerIds.add(team.id);
+        editableScorerList.push({ id: team.id, name: team.name, color: team.color });
       }
     }
-    // For the team-roster card (rendered separately below) we still want to
-    // surface ? chips next to individual pending members.
     for (const p of round.participants ?? []) {
       if (p.status === 'pending') pendingScorerIds.add(p.participantKey);
     }
   }
+
+  const maxHole = round.course.holes.length;
+
+  // Seed selection when entering edit mode; clear it on exit.
+  useEffect(() => {
+    if (editMode) {
+      if (!selected && editableScorerList.length > 0) {
+        setSelected({ scorerId: editableScorerList[0].id, holeNumber: 1 });
+      }
+    } else if (selected) {
+      setSelected(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMode]);
 
   const handleCellPress = useCallback(
     (scorerId: string, holeNumber: number) => {
@@ -205,6 +217,33 @@ export default function RoundDetailScreen() {
         (s) => s.scorerId === selected.scorerId && s.holeNumber === selected.holeNumber
       )
     : undefined;
+  const selectedScorerIdx = selected
+    ? editableScorerList.findIndex((s) => s.id === selected.scorerId)
+    : -1;
+  const selectedScorer = selectedScorerIdx >= 0 ? editableScorerList[selectedScorerIdx] : null;
+
+  const handleHoleChange = useCallback(
+    (next: number) => {
+      if (!selected) return;
+      setSelected({ scorerId: selected.scorerId, holeNumber: next });
+    },
+    [selected]
+  );
+
+  const handleScorerChange = useCallback(
+    (delta: 1 | -1) => {
+      if (!selected || editableScorerList.length === 0) return;
+      const idx = editableScorerList.findIndex((s) => s.id === selected.scorerId);
+      if (idx < 0) return;
+      const nextIdx =
+        (idx + delta + editableScorerList.length) % editableScorerList.length;
+      setSelected({
+        scorerId: editableScorerList[nextIdx].id,
+        holeNumber: selected.holeNumber,
+      });
+    },
+    [selected, editableScorerList]
+  );
 
   const handleKeypadChange = useCallback(
     async (strokes: number) => {
@@ -288,7 +327,20 @@ export default function RoundDetailScreen() {
         <InlineScoreKeypad
           par={selectedHole?.par ?? 4}
           strokes={selectedScore?.strokes ?? null}
-          disabled={!selected}
+          holeNumber={selected?.holeNumber ?? 1}
+          maxHole={maxHole}
+          onHoleChange={handleHoleChange}
+          scorer={
+            selectedScorer
+              ? {
+                  name: selectedScorer.name,
+                  color: selectedScorer.color,
+                  index: selectedScorerIdx,
+                  total: editableScorerList.length,
+                }
+              : undefined
+          }
+          onScorerChange={editableScorerList.length > 1 ? handleScorerChange : undefined}
           onChange={handleKeypadChange}
         />
       )}
