@@ -25,6 +25,7 @@ export const STORAGE_KEYS = {
   SOCIAL: 'tee-time:social',
   AUTO_ACCEPT_OUTGOING: 'tee-time:dev:auto-accept-outgoing',
   AUTO_CLAIM_PENDING: 'tee-time:dev:auto-claim-pending',
+  ONBOARDING_PRIMERS: 'tee-time:onboarding-primers',
 } as const;
 
 /**

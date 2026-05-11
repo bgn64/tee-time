@@ -11,7 +11,7 @@
 
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -21,6 +21,8 @@ import { AppHeader } from '@/components/AppHeader';
 import { AccountProvider, useAccount } from '@/state/AccountContext';
 import { GolfRoundProvider, useGolfRound } from '@/state/GolfRoundContext';
 import { HeaderProvider } from '@/state/HeaderContext';
+import { LocationProvider } from '@/state/LocationContext';
+import { OnboardingProvider, useOnboarding } from '@/state/OnboardingContext';
 import { PlayerProvider, usePlayers } from '@/state/PlayerContext';
 import { SocialProvider, useSocial } from '@/state/SocialContext';
 import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
@@ -58,7 +60,11 @@ export default function RootLayout() {
           <PlayerProvider>
             <GolfRoundProvider>
               <SocialProvider>
-                <RootLayoutNav />
+                <LocationProvider>
+                  <OnboardingProvider>
+                    <RootLayoutNav />
+                  </OnboardingProvider>
+                </LocationProvider>
               </SocialProvider>
             </GolfRoundProvider>
           </PlayerProvider>
@@ -74,9 +80,15 @@ function RootLayoutNav() {
   const { hydrated: roundHydrated } = useGolfRound();
   const { hydrated: accountHydrated } = useAccount();
   const { hydrated: socialHydrated } = useSocial();
+  const { hydrated: onboardingHydrated, nextPrimer } = useOnboarding();
 
   const allHydrated =
-    themeHydrated && playerHydrated && roundHydrated && accountHydrated && socialHydrated;
+    themeHydrated &&
+    playerHydrated &&
+    roundHydrated &&
+    accountHydrated &&
+    socialHydrated &&
+    onboardingHydrated;
 
   useEffect(() => {
     if (allHydrated) {
@@ -84,8 +96,23 @@ function RootLayoutNav() {
     }
   }, [allHydrated]);
 
-  // Hold rendering until storage has been read so seeded values don't flash
-  // before being replaced by hydrated state.
+  // Onboarding routing: when the user has an unseen primer, push them
+  // to the corresponding screen. Runs after the splash + initial render
+  // so the navigator is fully mounted. Wrapped in a microtask so the
+  // navigation dispatches AFTER React commits the Stack children — on
+  // first launch the Stack registration and the effect both fire in
+  // the same frame, and dispatching synchronously can lose the race.
+  useEffect(() => {
+    if (!allHydrated) return;
+    if (!nextPrimer) return;
+    const path: '/onboarding/account' | '/onboarding/location' =
+      nextPrimer === 'account' ? '/onboarding/account' : '/onboarding/location';
+    const id = setTimeout(() => {
+      router.replace(path);
+    }, 0);
+    return () => clearTimeout(id);
+  }, [allHydrated, nextPrimer]);
+
   if (!allHydrated) {
     return null;
   }
@@ -97,6 +124,7 @@ function RootLayoutNav() {
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="sign-in" />
+          <Stack.Screen name="onboarding" />
         </Stack>
       </View>
     </View>

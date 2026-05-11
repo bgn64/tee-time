@@ -27,6 +27,8 @@ import { formatScore } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
+import { useLocation } from '@/state/LocationContext';
+import { useOnboarding } from '@/state/OnboardingContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
 
@@ -43,6 +45,8 @@ export default function YouScreen() {
   const { completedRounds } = useGolfRound();
   const { defaultPlayerId, getPlayer } = usePlayers();
   const { account } = useAccount();
+  const { status: locationStatus, request: requestLocation, openSystemSettings } = useLocation();
+  const { setStatus: setPrimerStatus } = useOnboarding();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -176,6 +180,42 @@ export default function YouScreen() {
           iconBg={colors.textMuted}
           todo
           onPress={() => router.push('/(tabs)/(you)/about')}
+        />
+        <GridCard
+          styles={styles}
+          label="Location"
+          subtitle={
+            locationStatus === 'granted'
+              ? 'On · sorting by distance'
+              : locationStatus === 'denied'
+              ? 'Denied — tap to open settings'
+              : 'Off — tap to enable'
+          }
+          icon="📍"
+          iconBg={
+            locationStatus === 'granted'
+              ? colors.primaryDark
+              : locationStatus === 'denied'
+              ? '#b53030'
+              : colors.textMuted
+          }
+          onPress={async () => {
+            if (locationStatus === 'granted') {
+              // No-op for now. Future: a sub-screen for granular controls.
+              return;
+            }
+            if (locationStatus === 'denied') {
+              await openSystemSettings();
+              return;
+            }
+            // Off / unknown: re-trigger the primer so the user sees the
+            // value-prop before the OS dialog. We bump status back to
+            // 'not_seen' first so OnboardingContext's nextPrimer effect
+            // doesn't immediately re-route them after the primer
+            // resolves on its own.
+            setPrimerStatus('location', 'not_seen');
+            router.push('/onboarding/location');
+          }}
         />
       </View>
     </ScrollView>

@@ -11,7 +11,8 @@
     "test:watch": "jest --selectProjects unit --watch",
     "test:db": "jest --selectProjects db --runInBand",
     "test:all": "jest",
-    "icons": "tsx scripts/generate-icons.ts"
+    "icons": "tsx scripts/generate-icons.ts",
+    "ingest:opengolf": "tsx scripts/ingest-opengolf.ts"
   },
   "jest": {
     "projects": [
@@ -57,6 +58,7 @@
     "expo-constants": "~18.0.13",
     "expo-font": "~14.0.11",
     "expo-linking": "~8.0.11",
+    "expo-location": "~19.0.8",
     "expo-router": "~6.0.23",
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
