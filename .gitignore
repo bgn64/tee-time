@@ -46,3 +46,5 @@ docs/
 
 .env.test
 
+# Local script artifact cache (e.g., downloaded OpenGolf CSV)
+.cache/
