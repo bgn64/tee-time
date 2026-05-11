@@ -24,6 +24,13 @@ export type HeaderLeftSlot =
 export type HeaderRightSlot =
   | { kind: 'profile'; onPress?: () => void }
   | { kind: 'menu'; onPress: () => void }
+  | {
+      kind: 'action';
+      label: string;
+      onPress: () => void;
+      /** When true, render the chip with the "active/done" styling. */
+      active?: boolean;
+    }
   | { kind: 'none' };
 
 export type HeaderSlots = {
@@ -88,6 +95,9 @@ export function useScreenHeader(slots: HeaderSlots) {
 
 function slotsKey(s: HeaderSlots): string {
   const l = s.left.kind === 'text' ? `t:${s.left.text}` : `b:${s.left.label}`;
-  const r = s.right.kind;
+  const r =
+    s.right.kind === 'action'
+      ? `a:${s.right.label}:${s.right.active ? '1' : '0'}`
+      : s.right.kind;
   return `${l}|${r}`;
 }

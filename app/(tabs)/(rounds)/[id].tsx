@@ -2,8 +2,7 @@
  * Round detail screen.
  *
  * The canonical view for inspecting and editing a completed round. Renders
- * a full hole-by-hole scorecard (Front 9 + Back 9 + Final). Tapping any of
- * the viewer's editable cells opens a HoleEditSheet.
+ * a full hole-by-hole scorecard (Front 9 + Back 9 + Final).
  *
  * Behavior by viewer role:
  *   - Pending participant: a confirmation banner sits above the scorecard.
@@ -15,15 +14,24 @@
  *   - Observer (round visible because of friend-of-participant): pending
  *     rows are blurred; everything else is read-only.
  *
+ * Editing UX:
+ *   - "Edit" chip in the header's right slot toggles edit mode on/off.
+ *   - In read mode the scorecard is pure read-only — no green tints.
+ *   - In edit mode, every editable row's cells get a green tint and become
+ *     tappable. Tap a cell to select it (dashed outline). The inline
+ *     keypad below the scorecard becomes active; quick-pick chips or the
+ *     stepper change the selected cell's score. Tap another tinted cell
+ *     (any row, any hole) to switch instantly. Tap "Done" to leave edit.
+ *
  * Bottom of screen: "Remove this round from my history" — leaveRound RPC.
  * The round persists for any remaining confirmed participants.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { HoleEditSheet } from '@/components/HoleEditSheet';
+import { InlineScoreKeypad } from '@/components/InlineScoreKeypad';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import { buildRoundTitle } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
@@ -52,14 +60,56 @@ export default function RoundDetailScreen() {
   } = useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const [editing, setEditing] = useState<{ scorerId: string; holeNumber: number } | null>(null);
+  const [editMode, setEditMode] = useState(false);
+  const [selected, setSelected] = useState<{ scorerId: string; holeNumber: number } | null>(null);
+
+  const round = completedRounds.find((r) => r.id === id);
+
+  // Resolve "can the viewer edit anything?" so the Edit chip only renders
+  // when there's something to edit. Computed before the header registration.
+  const myUserId = account?.userId;
+  const myParticipant = round?.participants?.find((p) => p.linkedUserId === myUserId);
+  const isOwner = !!(round && myUserId && round.ownerUserId === myUserId);
+  const canEditAnything = useMemo(() => {
+    if (!round) return false;
+    if (round.scoringRule === 'scramble') {
+      // Owner pre-any-confirm OR any confirmed team member I'm on.
+      for (const team of round.teams ?? []) {
+        const members = (round.participants ?? []).filter((p) => p.teamId === team.id);
+        const anyConfirmed = members.some(
+          (m) => m.linkedUserId && m.status === 'confirmed'
+        );
+        const meConfirmed = members.some(
+          (m) => m.linkedUserId === myUserId && m.status === 'confirmed'
+        );
+        if (meConfirmed || (!anyConfirmed && isOwner)) return true;
+      }
+      return false;
+    }
+    if (myParticipant?.status === 'confirmed') return true;
+    if (isOwner) {
+      for (const p of round.participants ?? []) {
+        if (!p.linkedUserId) return true;
+        if (p.linkedUserId && p.status === 'pending') return true;
+      }
+    }
+    return false;
+  }, [round, isOwner, myParticipant, myUserId]);
 
   useScreenHeader({
     left: { kind: 'back', label: 'Rounds', onPress: () => router.back() },
-    right: { kind: 'profile' },
+    right: canEditAnything
+      ? {
+          kind: 'action',
+          label: editMode ? 'Done' : 'Edit',
+          active: editMode,
+          onPress: () => {
+            setEditMode((m) => !m);
+            setSelected(null);
+          },
+        }
+      : { kind: 'profile' },
   });
-
-  const round = completedRounds.find((r) => r.id === id);
 
   if (!round) {
     return (
@@ -72,9 +122,6 @@ export default function RoundDetailScreen() {
   }
 
   const isScramble = round.scoringRule === 'scramble';
-  const myUserId = account?.userId;
-  const myParticipant = round.participants?.find((p) => p.linkedUserId === myUserId);
-  const isOwner = myUserId && round.ownerUserId === myUserId;
   const iAmPending = myParticipant?.status === 'pending';
 
   // ---- Stroke edit-rights / blur sets ----
@@ -142,27 +189,38 @@ export default function RoundDetailScreen() {
     }
   }
 
-  const handleCellPress = (scorerId: string, holeNumber: number) => {
-    setEditing({ scorerId, holeNumber });
-  };
+  const handleCellPress = useCallback(
+    (scorerId: string, holeNumber: number) => {
+      if (!editMode) return;
+      setSelected({ scorerId, holeNumber });
+    },
+    [editMode]
+  );
 
-  const handleSaveScore = async (strokes: number) => {
-    if (!editing) return;
-    const result = await editHoleScore(round.id, editing.scorerId, editing.holeNumber, strokes);
-    setEditing(null);
-    if (!result.ok) {
-      Alert.alert('Edit failed', result.error);
-    }
-  };
-
-  const editingHole = editing
-    ? round.course.holes.find((h) => h.number === editing.holeNumber)
+  const selectedHole = selected
+    ? round.course.holes.find((h) => h.number === selected.holeNumber)
     : undefined;
-  const editingScore = editing
+  const selectedScore = selected
     ? round.scores.find(
-        (s) => s.scorerId === editing.scorerId && s.holeNumber === editing.holeNumber
+        (s) => s.scorerId === selected.scorerId && s.holeNumber === selected.holeNumber
       )
     : undefined;
+
+  const handleKeypadChange = useCallback(
+    async (strokes: number) => {
+      if (!selected) return;
+      const result = await editHoleScore(
+        round.id,
+        selected.scorerId,
+        selected.holeNumber,
+        strokes
+      );
+      if (!result.ok) {
+        Alert.alert('Edit failed', result.error);
+      }
+    },
+    [selected, editHoleScore, round.id]
+  );
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -199,10 +257,12 @@ export default function RoundDetailScreen() {
 
       <ReadOnlyScorecard
         round={round}
-        editableScorerIds={editableScorerIds}
+        editableScorerIds={editMode ? editableScorerIds : undefined}
         blurredScorerIds={blurredScorerIds}
         pendingScorerIds={pendingScorerIds}
-        onCellPress={handleCellPress}
+        editingScorerId={editMode ? selected?.scorerId : undefined}
+        editingHoleNumber={editMode ? selected?.holeNumber : undefined}
+        onCellPress={editMode ? handleCellPress : undefined}
       />
 
       {/* Scramble team rosters card. */}
@@ -224,13 +284,16 @@ export default function RoundDetailScreen() {
         </View>
       )}
 
-      {editableScorerIds.size > 0 && (
-        <Text style={styles.hint}>
-          Tap any of <Text style={styles.hintBold}>your</Text> cells to edit that hole.
-        </Text>
+      {editMode && (
+        <InlineScoreKeypad
+          par={selectedHole?.par ?? 4}
+          strokes={selectedScore?.strokes ?? null}
+          disabled={!selected}
+          onChange={handleKeypadChange}
+        />
       )}
 
-      {(myParticipant && myParticipant.status === 'confirmed') || isOwner ? (
+      {!editMode && ((myParticipant && myParticipant.status === 'confirmed') || isOwner) ? (
         <Pressable
           style={styles.dangerBtn}
           onPress={() => {
@@ -253,15 +316,6 @@ export default function RoundDetailScreen() {
           <Text style={styles.dangerBtnText}>Remove this round from my history</Text>
         </Pressable>
       ) : null}
-
-      <HoleEditSheet
-        visible={!!editing}
-        holeNumber={editing?.holeNumber ?? null}
-        par={editingHole?.par ?? 4}
-        initialStrokes={editingScore?.strokes ?? null}
-        onCancel={() => setEditing(null)}
-        onSave={handleSaveScore}
-      />
     </ScrollView>
   );
 }

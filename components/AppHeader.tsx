@@ -69,6 +69,23 @@ function renderRight(right: ReturnType<typeof useHeaderSlots>['right'], styles: 
       </Pressable>
     );
   }
+  if (right.kind === 'action') {
+    return (
+      <Pressable
+        onPress={right.onPress}
+        style={({ pressed }) => [
+          styles.actionChip,
+          right.active && styles.actionChipActive,
+          pressed && styles.pressed,
+        ]}
+        hitSlop={8}
+        accessibilityLabel={right.label}>
+        <Text style={[styles.actionChipText, right.active && styles.actionChipTextActive]}>
+          {right.label}
+        </Text>
+      </Pressable>
+    );
+  }
   return (
     <Pressable
       onPress={right.onPress}
@@ -165,6 +182,24 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textMuted,
       letterSpacing: -1,
       lineHeight: 24,
+    },
+    actionChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    actionChipText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: colors.primaryDark,
+    },
+    actionChipActive: {
+      backgroundColor: colors.accent + '1c',
+      borderWidth: 1,
+      borderColor: colors.accent + '55',
+    },
+    actionChipTextActive: {
+      color: colors.accent,
     },
     pressed: {
       opacity: 0.6,

@@ -32,6 +32,9 @@ type Props = {
   editableScorerIds?: Set<string>;
   blurredScorerIds?: Set<string>;
   pendingScorerIds?: Set<string>;
+  /** When set, the (editingScorerId, editingHoleNumber) cell renders with a dashed outline. */
+  editingScorerId?: string;
+  editingHoleNumber?: number;
   onCellPress?: (scorerId: string, holeNumber: number) => void;
 };
 
@@ -40,6 +43,8 @@ export function ReadOnlyScorecard({
   editableScorerIds,
   blurredScorerIds,
   pendingScorerIds,
+  editingScorerId,
+  editingHoleNumber,
   onCellPress,
 }: Props) {
   const { colors } = useTheme();
@@ -96,6 +101,8 @@ export function ReadOnlyScorecard({
         editableScorerIds={editableScorerIds}
         blurredScorerIds={blurredScorerIds}
         pendingScorerIds={pendingScorerIds}
+        editingScorerId={editingScorerId}
+        editingHoleNumber={editingHoleNumber}
         onCellPress={onCellPress}
       />
       {back9.length > 0 && (
@@ -109,6 +116,8 @@ export function ReadOnlyScorecard({
             editableScorerIds={editableScorerIds}
             blurredScorerIds={blurredScorerIds}
             pendingScorerIds={pendingScorerIds}
+            editingScorerId={editingScorerId}
+            editingHoleNumber={editingHoleNumber}
             onCellPress={onCellPress}
           />
         </View>
@@ -136,6 +145,8 @@ type SectionProps = {
   editableScorerIds?: Set<string>;
   blurredScorerIds?: Set<string>;
   pendingScorerIds?: Set<string>;
+  editingScorerId?: string;
+  editingHoleNumber?: number;
   onCellPress?: (scorerId: string, holeNumber: number) => void;
 };
 
@@ -148,6 +159,8 @@ function NineSection({
   editableScorerIds,
   blurredScorerIds,
   pendingScorerIds,
+  editingScorerId,
+  editingHoleNumber,
   onCellPress,
 }: SectionProps) {
   const parTotal = holes.reduce((t, h) => t + h.par, 0);
@@ -210,10 +223,11 @@ function NineSection({
               <Text style={{ color: scorer.color, fontSize: 11, fontWeight: '700' }} numberOfLines={1}>
                 {scorer.name}
                 {isPending ? ' ?' : ''}
-                {isEditable && !isPending ? ' ✎' : ''}
               </Text>
             </View>
             {cells.map((c, i) => {
+              const isThisCellEditing =
+                editingScorerId === scorer.id && editingHoleNumber === holes[i].number;
               const cellContent = isBlurred ? (
                 <View style={styles.blurMask} />
               ) : (
@@ -233,7 +247,7 @@ function NineSection({
                   <Pressable
                     key={holes[i].number}
                     onPress={() => onCellPress(scorer.id, holes[i].number)}
-                    style={styles.editableCell}>
+                    style={[styles.editableCell, isThisCellEditing && styles.editingCell]}>
                     {cellContent}
                   </Pressable>
                 );
@@ -359,7 +373,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     editableCell: {
       flex: 1,
-      backgroundColor: 'rgba(124,179,66,0.10)',
+      backgroundColor: 'rgba(124,179,66,0.12)',
+      borderRadius: 4,
+    },
+    editingCell: {
+      backgroundColor: 'rgba(124,179,66,0.40)',
+      borderWidth: 1.5,
+      borderColor: colors.primaryDark,
+      borderStyle: 'dashed',
       borderRadius: 4,
     },
     blurMask: {
