@@ -5,13 +5,19 @@
  *
  * Slot contents are driven by HeaderContext, which screens populate via
  * the `useScreenHeader` hook.
+ *
+ * The profile dot opens an anchored ProfileMenu with shortcuts to
+ * Settings / Theme / Notifications / About / Sign out. Menu state lives
+ * in AppHeader so it persists across screens that re-mount.
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Logo } from '@/components/Logo';
+import { ProfileMenu } from '@/components/ProfileMenu';
+import { useAccount } from '@/state/AccountContext';
 import { useHeaderSlots } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 
@@ -19,9 +25,11 @@ const HEADER_HEIGHT = 52;
 
 export function AppHeader() {
   const { colors } = useTheme();
+  const { account } = useAccount();
   const insets = useSafeAreaInsets();
   const slots = useHeaderSlots();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, height: HEADER_HEIGHT + insets.top }]}>
@@ -33,8 +41,11 @@ export function AppHeader() {
             <Text style={styles.logo}>tee time</Text>
           </View>
         </View>
-        <View style={styles.rightSlot}>{renderRight(slots.right, styles)}</View>
+        <View style={styles.rightSlot}>
+          {renderRight(slots.right, styles, account, () => setMenuOpen(true))}
+        </View>
       </View>
+      <ProfileMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
     </View>
   );
 }
@@ -54,7 +65,12 @@ function renderLeft(left: ReturnType<typeof useHeaderSlots>['left'], styles: Hea
   );
 }
 
-function renderRight(right: ReturnType<typeof useHeaderSlots>['right'], styles: HeaderStyles) {
+function renderRight(
+  right: ReturnType<typeof useHeaderSlots>['right'],
+  styles: HeaderStyles,
+  account: ReturnType<typeof useAccount>['account'],
+  onOpenProfileMenu: () => void
+) {
   if (right.kind === 'none') {
     return null;
   }
@@ -86,13 +102,22 @@ function renderRight(right: ReturnType<typeof useHeaderSlots>['right'], styles: 
       </Pressable>
     );
   }
+  // right.kind === 'profile'
+  const onPress = right.onPress ?? onOpenProfileMenu;
+  const initial = account?.displayName?.[0]?.toUpperCase();
+  const bg = account?.avatarColor;
   return (
     <Pressable
-      onPress={right.onPress}
-      style={({ pressed }) => [styles.profileDot, pressed && styles.pressed]}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.profileDot,
+        bg ? { backgroundColor: bg } : null,
+        pressed && styles.pressed,
+      ]}
       hitSlop={8}
-      accessibilityLabel="Profile"
-    />
+      accessibilityLabel="Profile">
+      {initial ? <Text style={styles.profileDotText}>{initial}</Text> : null}
+    </Pressable>
   );
 }
 
@@ -165,10 +190,17 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '600',
     },
     profileDot: {
-      width: 26,
-      height: 26,
-      borderRadius: 13,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
       backgroundColor: colors.chipBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    profileDotText: {
+      color: '#ffffff',
+      fontSize: 12,
+      fontWeight: '800',
     },
     menuBtn: {
       width: 32,
