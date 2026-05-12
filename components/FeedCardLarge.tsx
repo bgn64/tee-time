@@ -257,11 +257,11 @@ export function FeedCardLarge({
             {ownerHandle} · {dateLabel}
           </Text>
           <View style={styles.bandScoreBlock}>
-            <Text style={styles.bandStrokes}>
-              {totalStrokes > 0 ? totalStrokes : '—'}
+            <Text style={styles.bandRel}>
+              {totalStrokes > 0 ? formatScore(totalRel) : '—'}
             </Text>
             {totalStrokes > 0 ? (
-              <Text style={styles.bandRel}>{formatScore(totalRel)}</Text>
+              <Text style={styles.bandStrokes}>{totalStrokes}</Text>
             ) : null}
           </View>
         </View>
@@ -361,15 +361,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       gap: 6,
     },
     bandStrokes: {
-      color: '#ffffff',
-      fontSize: 28,
-      fontWeight: '800',
-      lineHeight: 30,
+      color: 'rgba(255,255,255,0.85)',
+      fontSize: 14,
+      fontWeight: '700',
     },
     bandRel: {
-      color: 'rgba(255,255,255,0.9)',
-      fontSize: 14,
+      color: '#ffffff',
+      fontSize: 30,
       fontWeight: '800',
+      lineHeight: 32,
     },
 
     // ---- Body ----
