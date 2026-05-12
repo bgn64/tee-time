@@ -189,13 +189,13 @@ export default function PlayersScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.fixedTop}>
-        <Text style={styles.title}>Who&apos;s playing?</Text>
         {course && (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.greeting} numberOfLines={1}>
             {course.name}
             {course.location ? ` · ${course.location}` : ''}
           </Text>
         )}
+        <Text style={styles.title}>Who&apos;s playing?</Text>
 
         <View style={[styles.searchBox, searchActive && styles.searchBoxActive]}>
           <Text style={styles.searchIcon}>🔍</Text>
@@ -427,8 +427,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     fixedTop: { paddingHorizontal: 20, paddingTop: 12 },
-    title: { fontSize: 22, fontWeight: '800', color: colors.textTitle },
-    subtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2, marginBottom: 12 },
+    title: { fontSize: 22, fontWeight: '800', color: colors.textTitle, marginBottom: 12 },
+    greeting: {
+      fontSize: 12,
+      color: colors.textMuted,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      marginBottom: 4,
+    },
     searchBox: {
       flexDirection: 'row',
       alignItems: 'center',

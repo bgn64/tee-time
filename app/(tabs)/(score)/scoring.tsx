@@ -150,9 +150,6 @@ export default function ScoringScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.titleBlock}>
-          <Text style={styles.title} numberOfLines={1}>
-            {currentRound.course.name}
-          </Text>
           <View style={styles.pillRow}>
             <View style={styles.formatPill}>
               <Text style={styles.formatPillText}>
@@ -184,6 +181,9 @@ export default function ScoringScreen() {
               </Pressable>
             )}
           </View>
+          <Text style={styles.title} numberOfLines={1}>
+            {currentRound.course.name}
+          </Text>
         </View>
 
         <HoleNavBar
@@ -299,19 +299,18 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingBottom: 32,
     },
     titleBlock: {
-      marginBottom: 8,
+      marginBottom: 12,
     },
     title: {
-      fontSize: 19,
+      fontSize: 22,
       fontWeight: '800',
       color: colors.textTitle,
-      lineHeight: 22,
-      marginBottom: 6,
     },
     pillRow: {
       flexDirection: 'row',
       gap: 6,
       alignItems: 'center',
+      marginBottom: 4,
     },
     formatPill: {
       backgroundColor: colors.chipBg,

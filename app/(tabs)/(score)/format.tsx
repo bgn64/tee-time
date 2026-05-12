@@ -121,15 +121,15 @@ export default function FormatScreen() {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>How are you scoring?</Text>
         {course && (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text style={styles.greeting} numberOfLines={1}>
             {course.name} ·{' '}
             {playerIds.length === 1
               ? 'solo'
               : `${playerIds.length} players`}
           </Text>
         )}
+        <Text style={styles.title}>How are you scoring?</Text>
 
         <View style={styles.toggleRow}>
           <Pressable
@@ -562,8 +562,14 @@ function makeStyles(colors: ThemeColors) {
     container: { flex: 1, backgroundColor: colors.background },
     scroll: { flex: 1 },
     scrollContent: { padding: 20, paddingBottom: 24 },
-    title: { fontSize: 22, fontWeight: '800', color: colors.textTitle },
-    subtitle: { fontSize: 12, color: colors.textMuted, marginTop: 2, marginBottom: 14 },
+    title: { fontSize: 22, fontWeight: '800', color: colors.textTitle, marginBottom: 14 },
+    greeting: {
+      fontSize: 12,
+      color: colors.textMuted,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      marginBottom: 4,
+    },
 
     toggleRow: {
       flexDirection: 'row',

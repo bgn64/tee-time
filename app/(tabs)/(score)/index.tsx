@@ -481,9 +481,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 12,
       color: colors.textMuted,
       fontWeight: '700',
-      marginBottom: 4,
-      textTransform: 'uppercase',
       letterSpacing: 0.5,
+      marginBottom: 4,
     },
     title: {
       fontSize: 22,
