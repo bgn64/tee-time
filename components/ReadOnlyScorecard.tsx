@@ -254,6 +254,7 @@ export function ReadOnlyScorecard({
         currentHoleNumber={currentHoleNumber}
         onHolePress={onHolePress}
         teesInPlay={teesInPlay}
+        courseTees={round.course.tees ?? []}
         showHcp={hasHcp}
       />
       {!hideFinalTotals && (
@@ -280,6 +281,12 @@ type SectionProps = {
   onHolePress?: (holeNumber: number) => void;
   /** Tees to render yardage rows for, longest-first. */
   teesInPlay: Array<{ id: string; name: string; color?: string; totalYardage?: number }>;
+  /**
+   * Full set of course-defined tees, used for scorer-row tee bars even
+   * when the tee has no per-hole yardages (and therefore is excluded
+   * from teesInPlay).
+   */
+  courseTees: Array<{ id: string; name: string; color?: string }>;
   /** Whether to render the HCP row (suppressed when no hole carries handicap_index). */
   showHcp: boolean;
 };
@@ -293,6 +300,7 @@ function NineSection({
   currentHoleNumber,
   onHolePress,
   teesInPlay,
+  courseTees,
   showHcp,
 }: SectionProps) {
   const parTotal = holes.reduce((t, h) => t + h.par, 0);
@@ -406,8 +414,12 @@ function NineSection({
 
       {/* SCORES — one row per scorer. */}
       {scorers.map((scorer) => {
+        // Look the scorer's tee up against the FULL course tee list,
+        // not the filtered yardage-having `teesInPlay` set — we want
+        // the left-edge bar to render even when the tee has no
+        // per-hole yardages (and therefore no yardage row above).
         const scorerTee = scorer.teeId
-          ? teesInPlay.find((t) => t.id === scorer.teeId)
+          ? courseTees.find((t) => t.id === scorer.teeId)
           : undefined;
         let nineRel = 0;
         let holesScored = 0;
