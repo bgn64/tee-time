@@ -31,6 +31,7 @@ import { CourseActionsSheet } from '@/components/CourseActionsSheet';
 import { RecentCoursesSheet, RecentCourseEntry } from '@/components/RecentCoursesSheet';
 import { confirm } from '@/lib/dialog';
 import { distanceMiles, formatMiles } from '@/lib/geo';
+import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useLocation } from '@/state/LocationContext';
@@ -70,6 +71,7 @@ function formatRelative(iso: string): string {
 
 export default function CourseSelectionScreen() {
   const { colors } = useTheme();
+  const { account } = useAccount();
   const {
     courses,
     completedRounds,
@@ -82,6 +84,16 @@ export default function CourseSelectionScreen() {
     ensureCourseScorecard,
   } = useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Recent-courses surfaces should mirror the Rounds-tab semantics: a
+  // course only counts as "recently played" if the viewer themselves
+  // scored a round there. RLS lets friends' rounds (and seeded fakes
+  // owned by the other test account) leak into `completedRounds`,
+  // which would otherwise pull their courses onto our recent list.
+  const myCompletedRounds = useMemo(() => {
+    if (!account?.userId) return completedRounds.filter((r) => !r.ownerUserId);
+    return completedRounds.filter((r) => r.ownerUserId === account.userId);
+  }, [completedRounds, account]);
 
   const [query, setQuery] = useState<string>('');
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
@@ -119,7 +131,7 @@ export default function CourseSelectionScreen() {
   // Decorate + sort every locally-known course by most-recent play.
   const decoratedAll = useMemo<RecentCourseEntry[]>(() => {
     return courses
-      .map((course) => ({ course, lastPlayedAt: lastPlayedAt(course.id, completedRounds) }))
+      .map((course) => ({ course, lastPlayedAt: lastPlayedAt(course.id, myCompletedRounds) }))
       .sort((a, b) => {
         if (a.lastPlayedAt && b.lastPlayedAt) {
           return a.lastPlayedAt < b.lastPlayedAt ? 1 : -1;
@@ -128,7 +140,7 @@ export default function CourseSelectionScreen() {
         if (b.lastPlayedAt) return 1;
         return a.course.name.localeCompare(b.course.name);
       });
-  }, [courses, completedRounds]);
+  }, [courses, myCompletedRounds]);
 
   // Recents = locally-known courses that have actually been played + any
   // custom courses the user created (whether played yet or not). Custom
@@ -213,7 +225,7 @@ export default function CourseSelectionScreen() {
     for (const course of remoteHits) {
       if (seen.has(course.id)) continue;
       seen.add(course.id);
-      out.push({ course, lastPlayedAt: lastPlayedAt(course.id, completedRounds) });
+      out.push({ course, lastPlayedAt: lastPlayedAt(course.id, myCompletedRounds) });
     }
     if (userCoords) {
       out.sort((a, b) => {
@@ -226,7 +238,7 @@ export default function CourseSelectionScreen() {
       });
     }
     return out;
-  }, [localHits, remoteHits, completedRounds, userCoords, distanceFor]);
+  }, [localHits, remoteHits, myCompletedRounds, userCoords, distanceFor]);
 
   const visibleList: RecentCourseEntry[] = searchActive
     ? searchEntries
