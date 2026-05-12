@@ -49,6 +49,19 @@ type Props = {
   onHolePress?: (holeNumber: number) => void;
   /** Suppress the bottom FINAL totals section (live scoring uses this). */
   hideFinalTotals?: boolean;
+  /**
+   * When provided, only render scorer rows whose id is in this list.
+   * For stroke rounds these are participant keys; for scramble they're
+   * team ids. Used by the feed card to render just the round-owner's
+   * perspective. Final totals row (if shown) is also filtered.
+   */
+  scorerIds?: string[];
+  /**
+   * Compact mode for embedding in feed cards. Drops the tee-yardage
+   * rows and the HCP row so the grid stays narrow. Score rows + par
+   * row + hole-number row remain.
+   */
+  compact?: boolean;
 };
 
 const TEE_COLOR_HEX: Record<string, string> = {
@@ -76,6 +89,8 @@ export function ReadOnlyScorecard({
   currentHoleNumber,
   onHolePress,
   hideFinalTotals,
+  scorerIds,
+  compact,
 }: Props) {
   const { colors } = useTheme();
   const { allPlayers } = usePlayers();
@@ -124,15 +139,11 @@ export function ReadOnlyScorecard({
   );
 
   const scorers: Scorer[] = useMemo(() => {
+    let raw: Scorer[];
     if (isScramble && round.teams) {
-      return round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
-    }
-    // For completed rounds we read from `participants` (built at
-    // completeCurrentRound time). For in-progress rounds that array is
-    // not yet populated, so fall back to playerIds + the local roster
-    // so the grid renders correctly during live scoring.
-    if (round.participants && round.participants.length > 0) {
-      return round.participants.map((p) => {
+      raw = round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
+    } else if (round.participants && round.participants.length > 0) {
+      raw = round.participants.map((p) => {
         const identity = resolveParticipantIdentity(p, {
           account,
           profileCache,
@@ -146,19 +157,25 @@ export function ReadOnlyScorecard({
           teeId: p.teeId,
         };
       });
+    } else {
+      raw = (round.playerIds ?? []).map((pid) => {
+        const local = allPlayers.find((p) => p.id === pid);
+        const isMe = !!local?.userId && account?.userId === local.userId;
+        return {
+          id: pid,
+          name: isMe
+            ? 'You'
+            : local?.displayName ?? local?.nickname ?? 'Player',
+          color: local?.color ?? colors.primary,
+        };
+      });
     }
-    return (round.playerIds ?? []).map((pid) => {
-      const local = allPlayers.find((p) => p.id === pid);
-      const isMe = !!local?.userId && account?.userId === local.userId;
-      return {
-        id: pid,
-        name: isMe
-          ? 'You'
-          : local?.displayName ?? local?.nickname ?? 'Player',
-        color: local?.color ?? colors.primary,
-      };
-    });
-  }, [round, isScramble, account, profileCache, allPlayers, colors.primary]);
+    if (scorerIds && scorerIds.length > 0) {
+      const allowed = new Set(scorerIds);
+      raw = raw.filter((s) => allowed.has(s.id));
+    }
+    return raw;
+  }, [round, isScramble, account, profileCache, allPlayers, colors.primary, scorerIds]);
 
   const front9 = useMemo(
     () => round.course.holes.filter((h) => h.number <= 9),
@@ -235,8 +252,8 @@ export function ReadOnlyScorecard({
         totalLabel={visibleTotalLabel}
         currentHoleNumber={currentHoleNumber}
         onHolePress={onHolePress}
-        teesInPlay={teesInPlay}
-        showHcp={hasHcp}
+        teesInPlay={compact ? [] : teesInPlay}
+        showHcp={hasHcp && !compact}
       />
       {!hideFinalTotals && (
         <View style={{ marginTop: 14 }}>

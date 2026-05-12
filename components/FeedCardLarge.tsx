@@ -1,25 +1,20 @@
 /**
  * FeedCardLarge — big social-style card used on the Feed tab.
  *
- * Layout:
- *   1. Bold colored band header (gradient using the owner's avatar
- *      color). Course name + location on the left, relative time +
- *      big +/− score on the right.
- *   2. Pills row — format (STROKE / SCRAMBLE), optional range pill
- *      (only when range !== 'all'), optional tee swatch pills (only
- *      when at least one participant has a teeId set, deduplicated by
- *      tee id).
- *   3. Optional caption block — hidden entirely when round.caption is
- *      empty.
- *   4. "With" / "Played" / "Teams" row — owner's avatar/name reads
- *      live from profileCache, other participants from roster + local
- *      snapshots. Solo rounds show "Played solo".
- *   5. Hole sparkline — one mini bar per active hole, color-coded by
- *      score relative to par (eagle/birdie/par/bogey/double+). Uses
- *      the viewer-perspective scorer (owner in stroke, owner's team
- *      in scramble). Hidden when no per-hole scores are available.
+ * Layout faithful to mockup B:
  *
- * No tap-through — the card is self-contained. Optional fields are
+ *   ┌──── colored band (owner's avatar_color gradient) ─────────┐
+ *   │ <Course Name>           (big)                             │
+ *   │ <City, State>           (small)                           │
+ *   │                                                           │
+ *   │ <handle> · <relative time>          <Strokes> <±score>    │
+ *   └───────────────────────────────────────────────────────────┘
+ *   pill row: STROKE/SCRAMBLE  · FRONT 9/BACK 9?  · tee swatches?
+ *   caption?    (only when round.caption is set)
+ *   ──── WITH / PLAYED / TEAMS · names / "solo round" ────
+ *   compact ReadOnlyScorecard (owner's row only, no yardage, no HCP)
+ *
+ * No tap-through; the card is self-contained. Optional fields are
  * silently skipped when missing.
  */
 
@@ -27,7 +22,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { formatRelativeTime, formatScore, holesInRange } from '@/lib/scoring';
+import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
+import {
+  formatRelativeTime,
+  formatScore,
+  getRoundTotalRelative,
+} from '@/lib/scoring';
 import { useTheme } from '@/state/ThemeContext';
 import type { Player, Round, RoundParticipant } from '@/types/golf';
 
@@ -49,8 +49,8 @@ type Props = {
 const DEFAULT_BAND = '#7cb342';
 
 /**
- * Dark / light variants of a hex color for the gradient stops.
- * Naive shading by clamping each RGB channel toward black/white.
+ * Naive RGB shading toward white (positive amount) or black (negative).
+ * Used to derive light + dark gradient stops from a single owner color.
  */
 function shade(hex: string, amount: number): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
@@ -60,12 +60,10 @@ function shade(hex: string, amount: number): string {
   let g = (n >> 8) & 0xff;
   let b = n & 0xff;
   if (amount >= 0) {
-    // Toward white.
     r = Math.round(r + (255 - r) * amount);
     g = Math.round(g + (255 - g) * amount);
     b = Math.round(b + (255 - b) * amount);
   } else {
-    // Toward black.
     const a = -amount;
     r = Math.round(r * (1 - a));
     g = Math.round(g * (1 - a));
@@ -98,23 +96,24 @@ export function FeedCardLarge({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  // Owner display data.
+  // ---- Owner ----
   const ownerProfile = round.ownerUserId ? profileCache[round.ownerUserId] : undefined;
   const ownerLocal = round.ownerUserId
     ? allPlayers.find((p) => p.userId === round.ownerUserId)
     : undefined;
-  const ownerName =
-    ownerProfile?.displayName ?? ownerLocal?.displayName ?? ownerLocal?.nickname ?? 'A friend';
-  const ownerHandle = ownerProfile?.handle ?? ownerLocal?.handle;
+  const ownerHandle =
+    ownerProfile?.handle ??
+    ownerLocal?.handle ??
+    ownerProfile?.displayName ??
+    ownerLocal?.displayName ??
+    ownerLocal?.nickname ??
+    'a friend';
   const ownerColor =
     ownerProfile?.avatarColor ?? ownerLocal?.color ?? DEFAULT_BAND;
-  const ownerInitial = ownerName[0]?.toUpperCase() ?? '?';
 
   const isScramble = round.scoringRule === 'scramble';
 
-  // Score = viewer-perspective. Stroke uses the owner's per-scorer total;
-  // scramble shows the owner's team total when we can find one, else the
-  // overall round total.
+  // ---- Owner-perspective scorer (used for score chip + scorecard row) ----
   const ownerParticipant = (round.participants ?? []).find(
     (p) => p.linkedUserId === round.ownerUserId
   );
@@ -122,34 +121,23 @@ export function FeedCardLarge({
     ? ownerParticipant?.teamId
     : ownerParticipant?.participantKey;
 
-  // Per-hole relative total used by both the score chip and sparkline.
-  const activeHoles = useMemo(
-    () => holesInRange(round.course.holes, round.holeRange),
-    [round.course.holes, round.holeRange]
-  );
-
-  const perHoleRel = useMemo(() => {
-    if (!ownerScorerId) return [] as Array<{ hole: number; rel: number }>;
-    const byHole = new Map<number, number>();
+  // Total strokes + relative to par from the viewer-perspective scorer.
+  const totalRel = ownerScorerId
+    ? getRoundTotalRelative(round, ownerScorerId)
+    : getRoundTotalRelative(round);
+  const totalStrokes = useMemo(() => {
+    let sum = 0;
     for (const s of round.scores) {
-      if (s.scorerId !== ownerScorerId) continue;
+      if (ownerScorerId && s.scorerId !== ownerScorerId) continue;
       const hole = round.course.holes.find((h) => h.number === s.holeNumber);
       if (!hole) continue;
-      byHole.set(s.holeNumber, s.strokes - hole.par);
+      // Honor hole-range filtering.
+      if (round.holeRange === 'front9' && s.holeNumber > 9) continue;
+      if (round.holeRange === 'back9' && s.holeNumber <= 9) continue;
+      sum += s.strokes;
     }
-    return activeHoles
-      .map((h) => {
-        const rel = byHole.get(h.number);
-        return rel == null ? null : { hole: h.number, rel };
-      })
-      .filter((v): v is { hole: number; rel: number } => v !== null);
-  }, [round.scores, round.course.holes, activeHoles, ownerScorerId]);
-
-  const totalRel = perHoleRel.reduce((sum, p) => sum + p.rel, 0);
-  const totalStrokes = perHoleRel.reduce((sum, p) => {
-    const hole = round.course.holes.find((h) => h.number === p.hole);
-    return sum + (hole ? hole.par + p.rel : 0);
-  }, 0);
+    return sum;
+  }, [round.scores, round.course.holes, round.holeRange, ownerScorerId]);
 
   const dateLabel = formatRelativeTime(round.completedAt ?? round.startedAt);
   const location = round.course.location;
@@ -245,11 +233,8 @@ export function FeedCardLarge({
     );
   }
 
-  // ---- Sparkline ----
-  const sparkBars = perHoleRel.length > 0;
-
-  // Band gradient stops derived from owner color.
-  const gradientStart = shade(ownerColor, -0.18);
+  // Band gradient stops from owner color.
+  const gradientStart = shade(ownerColor, -0.22);
   const gradientEnd = shade(ownerColor, 0.05);
 
   return (
@@ -259,24 +244,6 @@ export function FeedCardLarge({
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.band}>
-        <View style={styles.bandTopRow}>
-          <View style={styles.ownerChip}>
-            <View style={[styles.ownerAv, { backgroundColor: ownerColor }]}>
-              <Text style={styles.ownerAvText}>{ownerInitial}</Text>
-            </View>
-            <View style={styles.ownerNameBlock}>
-              <Text style={styles.ownerName} numberOfLines={1}>
-                {ownerName}
-              </Text>
-              {ownerHandle ? (
-                <Text style={styles.ownerHandle} numberOfLines={1}>
-                  @{ownerHandle}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-          <Text style={styles.bandWhen}>{dateLabel}</Text>
-        </View>
         <Text style={styles.bandCourse} numberOfLines={2}>
           {round.course.name}
         </Text>
@@ -285,13 +252,18 @@ export function FeedCardLarge({
             {location}
           </Text>
         ) : null}
-        <View style={styles.bandScoreRow}>
-          <Text style={styles.bandScoreLine}>
-            {totalStrokes > 0 ? `${totalStrokes}` : '—'}
-            <Text style={styles.bandScoreSuffix}>
-              {totalStrokes > 0 ? `  ${formatScore(totalRel)}` : ''}
-            </Text>
+        <View style={styles.bandBottomRow}>
+          <Text style={styles.bandByLine} numberOfLines={1}>
+            {ownerHandle} · {dateLabel}
           </Text>
+          <View style={styles.bandScoreBlock}>
+            <Text style={styles.bandStrokes}>
+              {totalStrokes > 0 ? totalStrokes : '—'}
+            </Text>
+            {totalStrokes > 0 ? (
+              <Text style={styles.bandRel}>{formatScore(totalRel)}</Text>
+            ) : null}
+          </View>
         </View>
       </LinearGradient>
 
@@ -324,35 +296,21 @@ export function FeedCardLarge({
           ))}
         </View>
 
-        {round.caption ? (
-          <Text style={styles.caption}>{round.caption}</Text>
-        ) : null}
+        {round.caption ? <Text style={styles.caption}>{round.caption}</Text> : null}
 
         <View style={styles.companyRow}>
           <Text style={styles.companyLabel}>{companyLabel}</Text>
           {companyBody}
         </View>
 
-        {sparkBars ? (
-          <View style={styles.sparkWrap}>
-            {perHoleRel.map(({ hole, rel }) => {
-              let cls: keyof ReturnType<typeof makeStyles> = 'sparkPar';
-              if (rel <= -2) cls = 'sparkEagle';
-              else if (rel === -1) cls = 'sparkBirdie';
-              else if (rel === 0) cls = 'sparkPar';
-              else if (rel === 1) cls = 'sparkBogey';
-              else if (rel >= 2) cls = 'sparkDouble';
-              return (
-                <View
-                  key={hole}
-                  style={[
-                    styles.sparkBar,
-                    styles[cls] as object,
-                    activeHoles.length > 9 && styles.sparkBarTight,
-                  ]}
-                />
-              );
-            })}
+        {ownerScorerId ? (
+          <View style={styles.scorecardWrap}>
+            <ReadOnlyScorecard
+              round={round}
+              scorerIds={[ownerScorerId]}
+              compact
+              hideFinalTotals
+            />
           </View>
         ) : null}
       </View>
@@ -370,89 +328,56 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       overflow: 'hidden',
       marginBottom: 14,
     },
+
+    // ---- Band ----
     band: {
       paddingHorizontal: 16,
-      paddingTop: 12,
-      paddingBottom: 16,
-    },
-    bandTopRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      gap: 8,
-      marginBottom: 10,
-    },
-    ownerChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      flex: 1,
-      minWidth: 0,
-    },
-    ownerAv: {
-      width: 34,
-      height: 34,
-      borderRadius: 17,
-      borderWidth: 2,
-      borderColor: 'rgba(255,255,255,0.85)',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    ownerAvText: {
-      color: '#ffffff',
-      fontSize: 13,
-      fontWeight: '800',
-    },
-    ownerNameBlock: {
-      flex: 1,
-      minWidth: 0,
-    },
-    ownerName: {
-      color: '#ffffff',
-      fontSize: 13,
-      fontWeight: '800',
-    },
-    ownerHandle: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 11,
-      fontWeight: '600',
-      marginTop: 1,
-    },
-    bandWhen: {
-      color: 'rgba(255,255,255,0.9)',
-      fontSize: 11,
-      fontWeight: '700',
-      letterSpacing: 0.3,
+      paddingTop: 14,
+      paddingBottom: 14,
     },
     bandCourse: {
       color: '#ffffff',
-      fontSize: 19,
+      fontSize: 20,
       fontWeight: '800',
-      lineHeight: 23,
+      lineHeight: 24,
     },
     bandLocation: {
       color: 'rgba(255,255,255,0.85)',
-      fontSize: 12,
+      fontSize: 12.5,
       marginTop: 2,
       fontWeight: '500',
     },
-    bandScoreRow: {
+    bandBottomRow: {
       flexDirection: 'row',
       alignItems: 'flex-end',
-      marginTop: 10,
+      justifyContent: 'space-between',
+      gap: 12,
+      marginTop: 14,
     },
-    bandScoreLine: {
-      color: '#ffffff',
-      fontSize: 30,
-      fontWeight: '800',
-      lineHeight: 32,
-    },
-    bandScoreSuffix: {
-      fontSize: 15,
+    bandByLine: {
+      flex: 1,
+      color: 'rgba(255,255,255,0.92)',
+      fontSize: 12.5,
       fontWeight: '700',
-      color: 'rgba(255,255,255,0.85)',
+    },
+    bandScoreBlock: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      gap: 6,
+    },
+    bandStrokes: {
+      color: '#ffffff',
+      fontSize: 28,
+      fontWeight: '800',
+      lineHeight: 30,
+    },
+    bandRel: {
+      color: 'rgba(255,255,255,0.9)',
+      fontSize: 14,
+      fontWeight: '800',
     },
 
+    // ---- Body ----
     body: {
       paddingHorizontal: 16,
       paddingTop: 12,
@@ -537,26 +462,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '600',
     },
 
-    sparkWrap: {
-      flexDirection: 'row',
-      gap: 2,
+    scorecardWrap: {
       marginTop: 14,
       paddingTop: 12,
       borderTopWidth: 1,
       borderTopColor: colors.border,
     },
-    sparkBar: {
-      flex: 1,
-      height: 22,
-      borderRadius: 2,
-    },
-    sparkBarTight: {
-      height: 18,
-    },
-    sparkPar:    { backgroundColor: colors.chipBg },
-    sparkBirdie: { backgroundColor: '#c7e7c8' },
-    sparkEagle:  { backgroundColor: '#5cb85c' },
-    sparkBogey:  { backgroundColor: '#f6e0c2' },
-    sparkDouble: { backgroundColor: '#f3a06b' },
   });
 }
