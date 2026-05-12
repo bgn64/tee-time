@@ -145,14 +145,16 @@ export default function ScoringScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.titleBar}>
+        <View style={styles.titleBlock}>
           <Text style={styles.title} numberOfLines={1}>
             {currentRound.course.name}
           </Text>
-          <View style={styles.formatPill}>
-            <Text style={styles.formatPillText}>
-              {isScramble ? 'SCRAMBLE' : 'STROKE'}
-            </Text>
+          <View style={styles.pillRow}>
+            <View style={styles.formatPill}>
+              <Text style={styles.formatPillText}>
+                {isScramble ? 'SCRAMBLE' : 'STROKE'}
+              </Text>
+            </View>
           </View>
         </View>
 
@@ -258,25 +260,26 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       padding: 14,
       paddingBottom: 32,
     },
-    titleBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
+    titleBlock: {
       marginBottom: 8,
     },
     title: {
-      flex: 1,
       fontSize: 19,
       fontWeight: '800',
       color: colors.textTitle,
       lineHeight: 22,
+      marginBottom: 6,
+    },
+    pillRow: {
+      flexDirection: 'row',
+      gap: 6,
+      alignItems: 'center',
     },
     formatPill: {
       backgroundColor: colors.chipBg,
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 6,
-      flexShrink: 0,
     },
     formatPillText: {
       fontSize: 9.5,

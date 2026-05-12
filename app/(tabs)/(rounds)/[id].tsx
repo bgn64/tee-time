@@ -216,14 +216,16 @@ export default function RoundDetailScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <View style={styles.titleBar}>
+      <View style={styles.titleBlock}>
         <Text style={styles.title} numberOfLines={1}>
           {round.course.name}
         </Text>
-        <View style={styles.formatPill}>
-          <Text style={styles.formatPillText}>
-            {isScramble ? 'SCRAMBLE' : 'STROKE'}
-          </Text>
+        <View style={styles.pillRow}>
+          <View style={styles.formatPill}>
+            <Text style={styles.formatPillText}>
+              {isScramble ? 'SCRAMBLE' : 'STROKE'}
+            </Text>
+          </View>
         </View>
       </View>
       <Text style={styles.subtitle}>
@@ -313,24 +315,26 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     content: { padding: 20, paddingBottom: 60 },
-    titleBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
+    titleBlock: {
+      marginBottom: 4,
     },
     title: {
-      flex: 1,
       fontSize: 19,
       fontWeight: '800',
       color: colors.textTitle,
       lineHeight: 22,
+      marginBottom: 6,
+    },
+    pillRow: {
+      flexDirection: 'row',
+      gap: 6,
+      alignItems: 'center',
     },
     formatPill: {
       backgroundColor: colors.chipBg,
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 6,
-      flexShrink: 0,
     },
     formatPillText: {
       fontSize: 9.5,
