@@ -61,6 +61,8 @@ type GolfRoundContextValue = {
   setCustomHoleScore: (scorerId: string, holeNumber: number, strokes: number) => void;
   goToPreviousHole: () => void;
   goToNextHole: () => void;
+  /** Jump to an arbitrary hole within the current round (clamped to [1, holes.length]). */
+  setCurrentHole: (holeNumber: number) => void;
   completeCurrentRound: () => void;
   abandonCurrentRound: () => void;
   /**
@@ -552,7 +554,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   /**
    * Build the participants[] inline jsonb for a freshly completed Round
    * from the local roster. Linked participants get NO snapshot
-   * (name/color render live from profile); unlinked participants snapshot
+   * (name/color render live from profile); local participants snapshot
    * the nickname and color captured at completion time.
    */
   const buildParticipants = useCallback((round: Round): RoundParticipant[] => {
@@ -579,8 +581,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         out.push({
           participantKey: playerId,
           teamId,
-          unlinkedDisplayName: p.nickname,
-          unlinkedDisplayColor: p.color,
+          localDisplayName: p.nickname,
+          localDisplayColor: p.color,
         });
       }
     }
@@ -831,6 +833,13 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             ...round,
             currentHoleNumber: Math.min(round.course.holes.length, round.currentHoleNumber + 1),
           };
+        });
+      },
+      setCurrentHole: (holeNumber) => {
+        setCurrentRound((round) => {
+          if (!round) throw new Error('Cannot set current hole without a current round.');
+          const clamped = Math.max(1, Math.min(round.course.holes.length, holeNumber));
+          return { ...round, currentHoleNumber: clamped };
         });
       },
       completeCurrentRound: () => {

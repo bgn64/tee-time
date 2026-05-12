@@ -1,29 +1,36 @@
 /**
- * Round detail screen (v7).
+ * Round detail screen.
  *
- * The canonical view for inspecting and editing a Round. The Round belongs
- * solely to its scorer — only the owner can edit any scoreline or delete
- * the Round.
+ * The canonical view for inspecting and editing a completed Round. A Round
+ * belongs solely to its scorer — only the owner can edit any scoreline or
+ * delete the Round.
  *
- * Behavior:
- *   - Owner: header "Edit" chip toggles edit mode on every scoreline. A
- *     "Delete this round" button sits at the bottom of the screen.
- *   - Non-owner (friend-of-owner viewer): pure read-only.
+ * Read-only view:
+ *   - Tappable cells do nothing. Just shows the grid + final-totals box.
+ *   - Owner sees a "Delete this round" button at the bottom.
  *
- * Editing UX:
- *   - "Edit" chip in the header's right slot toggles edit mode on/off.
- *   - In edit mode every scoreline's cells get a green tint and become
- *     tappable. Tap a cell to select it (dashed outline). The inline
- *     keypad below the scorecard becomes active; quick-pick chips or the
- *     stepper change the selected cell's score. Tap "Save" to flush.
+ * Edit mode (owner only):
+ *   - "Edit" chip in the header toggles edit mode on. The screen flips to
+ *     the same unified layout used by live scoring: HoleNavBar + per-
+ *     scorer ScoreEntryRow + the same scorecard grid (now showing a
+ *     current-hole highlight, with cell taps jumping to that hole) +
+ *     final-totals box that updates live as edits are made.
+ *   - "Save" chip flushes the pending edits via `commitScoreEdits`.
+ *   - Tapping back exits without saving (matches today's behavior).
+ *
+ * Scramble rounds use team rows in both the entry block (edit mode) and
+ * the grid. The standalone "Team Rosters" section that used to live
+ * below the grid was dropped under the unified-scoring pass — the
+ * final-totals box conveys the same info.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { InlineScoreKeypad } from '@/components/InlineScoreKeypad';
+import { HoleNavBar } from '@/components/HoleNavBar';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
+import { ScoreEntryRow } from '@/components/ScoreEntryRow';
 import { OPENGOLF_ATTRIBUTION } from '@/lib/attribution';
 import { confirm, showAlert } from '@/lib/dialog';
 import { resolveParticipantIdentity } from '@/lib/participantIdentity';
@@ -52,7 +59,8 @@ export default function RoundDetailScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [editMode, setEditMode] = useState(false);
-  const [selected, setSelected] = useState<{ scorerId: string; holeNumber: number } | null>(null);
+  // The current hole shown in the entry block (only relevant in edit mode).
+  const [editingHole, setEditingHole] = useState<number>(1);
   // Buffer of in-flight edits while in edit mode. Mirrored to a ref
   // because the header slot's onPress captures handleSave from the render
   // at which edit mode was entered; without the ref, the captured closure
@@ -72,17 +80,18 @@ export default function RoundDetailScreen() {
   const isOwner = !!(round && myUserId && round.ownerUserId === myUserId);
   const isScramble = round?.scoringRule === 'scramble';
 
-  // Owner-only edit-rights: the full list of scorer IDs is editable. For
-  // scramble that's the set of team IDs; for stroke it's the set of
-  // participantKeys. Computed via useMemo so the useEffect below (which
-  // reads it on editMode transitions) sees a stable value.
-  const editableScorerList = useMemo<Array<{ id: string; name: string; color: string }>>(() => {
+  // Per-scorer list used by the edit-mode entry rows. For scramble that's
+  // the set of teams; for stroke it's resolved-identity participant rows
+  // (live name/color from profileCache when available).
+  type EditScorer = { id: string; name: string; color: string; letter: string };
+  const editableScorerList = useMemo<EditScorer[]>(() => {
     if (!round || !isOwner) return [];
     if (isScramble && round.teams) {
       return round.teams.map((team) => ({
         id: team.id,
         name: team.name,
         color: team.color,
+        letter: team.name[0]?.toUpperCase() ?? '?',
       }));
     }
     return (round.participants ?? []).map((p) => {
@@ -95,14 +104,10 @@ export default function RoundDetailScreen() {
         id: p.participantKey,
         name: identity.displayName,
         color: identity.color ?? colors.primary,
+        letter: identity.displayName[0]?.toUpperCase() ?? '?',
       };
     });
   }, [round, isOwner, isScramble, account, profileCache, allPlayers, colors.primary]);
-
-  const editableScorerIds = useMemo(
-    () => new Set(editableScorerList.map((s) => s.id)),
-    [editableScorerList]
-  );
 
   const handleSave = useCallback(async () => {
     if (savingRef.current) return;
@@ -111,7 +116,6 @@ export default function RoundDetailScreen() {
     const entries: Array<[string, number]> = Object.entries(buffer);
     if (entries.length === 0 || !currentRound) {
       setEditMode(false);
-      setSelected(null);
       setPendingEdits({});
       return;
     }
@@ -137,7 +141,6 @@ export default function RoundDetailScreen() {
       return;
     }
     setEditMode(false);
-    setSelected(null);
     setPendingEdits({});
   }, [commitScoreEdits]);
 
@@ -153,6 +156,7 @@ export default function RoundDetailScreen() {
               handleSave();
             } else {
               setEditMode(true);
+              setEditingHole(1);
               setPendingEdits({});
             }
           },
@@ -160,30 +164,10 @@ export default function RoundDetailScreen() {
       : { kind: 'profile' },
   });
 
-  // Seed selection when entering edit mode; clear it on exit.
-  useEffect(() => {
-    if (editMode) {
-      if (!selected && editableScorerList.length > 0) {
-        setSelected({ scorerId: editableScorerList[0].id, holeNumber: 1 });
-      }
-    } else if (selected) {
-      setSelected(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editMode]);
-
-  const handleCellPress = useCallback(
-    (scorerId: string, holeNumber: number) => {
-      if (!editMode) return;
-      setSelected({ scorerId, holeNumber });
-    },
-    [editMode]
-  );
-
   // displayRound merges pendingEdits into round.scores so the scorecard
-  // and selectedScore lookup both reflect unsaved edits while in edit
-  // mode. Returns undefined when round is missing so the early-return
-  // below can short-circuit without unbalancing hook count.
+  // and entry rows both reflect unsaved edits while in edit mode. Returns
+  // undefined when round is missing so the early-return below can short-
+  // circuit without unbalancing hook count.
   const displayRound = useMemo(() => {
     if (!round) return undefined;
     if (!editMode || Object.keys(pendingEdits).length === 0) return round;
@@ -204,27 +188,12 @@ export default function RoundDetailScreen() {
     return { ...round, scores: merged };
   }, [round, editMode, pendingEdits]);
 
-  const handleHoleChange = useCallback(
-    (next: number) => {
-      if (!selected) return;
-      setSelected({ scorerId: selected.scorerId, holeNumber: next });
-    },
-    [selected]
-  );
-
-  const handleScorerSelect = useCallback((sid: string) => {
-    setSelected((prev) =>
-      prev ? { scorerId: sid, holeNumber: prev.holeNumber } : { scorerId: sid, holeNumber: 1 }
-    );
-  }, []);
-
-  const handleKeypadChange = useCallback(
-    (strokes: number) => {
-      if (!selected) return;
-      const key = `${selected.scorerId}::${selected.holeNumber}`;
+  const setEntryScore = useCallback(
+    (scorerId: string, holeNumber: number, strokes: number) => {
+      const key = `${scorerId}::${holeNumber}`;
       setPendingEdits((prev) => ({ ...prev, [key]: strokes }));
     },
-    [selected]
+    []
   );
 
   // -- Early return AFTER every hook so React's hook-order invariant
@@ -241,20 +210,23 @@ export default function RoundDetailScreen() {
   }
 
   const maxHole = round.course.holes.length;
-  const selectedHole = selected
-    ? round.course.holes.find((h) => h.number === selected.holeNumber)
-    : undefined;
-  const selectedScore = selected
-    ? displayRound.scores.find(
-        (s) => s.scorerId === selected.scorerId && s.holeNumber === selected.holeNumber
-      )
+  const currentEditHole = editMode
+    ? round.course.holes.find((h) => h.number === editingHole)
     : undefined;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>{round.course.name}</Text>
+      <View style={styles.titleBar}>
+        <Text style={styles.title} numberOfLines={1}>
+          {round.course.name}
+        </Text>
+        <View style={styles.formatPill}>
+          <Text style={styles.formatPillText}>
+            {isScramble ? 'SCRAMBLE' : 'STROKE'}
+          </Text>
+        </View>
+      </View>
       <Text style={styles.subtitle}>
-        {isScramble ? 'Scramble' : 'Stroke'} ·{' '}
         {buildRoundTitle(round, myUserId, (uid) => {
           if (uid === account?.userId) return account.displayName;
           const prof = profileCache[uid];
@@ -262,52 +234,50 @@ export default function RoundDetailScreen() {
           const local = allPlayers.find((p) => p.userId === uid);
           return local?.displayName ?? local?.nickname;
         })}{' '}· {formatDate(round.completedAt ?? round.startedAt)}
+        {editMode ? '  ·  editing' : ''}
       </Text>
+
+      {editMode && currentEditHole && (
+        <>
+          <HoleNavBar
+            holeNumber={currentEditHole.number}
+            par={currentEditHole.par}
+            yardage={currentEditHole.yardage}
+            maxHole={maxHole}
+            onChange={setEditingHole}
+          />
+          <View style={styles.entryCard}>
+            {editableScorerList.map((s, i) => {
+              const score = displayRound.scores.find(
+                (sc) =>
+                  sc.scorerId === s.id && sc.holeNumber === currentEditHole.number
+              );
+              return (
+                <View key={s.id} style={i > 0 ? styles.entryRowSep : undefined}>
+                  <ScoreEntryRow
+                    avatarLetter={s.letter}
+                    avatarColor={s.color}
+                    name={s.name}
+                      holeNumber={currentEditHole.number}
+                      par={currentEditHole.par}
+                      strokes={score ? score.strokes : null}
+                    onChange={(strokes) =>
+                      setEntryScore(s.id, currentEditHole.number, strokes)
+                    }
+                  />
+                </View>
+              );
+            })}
+          </View>
+          <Text style={styles.gridHint}>Tap any hole to jump</Text>
+        </>
+      )}
 
       <ReadOnlyScorecard
         round={displayRound}
-        editableScorerIds={editMode ? editableScorerIds : undefined}
-        editingScorerId={editMode ? selected?.scorerId : undefined}
-        editingHoleNumber={editMode ? selected?.holeNumber : undefined}
-        onCellPress={editMode ? handleCellPress : undefined}
+        currentHoleNumber={editMode ? editingHole : undefined}
+        onHolePress={editMode ? setEditingHole : undefined}
       />
-
-      {isScramble && round.teams && (
-        <View style={styles.rosterCard}>
-          <Text style={styles.rosterHead}>TEAM ROSTERS</Text>
-          {round.teams.map((team) => {
-            const members = (round.participants ?? []).filter((p) => p.teamId === team.id);
-            return (
-              <View key={team.id} style={styles.rosterRow}>
-                <View style={[styles.teamDot, { backgroundColor: team.color }]} />
-                <Text style={styles.rosterTeam}>{team.name}</Text>
-                <Text style={styles.rosterMembers}>
-                  {members
-                    .map((m) =>
-                      resolveParticipantIdentity(m, { account, profileCache, allPlayers })
-                        .displayName
-                    )
-                    .join(' · ')}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-      )}
-
-      {editMode && (
-        <InlineScoreKeypad
-          par={selectedHole?.par ?? 4}
-          strokes={selectedScore?.strokes ?? null}
-          holeNumber={selected?.holeNumber ?? 1}
-          maxHole={maxHole}
-          onHoleChange={handleHoleChange}
-          scorers={editableScorerList}
-          selectedScorerId={selected?.scorerId}
-          onScorerSelect={handleScorerSelect}
-          onChange={handleKeypadChange}
-        />
-      )}
 
       {!editMode && isOwner ? (
         <Pressable
@@ -343,27 +313,54 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     content: { padding: 20, paddingBottom: 60 },
-    title: { fontSize: 18, fontWeight: '800', color: colors.textTitle },
-    subtitle: { fontSize: 11.5, color: colors.textMuted, marginTop: 2, marginBottom: 12 },
-    rosterCard: {
-      backgroundColor: colors.cardBg,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: 11,
-      padding: 11,
-      marginTop: 8,
+    titleBar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
     },
-    rosterHead: {
+    title: {
+      flex: 1,
+      fontSize: 19,
+      fontWeight: '800',
+      color: colors.textTitle,
+      lineHeight: 22,
+    },
+    formatPill: {
+      backgroundColor: colors.chipBg,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      flexShrink: 0,
+    },
+    formatPillText: {
       fontSize: 9.5,
       fontWeight: '800',
+      letterSpacing: 0.6,
+      color: colors.primaryDark,
+    },
+    subtitle: { fontSize: 11.5, color: colors.textMuted, marginTop: 2, marginBottom: 12 },
+    entryCard: {
+      backgroundColor: colors.cardBg,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 10,
+      marginBottom: 12,
+    },
+    entryRowSep: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+      marginTop: 3,
+      paddingTop: 3,
+    },
+    gridHint: {
+      fontSize: 10,
+      fontWeight: '700',
       letterSpacing: 0.5,
       color: colors.textMuted,
       marginBottom: 6,
+      marginLeft: 4,
     },
-    rosterRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 },
-    teamDot: { width: 10, height: 10, borderRadius: 5 },
-    rosterTeam: { fontSize: 11.5, fontWeight: '800', color: colors.textTitle, minWidth: 50 },
-    rosterMembers: { flex: 1, fontSize: 11.5, color: colors.textMuted },
     dangerBtn: {
       marginTop: 14,
       borderWidth: 1,

@@ -1,18 +1,22 @@
 /**
- * People tab landing — Friends-primary list.
+ * Friends list — reached by drill-in from the You tab's "Friends" row.
  *
- * Under the v6 redesign the People tab has no segmented control. Friends
- * are the primary content. Unlinked players surface only as a subtle
- * "drawer-link" card at the bottom of the list when there's at least one
- * unlinked entry; if zero, the drawer-link is hidden entirely.
+ * Friends are the sole user-facing content. Local players (roster rows
+ * without a linked user account) are intentionally invisible here: they
+ * exist in the backend so stats and avatar colors stay consistent for
+ * recurring non-app guests, but they are not browsable as an entity from
+ * any top-level surface. See plan.md (Path 3a) for rationale.
  *
- * Pinned at the top: incoming friend-request banner, when applicable.
+ * Pinned at the top: the shared IncomingRequestsBanner, when applicable.
+ * The same banner also lives on the Feed tab so users always see pending
+ * requests at the moment they open the app.
  */
 
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -25,20 +29,18 @@ function roundsTogether(playerId: string, rounds: Round[]): number {
   return rounds.filter((r) => r.playerIds.includes(playerId)).length;
 }
 
-export default function PeopleScreen() {
+export default function FriendsScreen() {
   const { colors } = useTheme();
-  const { allPlayers, defaultPlayerId } = usePlayers();
+  const { allPlayers } = usePlayers();
   const { completedRounds } = useGolfRound();
   const { account } = useAccount();
-  const { friends, incomingRequests, acceptIncomingRequest, declineIncomingRequest } = useSocial();
+  const { friends } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
-    left: { kind: 'text', text: 'PEOPLE' },
+    left: { kind: 'back', label: 'You', onPress: () => router.back() },
     right: { kind: 'profile' },
   });
-
-  const friendsSet = useMemo(() => new Set(friends), [friends]);
 
   // Friend rows: dedupe by userId, prefer the most-played-with roster entry.
   const friendRows = useMemo(() => {
@@ -55,59 +57,12 @@ export default function PeopleScreen() {
       .sort((a, b) => a.player.nickname.localeCompare(b.player.nickname));
   }, [friends, allPlayers, completedRounds]);
 
-  // Unlinked players = roster entries with no userId (and not the default
-  // player, which represents the user themselves).
-  const unlinkedCount = useMemo(() => {
-    return allPlayers.filter(
-      (p) =>
-        p.id !== defaultPlayerId &&
-        !(p.userId && friendsSet.has(p.userId))
-    ).length;
-  }, [allPlayers, defaultPlayerId, friendsSet]);
-
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.title}>Friends</Text>
 
-        {/* Incoming friend-request banner. */}
-        {incomingRequests.length > 0 && (
-          <View style={styles.requestBanner}>
-            <Text style={styles.requestBannerHead}>
-              ⏳  {incomingRequests.length === 1
-                ? '1 FRIEND REQUEST'
-                : `${incomingRequests.length} FRIEND REQUESTS`}
-            </Text>
-            {incomingRequests.map((req) => (
-              <View key={req.id} style={styles.requestRow}>
-                <View style={[styles.requestAvatar, { backgroundColor: req.fromAvatarColor }]}>
-                  <Text style={styles.requestAvatarText}>
-                    {req.fromDisplayName[0]?.toUpperCase()}
-                  </Text>
-                </View>
-                <View style={styles.requestInfo}>
-                  <Text style={styles.requestFrom} numberOfLines={1}>
-                    <Text style={styles.requestFromBold}>{req.fromDisplayName}</Text>{' '}
-                    <Text style={styles.requestHandle}>@{req.fromHandle}</Text>
-                  </Text>
-                  <Text style={styles.requestSubtext}>wants to be friends</Text>
-                </View>
-                <View style={styles.requestActions}>
-                  <Pressable
-                    style={[styles.requestBtn, styles.requestBtnDanger]}
-                    onPress={() => declineIncomingRequest(req.id)}>
-                    <Text style={styles.requestBtnDangerText}>Decline</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.requestBtn, styles.requestBtnPrimary]}
-                    onPress={() => acceptIncomingRequest(req.id)}>
-                    <Text style={styles.requestBtnPrimaryText}>Confirm</Text>
-                  </Pressable>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
+        <IncomingRequestsBanner />
 
         {!account ? (
           <View style={styles.emptyWrap}>
@@ -131,7 +86,7 @@ export default function PeopleScreen() {
             </Text>
             <Pressable
               style={styles.emptyCta}
-              onPress={() => router.push('/(tabs)/(people)/search')}>
+              onPress={() => router.push('/(tabs)/(you)/friends/search')}>
               <Text style={styles.emptyCtaText}>+  Find friends</Text>
             </Pressable>
           </View>
@@ -142,7 +97,7 @@ export default function PeopleScreen() {
                 key={player.userId ?? player.id}
                 onPress={() =>
                   router.push({
-                    pathname: '/(tabs)/(people)/[id]',
+                    pathname: '/(tabs)/(you)/friends/[id]',
                     params: { id: player.id },
                   })
                 }
@@ -167,23 +122,10 @@ export default function PeopleScreen() {
             ))}
             <Pressable
               style={styles.findFriendsRow}
-              onPress={() => router.push('/(tabs)/(people)/search')}>
+              onPress={() => router.push('/(tabs)/(you)/friends/search')}>
               <Text style={styles.findFriendsText}>+  Find more friends</Text>
             </Pressable>
           </>
-        )}
-
-        {/* Unlinked drawer-link, hidden entirely when count = 0. */}
-        {account && unlinkedCount > 0 && (
-          <Pressable
-            style={styles.drawerLink}
-            onPress={() => router.push('/(tabs)/(people)/unlinked')}>
-            <Text style={styles.drawerLinkLabel}>
-              👤  Unlinked players
-              <Text style={styles.drawerLinkCount}>  · {unlinkedCount}</Text>
-            </Text>
-            <Text style={styles.drawerLinkChev}>›</Text>
-          </Pressable>
         )}
       </ScrollView>
     </View>
@@ -231,19 +173,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
     },
     findFriendsText: { fontSize: 13, fontWeight: '700', color: colors.textMuted },
-    drawerLink: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginTop: 14,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      backgroundColor: colors.chipBg,
-      borderRadius: 10,
-    },
-    drawerLinkLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '700' },
-    drawerLinkCount: { fontWeight: '800' },
-    drawerLinkChev: { fontSize: 16, color: colors.textMuted, opacity: 0.6 },
     emptyWrap: { alignItems: 'center', gap: 6, paddingTop: 56, paddingHorizontal: 20 },
     emptyIcon: { fontSize: 36, marginBottom: 4, opacity: 0.6 },
     emptyTitle: { fontSize: 14, fontWeight: '800', color: colors.textTitle },
@@ -262,40 +191,5 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 10,
     },
     emptyCtaText: { color: '#ffffff', fontWeight: '800', fontSize: 13 },
-    requestBanner: {
-      backgroundColor: '#fff8e7',
-      borderColor: '#f5e0b8',
-      borderWidth: 1,
-      borderRadius: 12,
-      padding: 12,
-      marginBottom: 12,
-    },
-    requestBannerHead: {
-      fontSize: 10,
-      fontWeight: '800',
-      color: colors.accent,
-      letterSpacing: 0.6,
-      marginBottom: 8,
-    },
-    requestRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
-    requestAvatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    requestAvatarText: { color: '#ffffff', fontWeight: '800', fontSize: 12 },
-    requestInfo: { flex: 1, minWidth: 0 },
-    requestFrom: { fontSize: 12, color: '#6b5a3a' },
-    requestFromBold: { color: colors.textTitle, fontWeight: '800' },
-    requestHandle: { color: colors.primaryDark, fontWeight: '700' },
-    requestSubtext: { fontSize: 10.5, color: '#8a7656', marginTop: 1 },
-    requestActions: { flexDirection: 'row', gap: 6 },
-    requestBtn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 7 },
-    requestBtnDanger: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#e0d0a8' },
-    requestBtnDangerText: { color: '#7c6b4f', fontSize: 11, fontWeight: '800' },
-    requestBtnPrimary: { backgroundColor: colors.primary },
-    requestBtnPrimaryText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
   });
 }

@@ -1,6 +1,28 @@
 # Tee Time — implementation status & follow-ups
 
-> **v7 simplification (current).** A Round now belongs solely to its
+> **v9 (People → You reshape, current).** The dedicated People tab has
+> been dissolved into the existing You tab. Bottom bar drops from five
+> tabs to four (Feed · Rounds · Score · You). The friends list, search,
+> confirm-request, and per-friend detail now live under the renamed
+> `(you)/friends` nested stack, reached by drill-in from a new "Friends · N"
+> row on the You-tab landing. Incoming friend requests surface in two
+> places: a pinned `IncomingRequestsBanner` at the top of the Feed and
+> a badge dot on the You-tab icon (plus the same banner inside the
+> friends list itself). The v8 note below is preserved verbatim.
+>
+> **v8 (Path 3a).** Local players (the entity formerly known as
+> "unlinked players") are no longer surfaced as a browsable entity in the
+> UI. They still exist in the backend so per-person stats and avatar
+> colors stay consistent for recurring non-app guests, but the People tab
+> only shows friends; the "Unlinked players" drilldown is gone, and the
+> per-person detail screen is only reachable for friends. The snapshot
+> fields on `RoundParticipant` have been renamed:
+> `unlinkedDisplayName` / `unlinkedDisplayColor` →
+> `localDisplayName` / `localDisplayColor` (data migrated by
+> `011_rename_local_player_fields.sql`). All v6/v7 notes below predate
+> this rename and are preserved verbatim as historical reference.
+>
+> **v7 simplification.** A Round now belongs solely to its
 > scorer. The v6 per-participant confirmation model, the unlinked→friend
 > merge flow, and all six v6-era RPCs (`confirm_participation`,
 > `deny_participation`, `leave_round`, `update_score`,

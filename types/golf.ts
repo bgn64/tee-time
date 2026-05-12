@@ -138,9 +138,9 @@ export type Team = {
  *   - Linked entries (`linkedUserId` set) render LIVE from the current
  *     profile (via `lib/participantIdentity.ts`). No snapshot fields are
  *     populated.
- *   - Unlinked entries have no profile to resolve against; their name and
- *     color are snapshotted at Round-creation time onto
- *     `unlinkedDisplayName` / `unlinkedDisplayColor`.
+ *   - Local entries (no `linkedUserId`) have no profile to resolve
+ *     against; their name and color are snapshotted at Round-creation
+ *     time onto `localDisplayName` / `localDisplayColor`.
  */
 export type RoundParticipant = {
   /**
@@ -153,9 +153,9 @@ export type RoundParticipant = {
   /** Set in scramble rounds; references `Round.teams[].id`. */
   teamId?: string;
   /** Snapshot, populated only when `linkedUserId` is absent. */
-  unlinkedDisplayName?: string;
+  localDisplayName?: string;
   /** Snapshot, populated only when `linkedUserId` is absent. */
-  unlinkedDisplayColor?: string;
+  localDisplayColor?: string;
 };
 
 export type Round = {

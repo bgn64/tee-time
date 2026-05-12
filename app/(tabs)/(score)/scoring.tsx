@@ -1,64 +1,104 @@
 /**
- * Scoring screen — root of the Score tab once a round is active (Model B
- * "locked round"). Each scoring entity is rendered as an always-expanded card
- * with labeled score chips. Stroke rounds: one card per player; Scramble
- * rounds: one card per team with a single chip row (one ball per team).
- * Chip size scales by entity count (60 / 44 / 42 px) for touch ergonomics.
+ * Live scoring screen — root of the Score tab once a round is active.
  *
- * Header chrome: left = "SCORE" (no back button), right = ⋯ overflow menu.
- * Hardware back is intercepted on Android so the locked round can't be exited
- * via gesture; round-level exits go through the ⋯ sheet.
+ * Unified scoring/editing layout (v9):
+ *   - HoleNavBar at top (prev/next chevrons + current hole + par/yardage)
+ *   - One ScoreEntryRow per scorer (avatar · name · running-score chip ·
+ *     −  score-display  +)
+ *   - ReadOnlyScorecard below (current hole highlighted, tap any cell to
+ *     jump to that hole). Final totals are suppressed during scoring.
+ *   - Header right slot: "Finish" action chip.
+ *   - Below the grid: an "Abandon round" danger button.
+ *
+ * For scramble rounds the entry rows are per-team (team avatar/name +
+ * team running score). The grid uses team rows.
+ *
+ * Hardware back is still intercepted on Android so the locked round
+ * can't be exited via gesture — round exits go through Finish or
+ * Abandon.
  */
 
 import { useFocusEffect, router } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ConfirmAbandonSheet } from '@/components/ConfirmAbandonSheet';
-import { RoundActionsSheet } from '@/components/RoundActionsSheet';
-import { formatScore, getScorerTotalRelative } from '@/lib/scoring';
+import { HoleNavBar } from '@/components/HoleNavBar';
+import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
+import { ScoreEntryRow } from '@/components/ScoreEntryRow';
+import { confirm } from '@/lib/dialog';
+import { formatScore } from '@/lib/scoring';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
-import { Round } from '@/types/golf';
 
-const SCORE_OPTIONS = [-2, -1, 0, 1, 2];
-
-function scoreLabel(relative: number): string {
-  switch (relative) {
-    case -2: return 'Eagle';
-    case -1: return 'Birdie';
-    case 0: return 'Par';
-    case 1: return 'Bogey';
-    case 2: return 'Dbl';
-    default: return 'Other';
-  }
-}
+type Scorer = {
+  id: string;
+  name: string;
+  color: string;
+  letter: string;
+};
 
 export default function ScoringScreen() {
   const { colors } = useTheme();
   const {
     currentRound,
-    setHoleScore,
-    goToNextHole,
-    goToPreviousHole,
+    setCustomHoleScore,
+    setCurrentHole,
     completeCurrentRound,
     abandonCurrentRound,
   } = useGolfRound();
   const { getPlayer } = usePlayers();
 
-  const [actionsOpen, setActionsOpen] = useState(false);
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  // Header chrome: SCORE label, ⋯ overflow trigger. Re-applied on focus.
+  const isScramble =
+    currentRound?.scoringRule === 'scramble' && (currentRound.teams?.length ?? 0) > 0;
+
+  const handleFinish = useCallback(async () => {
+    if (!currentRound) return;
+    const requiredIds = isScramble
+      ? currentRound.teams!.map((t) => t.id)
+      : currentRound.playerIds;
+    const fullyScored = currentRound.course.holes.every((h) =>
+      requiredIds.every((sid) =>
+        currentRound.scores.some(
+          (s) => s.scorerId === sid && s.holeNumber === h.number
+        )
+      )
+    );
+    if (!fullyScored) {
+      const ok = await confirm({
+        title: 'Finish with missing scores?',
+        message: `Not every hole has a score yet (${currentRound.course.holes.length} total). You can finish anyway and edit later from the Rounds tab.`,
+        confirmLabel: 'Finish anyway',
+      });
+      if (!ok) return;
+    }
+    completeCurrentRound();
+    router.replace('/(tabs)/(score)');
+  }, [currentRound, isScramble, completeCurrentRound]);
+
+  // `useScreenHeader` only re-registers the slot when its semantic key
+  // (label / kind / active) changes — not when the captured `onPress`
+  // closure changes identity. Stash `handleFinish` in a ref so the
+  // stored slot always invokes the latest callback (with the freshest
+  // `currentRound`) and not a stale closure from an earlier render.
+  const handleFinishRef = useRef(handleFinish);
+  handleFinishRef.current = handleFinish;
+
   useScreenHeader({
     left: { kind: 'text', text: 'SCORE' },
-    right: { kind: 'menu', onPress: () => setActionsOpen(true) },
+    right: {
+      kind: 'action',
+      label: 'Finish',
+      onPress: () => handleFinishRef.current(),
+    },
   });
 
-  // Block Android hardware back while the locked round is on screen — round
-  // exits must go through the ⋯ sheet.
+  // Block Android hardware back while the locked round is on screen.
   useFocusEffect(
     useCallback(() => {
       const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
@@ -66,512 +106,218 @@ export default function ScoringScreen() {
     }, [])
   );
 
-  // Chip size scales by the number of cards on screen (one per scoring entity).
-  const isScramble =
-    currentRound?.scoringRule === 'scramble' && (currentRound.teams?.length ?? 0) > 0;
-  const entityCount = isScramble
-    ? currentRound!.teams!.length
-    : currentRound?.playerIds.length ?? 0;
-  const chipSize = entityCount === 1 ? 60 : entityCount === 2 ? 44 : 42;
-
-  const styles = useMemo(() => makeStyles(colors, chipSize), [colors, chipSize]);
-
-  const handleScore = useCallback(
-    (scorerId: string, relative: number) => {
-      if (!currentRound) return;
-      setHoleScore(scorerId, currentRound.currentHoleNumber, relative);
-    },
-    [currentRound, setHoleScore]
-  );
-
-  // Defensive: bounce back to tab root if the round disappeared. Run via
-  // useEffect so navigation happens after the render completes; calling
-  // router.replace inline during render warns about updating a navigator
-  // mid-render.
+  // Defensive bounce if the round disappears.
   useEffect(() => {
     if (!currentRound) {
       router.replace('/(tabs)/(score)');
     }
   }, [currentRound]);
 
-  if (!currentRound) {
-    return null;
-  }
+  if (!currentRound) return null;
 
   const currentHole = currentRound.course.holes.find(
     (h) => h.number === currentRound.currentHoleNumber
   );
   if (!currentHole) return null;
 
-  const isLastHole = currentHole.number === currentRound.course.holes.length;
+  const maxHole = currentRound.course.holes.length;
 
-  // Scorer ids that need a recorded score to advance the hole.
-  const requiredScorerIds = isScramble
-    ? currentRound.teams!.map((t) => t.id)
-    : currentRound.playerIds;
-
-  const allScoredThisHole = requiredScorerIds.every((sid) =>
-    currentRound.scores.some(
-      (s) => s.scorerId === sid && s.holeNumber === currentHole.number
-    )
-  );
-
-  function handleNext() {
-    if (!allScoredThisHole) return;
-    if (isLastHole) {
-      completeCurrentRound();
-      router.replace('/(tabs)/(score)');
-    } else {
-      goToNextHole();
-    }
-  }
-
-  function handleFinishFromMenu() {
-    completeCurrentRound();
-    router.replace('/(tabs)/(score)');
-  }
-
-  function handleAbandonFromMenu() {
-    setAbandonConfirmVisible(true);
-  }
-
-  function handleAbandonConfirmed() {
-    setAbandonConfirmVisible(false);
-    // Defer navigation a tick so the modal's fade-out animation isn't
-    // clipped by the screen transition.
-    setTimeout(() => {
-      abandonCurrentRound();
-      router.replace('/(tabs)/(score)');
-    }, 0);
-  }
-
-  function handleViewScorecard() {
-    router.push('/(tabs)/(score)/scorecard');
-  }
+  const scorers: Scorer[] = isScramble
+    ? currentRound.teams!.map((t) => ({
+        id: t.id,
+        name: t.name,
+        color: t.color,
+        letter: t.name[0]?.toUpperCase() ?? '?',
+      }))
+    : currentRound.playerIds
+        .map((pid) => {
+          const p = getPlayer(pid);
+          if (!p) return null;
+          return {
+            id: p.id,
+            name: p.nickname,
+            color: p.color || colors.primary,
+            letter: p.nickname[0]?.toUpperCase() ?? '?',
+          };
+        })
+        .filter((s): s is Scorer => s !== null);
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.dotsRow}>
-          {currentRound.course.holes.map((hole) => {
-            const allScored = requiredScorerIds.every((sid) =>
-              currentRound.scores.some(
-                (s) => s.scorerId === sid && s.holeNumber === hole.number
-              )
+        <View style={styles.titleBar}>
+          <Text style={styles.title} numberOfLines={1}>
+            {currentRound.course.name}
+          </Text>
+          <View style={styles.formatPill}>
+            <Text style={styles.formatPillText}>
+              {isScramble ? 'SCRAMBLE' : 'STROKE'}
+            </Text>
+          </View>
+        </View>
+
+        <HoleNavBar
+          holeNumber={currentHole.number}
+          par={currentHole.par}
+          yardage={currentHole.yardage}
+          maxHole={maxHole}
+          onChange={setCurrentHole}
+        />
+
+        <View style={styles.entryCard}>
+          {scorers.map((s, i) => {
+            const score = currentRound.scores.find(
+              (sc) => sc.scorerId === s.id && sc.holeNumber === currentHole.number
             );
-            const isCurrent = hole.number === currentRound.currentHoleNumber;
+            const totals = computeRunning(currentRound, s.id);
+            const runningValue =
+              totals.holes === 0
+                ? 'E'
+                : formatScore(totals.rel);
+            const tone: 'over' | 'under' | 'even' =
+              totals.holes === 0
+                ? 'even'
+                : totals.rel > 0
+                ? 'over'
+                : totals.rel < 0
+                ? 'under'
+                : 'even';
             return (
-              <View
-                key={hole.number}
-                style={[
-                  styles.dot,
-                  allScored && styles.dotScored,
-                  isCurrent && styles.dotCurrent,
-                ]}
-              />
+              <View key={s.id} style={i > 0 ? styles.entryRowSep : undefined}>
+                <ScoreEntryRow
+                  avatarLetter={s.letter}
+                  avatarColor={s.color}
+                  name={s.name}
+                  runningText={`${runningValue} · thru ${totals.holes}`}
+                  runningTone={tone}
+                  holeNumber={currentHole.number}
+                  par={currentHole.par}
+                  strokes={score ? score.strokes : null}
+                  onChange={(strokes) =>
+                    setCustomHoleScore(s.id, currentHole.number, strokes)
+                  }
+                />
+              </View>
             );
           })}
         </View>
 
-        <View style={styles.holeHead}>
-          <View style={styles.holeBadge}>
-            <Text style={styles.holeBadgeText}>{currentHole.number}</Text>
-          </View>
-          <View>
-            <Text style={styles.holeTitle}>
-              Hole {currentHole.number}
-              {isLastHole ? ' — Final' : ''}
-            </Text>
-            <Text style={styles.holeMeta}>
-              Par {currentHole.par}
-              {currentHole.yardage ? ` · ${currentHole.yardage} yards` : ''}
-            </Text>
-          </View>
-        </View>
+        <Text style={styles.gridHint}>Tap any hole to jump</Text>
+        <ReadOnlyScorecard
+          round={currentRound}
+          currentHoleNumber={currentHole.number}
+          onHolePress={setCurrentHole}
+          hideFinalTotals
+        />
 
-        {isScramble
-          ? currentRound.teams!.map((team) => {
-              const score = currentRound.scores.find(
-                (s) => s.scorerId === team.id && s.holeNumber === currentHole.number
-              );
-              const relativeScore = score ? score.strokes - currentHole.par : null;
-              const totalStr = getScorerTotalRelative(currentRound, team.id);
-              return (
-                <View
-                  key={team.id}
-                  style={[styles.teamCard, { borderLeftColor: team.color }]}>
-                  <View style={styles.teamHeader}>
-                    <View style={styles.avatarStack}>
-                      {team.playerIds.map((pid) => {
-                        const p = getPlayer(pid);
-                        if (!p) return null;
-                        return (
-                          <View
-                            key={pid}
-                            style={[
-                              styles.stackAvatar,
-                              { backgroundColor: p.color || colors.primary },
-                            ]}>
-                            <Text style={styles.stackAvatarText}>{p.nickname[0]}</Text>
-                          </View>
-                        );
-                      })}
-                    </View>
-                    <Text style={[styles.teamLabel, { color: team.color }]}>
-                      {team.name.toUpperCase()}
-                    </Text>
-                    {totalStr ? (
-                      <View style={styles.totalBadge}>
-                        <Text style={styles.totalBadgeText}>{totalStr}</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.totalBadge, styles.totalBadgeEmpty]}>
-                        <Text style={styles.totalBadgeEmptyText}>—</Text>
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.chipsContainer}>
-                    {SCORE_OPTIONS.map((rel) => {
-                      const isSelected = relativeScore === rel;
-                      return (
-                        <Pressable
-                          key={rel}
-                          onPress={() => handleScore(team.id, rel)}
-                          style={styles.chipWrapper}>
-                          <View style={[styles.chip, isSelected && styles.chipSelected]}>
-                            <Text
-                              style={[
-                                styles.chipText,
-                                isSelected && styles.chipTextSelected,
-                              ]}>
-                              {formatScore(rel)}
-                            </Text>
-                          </View>
-                          <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
-            })
-          : currentRound.playerIds.map((id) => {
-              const player = getPlayer(id);
-              if (!player) return null;
-              const score = currentRound.scores.find(
-                (s) => s.scorerId === player.id && s.holeNumber === currentHole.number
-              );
-              const relativeScore = score ? score.strokes - currentHole.par : null;
-              const totalStr = getScorerTotalRelative(currentRound, player.id);
-
-              return (
-                <View key={player.id} style={styles.playerCard}>
-                  <View style={styles.playerHeader}>
-                    <View
-                      style={[
-                        styles.playerAvatar,
-                        { backgroundColor: player.color || colors.primary },
-                      ]}>
-                      <Text style={styles.playerAvatarText}>{player.nickname[0]}</Text>
-                    </View>
-                    <Text style={styles.playerName}>{player.nickname}</Text>
-                    {totalStr ? (
-                      <View style={styles.totalBadge}>
-                        <Text style={styles.totalBadgeText}>{totalStr}</Text>
-                      </View>
-                    ) : (
-                      <View style={[styles.totalBadge, styles.totalBadgeEmpty]}>
-                        <Text style={styles.totalBadgeEmptyText}>—</Text>
-                      </View>
-                    )}
-                  </View>
-
-                  <View style={styles.chipsContainer}>
-                    {SCORE_OPTIONS.map((rel) => {
-                      const isSelected = relativeScore === rel;
-                      return (
-                        <Pressable
-                          key={rel}
-                          onPress={() => handleScore(player.id, rel)}
-                          style={styles.chipWrapper}>
-                          <View style={[styles.chip, isSelected && styles.chipSelected]}>
-                            <Text
-                              style={[
-                                styles.chipText,
-                                isSelected && styles.chipTextSelected,
-                              ]}>
-                              {formatScore(rel)}
-                            </Text>
-                          </View>
-                          <Text style={styles.chipLabel}>{scoreLabel(rel)}</Text>
-                        </Pressable>
-                      );
-                    })}
-                  </View>
-                </View>
-              );
-            })}
+        <Pressable
+          style={styles.abandonBtn}
+          onPress={() => setAbandonConfirmVisible(true)}>
+          <Text style={styles.abandonBtnText}>Abandon round</Text>
+        </Pressable>
       </ScrollView>
-
-      <View style={styles.navRow}>
-        <Pressable
-          style={[styles.navBtn, currentHole.number === 1 && styles.navBtnDisabled]}
-          onPress={goToPreviousHole}
-          disabled={currentHole.number === 1}>
-          <Text
-            style={[styles.navBtnText, currentHole.number === 1 && styles.navBtnTextDisabled]}>
-            ← Back
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[
-            styles.navBtn,
-            styles.navBtnNext,
-            isLastHole && styles.navBtnFinish,
-            !allScoredThisHole && styles.navBtnDisabled,
-          ]}
-          onPress={handleNext}
-          disabled={!allScoredThisHole}>
-          <Text style={styles.navBtnNextText}>
-            {isLastHole ? '🏁 Finish Round' : 'Next →'}
-          </Text>
-        </Pressable>
-      </View>
-
-      <RoundActionsSheet
-        visible={actionsOpen}
-        onClose={() => setActionsOpen(false)}
-        onViewScorecard={handleViewScorecard}
-        onFinishRound={handleFinishFromMenu}
-        onAbandonRound={handleAbandonFromMenu}
-      />
 
       <ConfirmAbandonSheet
         visible={abandonConfirmVisible}
         onCancel={() => setAbandonConfirmVisible(false)}
-        onConfirm={handleAbandonConfirmed}
+        onConfirm={() => {
+          setAbandonConfirmVisible(false);
+          setTimeout(() => {
+            abandonCurrentRound();
+            router.replace('/(tabs)/(score)');
+          }, 0);
+        }}
       />
     </View>
   );
 }
 
-function makeStyles(
-  colors: ReturnType<typeof useTheme>['colors'],
-  chipSize: number
-) {
+function computeRunning(
+  round: NonNullable<ReturnType<typeof useGolfRound>['currentRound']>,
+  scorerId: string
+): { rel: number; holes: number } {
+  let rel = 0;
+  let holes = 0;
+  for (const s of round.scores) {
+    if (s.scorerId !== scorerId) continue;
+    const hole = round.course.holes.find((h) => h.number === s.holeNumber);
+    if (!hole) continue;
+    rel += s.strokes - hole.par;
+    holes++;
+  }
+  return { rel, holes };
+}
+
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
       backgroundColor: colors.background,
     },
     content: {
-      padding: 16,
-      paddingBottom: 100,
+      padding: 14,
+      paddingBottom: 32,
     },
-    dotsRow: {
-      flexDirection: 'row',
-      gap: 2,
-      marginBottom: 12,
-    },
-    dot: {
-      flex: 1,
-      height: 3,
-      borderRadius: 2,
-      backgroundColor: colors.border,
-    },
-    dotScored: { backgroundColor: colors.primary },
-    dotCurrent: { backgroundColor: colors.accent },
-    holeHead: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 10,
-      marginBottom: 14,
-    },
-    holeBadge: {
-      width: 36,
-      height: 36,
-      borderRadius: 18,
-      backgroundColor: colors.accent,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    holeBadgeText: {
-      color: '#ffffff',
-      fontSize: 16,
-      fontWeight: '800',
-    },
-    holeTitle: {
-      fontSize: 15,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
-    holeMeta: {
-      fontSize: 12,
-      color: colors.textMuted,
-      marginTop: 2,
-    },
-    playerCard: {
-      backgroundColor: colors.cardBg,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      marginBottom: 10,
-      padding: 12,
-    },
-    teamCard: {
-      backgroundColor: colors.cardBg,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderLeftWidth: 4,
-      marginBottom: 12,
-      padding: 12,
-    },
-    teamHeader: {
+    titleBar: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
+      marginBottom: 8,
     },
-    avatarStack: {
-      flexDirection: 'row',
-    },
-    stackAvatar: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-      marginLeft: -8,
-      borderWidth: 2,
-      borderColor: colors.cardBg,
-    },
-    stackAvatarText: {
-      color: '#ffffff',
-      fontSize: 11,
-      fontWeight: '800',
-    },
-    teamLabel: {
+    title: {
       flex: 1,
-      fontSize: 11,
+      fontSize: 19,
       fontWeight: '800',
-      letterSpacing: 1,
+      color: colors.textTitle,
+      lineHeight: 22,
+    },
+    formatPill: {
+      backgroundColor: colors.chipBg,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      flexShrink: 0,
+    },
+    formatPillText: {
+      fontSize: 9.5,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      color: colors.primaryDark,
+    },
+    entryCard: {
+      backgroundColor: colors.cardBg,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 10,
+      marginBottom: 12,
+    },
+    entryRowSep: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+      marginTop: 3,
+      paddingTop: 3,
+    },
+    gridHint: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.5,
+      color: colors.textMuted,
+      marginBottom: 6,
       marginLeft: 4,
     },
-    playerHeader: {
-      flexDirection: 'row',
+    abandonBtn: {
+      marginTop: 18,
+      borderWidth: 1,
+      borderColor: '#f5cccc',
+      borderRadius: 11,
+      paddingVertical: 11,
       alignItems: 'center',
-      gap: 8,
     },
-    playerAvatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    playerAvatarText: {
-      color: '#ffffff',
-      fontSize: 13,
+    abandonBtnText: {
+      color: '#d54848',
       fontWeight: '800',
-    },
-    playerName: {
-      flex: 1,
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.textTitle,
-    },
-    totalBadge: {
-      backgroundColor: colors.chipBg,
-      borderRadius: 8,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-    },
-    totalBadgeEmpty: {
-      backgroundColor: colors.border,
-    },
-    totalBadgeText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.textMuted,
-    },
-    totalBadgeEmptyText: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.textMuted,
-    },
-    chipsContainer: {
-      flexDirection: 'row',
-      gap: 6,
-      marginTop: 10,
-    },
-    chipWrapper: {
-      flex: 1,
-      alignItems: 'stretch',
-    },
-    chip: {
-      height: chipSize,
-      borderRadius: chipSize > 50 ? 14 : 10,
-      backgroundColor: colors.chipBg,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    chipSelected: {
-      backgroundColor: colors.accent,
-    },
-    chipText: {
-      fontSize: chipSize > 50 ? 18 : 14,
-      fontWeight: '800',
-      color: colors.chipText,
-    },
-    chipTextSelected: {
-      color: colors.chipSelectedText,
-    },
-    chipLabel: {
-      fontSize: 9,
-      color: colors.textMuted,
-      marginTop: 4,
-      textAlign: 'center',
-      fontWeight: '600',
-    },
-    navRow: {
-      position: 'absolute',
-      bottom: 0,
-      left: 0,
-      right: 0,
-      flexDirection: 'row',
-      gap: 8,
-      backgroundColor: colors.background,
-      padding: 14,
-      paddingBottom: 24,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    navBtn: {
-      flex: 1,
-      alignItems: 'center',
-      borderRadius: 16,
-      backgroundColor: colors.chipBg,
-      paddingVertical: 12,
-    },
-    navBtnDisabled: { opacity: 0.4 },
-    navBtnText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.textMuted,
-    },
-    navBtnTextDisabled: { color: colors.textMuted },
-    navBtnNext: {
-      backgroundColor: colors.primary,
-    },
-    navBtnFinish: {
-      backgroundColor: colors.accent,
-      flex: 2,
-    },
-    navBtnNextText: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: '#ffffff',
+      fontSize: 12,
     },
   });
 }

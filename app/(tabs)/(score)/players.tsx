@@ -6,7 +6,7 @@
  * included and pinned. Tap a player to toggle. Selected players also
  * surface as removable chips beneath the search bar. Typing replaces
  * the recents list with fuzzy matches; an "Add new player" row at the
- * top of the list creates a new unlinked roster entry in one tap (no
+ * top of the list creates a new local roster entry in one tap (no
  * separate creation form).
  *
  * Footer "Next" routes to the format screen with the picked player
@@ -294,7 +294,7 @@ export default function PlayersScreen() {
             <Text style={styles.emptyBody}>
               {searchActive
                 ? 'Tap "Add" above to add them as a new player — you can link them to a friend later.'
-                : 'Add someone to your roster from the People tab, or use "Add new player" above.'}
+                : 'Use "Add new player" above to start a round with someone, or find friends from the You tab.'}
             </Text>
           </View>
         ) : (
@@ -341,21 +341,13 @@ export default function PlayersScreen() {
                     {metaLine}
                   </Text>
                 </View>
-                <View
-                  style={[
-                    styles.playerBadge,
-                    isLinked ? styles.playerBadgeFriend : styles.playerBadgeUnlinked,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.playerBadgeText,
-                      isLinked
-                        ? styles.playerBadgeFriendText
-                        : styles.playerBadgeUnlinkedText,
-                    ]}>
-                    {isLinked ? 'FRIEND' : 'UNLINKED'}
-                  </Text>
-                </View>
+                {isLinked && (
+                  <View style={[styles.playerBadge, styles.playerBadgeFriend]}>
+                    <Text style={[styles.playerBadgeText, styles.playerBadgeFriendText]}>
+                      FRIEND
+                    </Text>
+                  </View>
+                )}
               </Pressable>
             );
           })
@@ -608,10 +600,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 3,
     },
     playerBadgeFriend: { backgroundColor: 'rgba(124,179,66,0.18)' },
-    playerBadgeUnlinked: { backgroundColor: colors.chipBg },
     playerBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.6 },
     playerBadgeFriendText: { color: colors.primaryDark },
-    playerBadgeUnlinkedText: { color: colors.textMuted },
 
     emptyWrap: {
       alignItems: 'center',

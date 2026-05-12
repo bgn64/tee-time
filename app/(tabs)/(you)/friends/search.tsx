@@ -1,11 +1,13 @@
 /**
  * Friend search by @handle.
  *
- * Single entry point under the v6 redesign — launched from the Friends list's
- * "+ Find friends" CTA in the People tab. Search results lead to confirm-
- * request, which calls `sendFriendRequest`. Roster entries for accepted
- * friends are auto-created on accept (no auto-link to existing unlinked
- * roster rows; users merge those manually from the Unlinked drilldown).
+ * Launched from the Friends list's "+ Find friends" CTA inside the You
+ * tab. Search results lead to confirm-request, which calls
+ * `sendFriendRequest`. Roster entries for accepted friends are
+ * auto-created on accept; local players (the entity formerly known as
+ * "unlinked players") are tracked in the backend for stats continuity
+ * but no longer have any merge-to-friend flow or user-facing list (see
+ * plan.md, Path 3a).
  *
  * Search calls `useSocial().searchHandle(q)` which queries the `profiles`
  * table for a case-insensitive prefix match on `handle`.
@@ -32,7 +34,7 @@ export default function FriendSearchScreen() {
   const [searching, setSearching] = useState(false);
 
   useScreenHeader({
-    left: { kind: 'back', label: 'People', onPress: () => router.back() },
+    left: { kind: 'back', label: 'Friends', onPress: () => router.back() },
     right: { kind: 'profile' },
   });
 
@@ -113,7 +115,7 @@ export default function FriendSearchScreen() {
                   style={styles.resultRow}
                   onPress={() =>
                     router.push({
-                      pathname: '/(tabs)/(people)/confirm-request',
+                      pathname: '/(tabs)/(you)/friends/confirm-request',
                       params: { targetUserId: entry.userId },
                     })
                   }>

@@ -1,5 +1,5 @@
 /**
- * You tab landing — profile + stats strip + 2×2 settings grid.
+ * You tab landing — profile + stats strip + Friends row + 2×2 settings grid.
  *
  * Wired in Phase 1:
  *   · Profile name/avatar (sourced from the default player record)
@@ -16,6 +16,12 @@
  *     border, taps into the /sign-in modal flow. Signed-in: shows the
  *     handle as the subtitle and routes into /(tabs)/(you)/account for
  *     account details + sign-out.
+ *
+ * People → You reshape:
+ *   · Friends row above the settings grid. Drills into the (you)/friends
+ *     stack. Shows a small accent dot + an "X requests pending" subtitle
+ *     when there are incoming friend requests; falls back to an "X friends"
+ *     count otherwise. Signed-out variant nudges into /sign-in.
  */
 
 import { router } from 'expo-router';
@@ -30,6 +36,7 @@ import { useScreenHeader } from '@/state/HeaderContext';
 import { useLocation } from '@/state/LocationContext';
 import { useOnboarding } from '@/state/OnboardingContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 
 function formatAvg(avg: number): string {
@@ -45,6 +52,7 @@ export default function YouScreen() {
   const { completedRounds } = useGolfRound();
   const { defaultPlayerId, getPlayer } = usePlayers();
   const { account } = useAccount();
+  const { friends, incomingRequests } = useSocial();
   const { status: locationStatus, request: requestLocation, openSystemSettings } = useLocation();
   const { setStatus: setPrimerStatus } = useOnboarding();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -142,6 +150,13 @@ export default function YouScreen() {
         </View>
       </View>
 
+      <FriendsRow
+        styles={styles}
+        account={account}
+        friendsCount={friends.length}
+        pendingCount={incomingRequests.length}
+      />
+
       <View style={styles.grid}>
         <GridCard
           styles={styles}
@@ -233,6 +248,58 @@ type GridCardProps = {
   pulse?: boolean;
   onPress: () => void;
 };
+
+type FriendsRowProps = {
+  styles: ReturnType<typeof makeStyles>;
+  account: ReturnType<typeof useAccount>['account'];
+  friendsCount: number;
+  pendingCount: number;
+};
+
+function FriendsRow({ styles, account, friendsCount, pendingCount }: FriendsRowProps) {
+  const signedIn = !!account;
+  const hasPending = signedIn && pendingCount > 0;
+
+  const onPress = () => {
+    if (!signedIn) {
+      router.push('/sign-in');
+      return;
+    }
+    router.push('/(tabs)/(you)/friends');
+  };
+
+  const subtitle = !signedIn
+    ? 'Sign in to find friends'
+    : pendingCount > 0
+    ? `${friendsCount} ${friendsCount === 1 ? 'friend' : 'friends'} · ${pendingCount} ${
+        pendingCount === 1 ? 'request' : 'requests'
+      } pending`
+    : `${friendsCount} ${friendsCount === 1 ? 'friend' : 'friends'}`;
+
+  return (
+    <Pressable
+      style={[
+        styles.friendsRow,
+        hasPending && styles.friendsRowPending,
+        !signedIn && styles.friendsRowSignedOut,
+      ]}
+      onPress={onPress}>
+      {hasPending && <View style={styles.friendsRowDot} />}
+      <View style={styles.friendsRowIcon}>
+        <Text style={styles.friendsRowIconText}>👥</Text>
+      </View>
+      <View style={styles.friendsRowBody}>
+        <Text style={styles.friendsRowLabel}>Friends</Text>
+        <Text
+          style={[styles.friendsRowSub, !signedIn && styles.friendsRowSubSignedOut]}
+          numberOfLines={1}>
+          {subtitle}
+        </Text>
+      </View>
+      <Text style={styles.friendsRowChev}>›</Text>
+    </Pressable>
+  );
+}
 
 function GridCard({
   styles,
@@ -351,6 +418,62 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       flexWrap: 'wrap',
       gap: 10,
+    },
+    friendsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: colors.cardBg,
+      borderRadius: 14,
+      padding: 12,
+      marginBottom: 14,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+    },
+    friendsRowPending: {
+      backgroundColor: '#fff8e7',
+      borderColor: '#f5e0b8',
+    },
+    friendsRowSignedOut: {
+      backgroundColor: '#fffbe8',
+      borderColor: '#f5e0b8',
+    },
+    friendsRowDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: colors.accent,
+      marginRight: 2,
+    },
+    friendsRowIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.chipBg,
+    },
+    friendsRowIconText: { fontSize: 16 },
+    friendsRowBody: { flex: 1, minWidth: 0 },
+    friendsRowLabel: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    friendsRowSub: {
+      fontSize: 11,
+      color: colors.textMuted,
+      fontWeight: '600',
+      marginTop: 2,
+    },
+    friendsRowSubSignedOut: {
+      color: colors.accent,
+      fontWeight: '700',
+    },
+    friendsRowChev: {
+      fontSize: 18,
+      color: colors.textMuted,
+      opacity: 0.5,
     },
     gridCard: {
       width: '48%',

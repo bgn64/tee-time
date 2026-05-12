@@ -5,8 +5,8 @@
  *   - Linked participants render LIVE from the current profile (the
  *     viewer's own account, the SocialContext's `profileCache`, or — as a
  *     fallback — a roster entry whose `userId` matches).
- *   - Unlinked participants have no live source; their `unlinkedDisplayName`
- *     / `unlinkedDisplayColor` snapshot (captured by the scorer at Round-
+ *   - Local participants have no live source; their `localDisplayName`
+ *     / `localDisplayColor` snapshot (captured by the scorer at Round-
  *     completion time) is used directly.
  *
  * This helper is the single place any UI surface should go to ask "what
@@ -65,7 +65,7 @@ export function resolveParticipantIdentity(
   }
 
   return {
-    displayName: participant.unlinkedDisplayName ?? 'Player',
-    color: participant.unlinkedDisplayColor,
+    displayName: participant.localDisplayName ?? 'Player',
+    color: participant.localDisplayColor,
   };
 }

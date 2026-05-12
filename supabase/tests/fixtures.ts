@@ -116,7 +116,7 @@ export type SeedScorecardOpts = {
    */
   others?: Array<{
     user?: TestUser;
-    /** Used for unlinked entries. */
+    /** Used for local entries. */
     nickname?: string;
     /** Override the participant_key. Defaults to a unique key per index. */
     participantKey?: string;
@@ -183,8 +183,8 @@ export async function seedScorecard(opts: SeedScorecardOpts): Promise<string> {
     } else {
       participants.push({
         participantKey: key,
-        unlinkedDisplayName: o.nickname ?? `Player${i}`,
-        unlinkedDisplayColor: COLORS[i % COLORS.length],
+        localDisplayName: o.nickname ?? `Player${i}`,
+        localDisplayColor: COLORS[i % COLORS.length],
         ...(otherTeamId ? { teamId: otherTeamId } : {}),
       });
     }

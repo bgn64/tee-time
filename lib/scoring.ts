@@ -129,7 +129,7 @@ export function replaceScore(scores: RoundScore[], nextScore: RoundScore): Round
  *     replacing the viewer's name with "you" when `myUserId` matches.
  *   - "Round" if no linked participants exist.
  *
- * Only linked participants count toward the title — unlinked participants
+ * Only linked participants count toward the title — local participants
  * are excluded so the title acts as the round's "broadcast headline."
  *
  * `resolveName` is consulted to look up the live displayName for a linked

@@ -1,9 +1,12 @@
 /**
  * Per-person detail.
  *
- * Serves both linked friends and unlinked roster entries. Read-only summary
- * + recent rounds. The default player ("YOU") gets a slightly different
- * label but the layout is the same.
+ * Reached from the Friends list (inside the You tab). Renders a read-only
+ * summary + recent rounds for a linked friend (or "YOU" for the default
+ * player). Local players (roster rows without a linked user account) are
+ * not browsable from any top-level surface under Path 3a; if a deep link
+ * somehow lands here for one, the screen still renders sensibly — it just
+ * won't show a FRIEND badge.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
@@ -36,7 +39,7 @@ export default function PersonDetailScreen() {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
-    left: { kind: 'back', label: 'People', onPress: () => router.back() },
+    left: { kind: 'back', label: 'Friends', onPress: () => router.back() },
     right: { kind: 'profile' },
   });
 
@@ -73,7 +76,6 @@ export default function PersonDetailScreen() {
         <View style={styles.badgeRow}>
           {isYou && <Text style={[styles.badge, styles.badgeYou]}>YOU · DEFAULT PLAYER</Text>}
           {!isYou && linked && <Text style={[styles.badge, styles.badgeFriend]}>FRIEND</Text>}
-          {!isYou && !linked && <Text style={styles.badge}>UNLINKED</Text>}
         </View>
       </View>
 

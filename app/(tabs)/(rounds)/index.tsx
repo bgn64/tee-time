@@ -126,7 +126,7 @@ export default function RoundsListScreen() {
                 const isScramble = round.scoringRule === 'scramble';
 
                 // Avatars rendered live via the participantIdentity resolver.
-                // Unlinked entries fall back to their snapshot fields. For
+                // Local entries fall back to their snapshot fields. For
                 // scramble rounds we still use the team chips.
                 const avatarSources: { id: string; name: string; color: string }[] =
                   isScramble && round.teams
@@ -144,8 +144,8 @@ export default function RoundsListScreen() {
                         }
                         return {
                           id,
-                          name: p.unlinkedDisplayName ?? 'Player',
-                          color: p.unlinkedDisplayColor ?? colors.primary,
+                          name: p.localDisplayName ?? 'Player',
+                          color: p.localDisplayColor ?? colors.primary,
                         };
                       });
 

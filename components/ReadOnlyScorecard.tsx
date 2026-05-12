@@ -1,7 +1,7 @@
 /**
  * Read-only scorecard grid (holes × scorers). Used by:
- *   - app/(tabs)/(rounds)/[id].tsx for completed-round history
- *   - app/(tabs)/(score)/scorecard.tsx for the in-progress locked round
+ *   - app/(tabs)/(rounds)/[id].tsx for completed-round history + edit mode
+ *   - app/(tabs)/(score)/scoring.tsx for the live in-progress round
  *
  * Layout: Front 9 section + Back 9 section, each with hole numbers, par
  * row, and per-scorer rows (strokes per hole) plus an OUT / IN total per
@@ -10,17 +10,25 @@
  *
  * Stroke rounds: scorers are players resolved live via
  * `resolveParticipantIdentity` (profileCache / account / roster fallback).
- * Unlinked entries snapshot their name/color on the participant row.
+ * Local entries snapshot their name/color on the participant row.
  *
  * Scramble rounds: scorers are teams (taken directly from round.teams).
  *
- * Edit overlay (v7):
- *   - editableScorerIds — score cells become tappable; calls `onCellPress`.
- *   The (editingScorerId, editingHoleNumber) cell renders with a dashed
- *   outline.
+ * Jump-to-hole pattern (unified scoring/editing v9):
+ *   - currentHoleNumber  — highlights that hole's column header.
+ *   - onHolePress        — when set, every cell in the column (header,
+ *                          par, scorer rows) is wrapped in a Pressable
+ *                          that calls back with the hole number. Cells
+ *                          themselves are not individually editable on
+ *                          the grid; editing happens in the entry rows
+ *                          above the grid in the scoring/edit screens.
+ *   - hideFinalTotals    — drops the bottom totals section so the caller
+ *                          can either omit it (live scoring) or render
+ *                          its own (no current caller needs the latter,
+ *                          but the flag is easy to add).
  */
 
-import { Fragment, useMemo } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { resolveParticipantIdentity } from '@/lib/participantIdentity';
@@ -35,19 +43,19 @@ type Scorer = { id: string; name: string; color: string };
 
 type Props = {
   round: Round;
-  editableScorerIds?: Set<string>;
-  /** When set, the (editingScorerId, editingHoleNumber) cell renders with a dashed outline. */
-  editingScorerId?: string;
-  editingHoleNumber?: number;
-  onCellPress?: (scorerId: string, holeNumber: number) => void;
+  /** Highlight the column for this hole number. */
+  currentHoleNumber?: number;
+  /** When set, tapping any cell in a column calls back with that hole number. */
+  onHolePress?: (holeNumber: number) => void;
+  /** Suppress the bottom FINAL totals section (live scoring uses this). */
+  hideFinalTotals?: boolean;
 };
 
 export function ReadOnlyScorecard({
   round,
-  editableScorerIds,
-  editingScorerId,
-  editingHoleNumber,
-  onCellPress,
+  currentHoleNumber,
+  onHolePress,
+  hideFinalTotals,
 }: Props) {
   const { colors } = useTheme();
   const { allPlayers } = usePlayers();
@@ -61,17 +69,34 @@ export function ReadOnlyScorecard({
     if (isScramble && round.teams) {
       return round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
     }
-    return (round.participants ?? []).map((p) => {
-      const identity = resolveParticipantIdentity(p, {
-        account,
-        profileCache,
-        allPlayers,
+    // For completed rounds we read from `participants` (built at
+    // completeCurrentRound time). For in-progress rounds that array is
+    // not yet populated, so fall back to playerIds + the local roster
+    // so the grid renders correctly during live scoring.
+    if (round.participants && round.participants.length > 0) {
+      return round.participants.map((p) => {
+        const identity = resolveParticipantIdentity(p, {
+          account,
+          profileCache,
+          allPlayers,
+        });
+        const isMe = !!account?.userId && p.linkedUserId === account.userId;
+        return {
+          id: p.participantKey,
+          name: isMe ? 'You' : identity.displayName,
+          color: identity.color ?? colors.primary,
+        };
       });
-      const isMe = !!account?.userId && p.linkedUserId === account.userId;
+    }
+    return (round.playerIds ?? []).map((pid) => {
+      const local = allPlayers.find((p) => p.id === pid);
+      const isMe = !!local?.userId && account?.userId === local.userId;
       return {
-        id: p.participantKey,
-        name: isMe ? 'You' : identity.displayName,
-        color: identity.color ?? colors.primary,
+        id: pid,
+        name: isMe
+          ? 'You'
+          : local?.displayName ?? local?.nickname ?? 'Player',
+        color: local?.color ?? colors.primary,
       };
     });
   }, [round, isScramble, account, profileCache, allPlayers, colors.primary]);
@@ -85,42 +110,73 @@ export function ReadOnlyScorecard({
     [round.course.holes]
   );
 
+  const hasBack9 = back9.length > 0;
+
+  // Visible-nine state: initialize from currentHoleNumber when present
+  // (so the section containing the current hole is shown first), else
+  // default to front. Auto-flip when currentHoleNumber crosses into the
+  // other half so the user always sees the hole they're scoring; manual
+  // taps on the tabs override until the next auto-flip.
+  const [visibleNine, setVisibleNine] = useState<'front' | 'back'>(
+    currentHoleNumber && currentHoleNumber > 9 ? 'back' : 'front'
+  );
+
+  useEffect(() => {
+    if (!hasBack9) return;
+    if (currentHoleNumber == null) return;
+    setVisibleNine(currentHoleNumber > 9 ? 'back' : 'front');
+  }, [currentHoleNumber, hasBack9]);
+
+  const visibleHoles = !hasBack9 ? front9 : visibleNine === 'front' ? front9 : back9;
+  const visibleTotalLabel = visibleNine === 'front' ? 'OUT' : 'IN';
+
   return (
     <View>
+      {hasBack9 && (
+        <View style={styles.tabs}>
+          <Pressable
+            onPress={() => setVisibleNine('front')}
+            style={[styles.tab, visibleNine === 'front' && styles.tabActive]}>
+            <Text
+              style={[
+                styles.tabText,
+                visibleNine === 'front' && styles.tabTextActive,
+              ]}>
+              FRONT
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setVisibleNine('back')}
+            style={[styles.tab, visibleNine === 'back' && styles.tabActive]}>
+            <Text
+              style={[
+                styles.tabText,
+                visibleNine === 'back' && styles.tabTextActive,
+              ]}>
+              BACK
+            </Text>
+          </Pressable>
+        </View>
+      )}
       <NineSection
         styles={styles}
-        holes={front9}
+        holes={visibleHoles}
         scorers={scorers}
         scores={round.scores}
-        totalLabel="OUT"
-        editableScorerIds={editableScorerIds}
-        editingScorerId={editingScorerId}
-        editingHoleNumber={editingHoleNumber}
-        onCellPress={onCellPress}
+        totalLabel={visibleTotalLabel}
+        currentHoleNumber={currentHoleNumber}
+        onHolePress={onHolePress}
       />
-      {back9.length > 0 && (
+      {!hideFinalTotals && (
         <View style={{ marginTop: 14 }}>
-          <NineSection
+          <FinalTotals
             styles={styles}
-            holes={back9}
+            allHoles={round.course.holes}
             scorers={scorers}
             scores={round.scores}
-            totalLabel="IN"
-            editableScorerIds={editableScorerIds}
-            editingScorerId={editingScorerId}
-            editingHoleNumber={editingHoleNumber}
-            onCellPress={onCellPress}
           />
         </View>
       )}
-      <View style={{ marginTop: 14 }}>
-        <FinalTotals
-          styles={styles}
-          allHoles={round.course.holes}
-          scorers={scorers}
-          scores={round.scores}
-        />
-      </View>
     </View>
   );
 }
@@ -131,10 +187,8 @@ type SectionProps = {
   scorers: Scorer[];
   scores: RoundScore[];
   totalLabel: string;
-  editableScorerIds?: Set<string>;
-  editingScorerId?: string;
-  editingHoleNumber?: number;
-  onCellPress?: (scorerId: string, holeNumber: number) => void;
+  currentHoleNumber?: number;
+  onHolePress?: (holeNumber: number) => void;
 };
 
 function NineSection({
@@ -143,37 +197,71 @@ function NineSection({
   scorers,
   scores,
   totalLabel,
-  editableScorerIds,
-  editingScorerId,
-  editingHoleNumber,
-  onCellPress,
+  currentHoleNumber,
+  onHolePress,
 }: SectionProps) {
   const parTotal = holes.reduce((t, h) => t + h.par, 0);
+
+  function CellWrap({
+    holeNumber,
+    children,
+  }: {
+    holeNumber: number;
+    children: React.ReactNode;
+  }) {
+    if (!onHolePress) return <Fragment>{children}</Fragment>;
+    return (
+      <Pressable
+        style={styles.cellPressable}
+        onPress={() => onHolePress(holeNumber)}>
+        {children}
+      </Pressable>
+    );
+  }
 
   return (
     <View style={styles.section}>
       <View style={[styles.row, styles.headRow]}>
         <Text style={[styles.cellName, styles.headText]}>Hole</Text>
-        {holes.map((h) => (
-          <Text key={h.number} style={[styles.cellNum, styles.headText]}>
-            {h.number}
-          </Text>
-        ))}
+        {holes.map((h) => {
+          const isCurrent = h.number === currentHoleNumber;
+          return (
+            <CellWrap key={h.number} holeNumber={h.number}>
+              <Text
+                style={[
+                  styles.cellNum,
+                  styles.headText,
+                  isCurrent && styles.headTextCurrent,
+                ]}>
+                {h.number}
+              </Text>
+            </CellWrap>
+          );
+        })}
         <Text style={[styles.cellTotal, styles.headText]}>{totalLabel}</Text>
       </View>
 
       <View style={styles.row}>
         <Text style={[styles.cellName, styles.parText]}>Par</Text>
-        {holes.map((h) => (
-          <Text key={h.number} style={[styles.cellNum, styles.parText]}>
-            {h.par}
-          </Text>
-        ))}
+        {holes.map((h) => {
+          const isCurrent = h.number === currentHoleNumber;
+          return (
+            <CellWrap key={h.number} holeNumber={h.number}>
+              <Text
+                style={[
+                  styles.cellNum,
+                  styles.parText,
+                  isCurrent && styles.cellColCurrent,
+                ]}>
+                {h.par}
+              </Text>
+            </CellWrap>
+          );
+        })}
         <Text style={[styles.cellTotal, styles.parText]}>{parTotal}</Text>
       </View>
 
       {scorers.map((scorer) => {
-        const isEditable = !!editableScorerIds?.has(scorer.id);
         let nineRel = 0;
         let holesScored = 0;
         const cells = holes.map((h) => {
@@ -204,31 +292,22 @@ function NineSection({
               </Text>
             </View>
             {cells.map((c, i) => {
-              const isThisCellEditing =
-                editingScorerId === scorer.id && editingHoleNumber === holes[i].number;
-              const cellContent = (
-                <Text
-                  style={[
-                    styles.cellNum,
-                    c.rel !== null && c.rel > 0 && styles.cellOver,
-                    c.rel !== null && c.rel < 0 && styles.cellUnder,
-                    c.strokes === null && styles.cellEmpty,
-                  ]}>
-                  {c.rel !== null ? formatScore(c.rel) : '—'}
-                </Text>
+              const holeNumber = holes[i].number;
+              const isCurrent = holeNumber === currentHoleNumber;
+              return (
+                <CellWrap key={holeNumber} holeNumber={holeNumber}>
+                  <Text
+                    style={[
+                      styles.cellNum,
+                      c.rel !== null && c.rel > 0 && styles.cellOver,
+                      c.rel !== null && c.rel < 0 && styles.cellUnder,
+                      c.strokes === null && styles.cellEmpty,
+                      isCurrent && styles.cellColCurrent,
+                    ]}>
+                    {c.rel !== null ? formatScore(c.rel) : '—'}
+                  </Text>
+                </CellWrap>
               );
-
-              if (isEditable && onCellPress) {
-                return (
-                  <Pressable
-                    key={holes[i].number}
-                    onPress={() => onCellPress(scorer.id, holes[i].number)}
-                    style={[styles.editableCell, isThisCellEditing && styles.editingCell]}>
-                    {cellContent}
-                  </Pressable>
-                );
-              }
-              return <Fragment key={holes[i].number}>{cellContent}</Fragment>;
             })}
             <Text
               style={[
@@ -262,6 +341,7 @@ function FinalTotals({ styles, allHoles, scorers, scores }: FinalProps) {
       </View>
       {scorers.map((scorer) => {
         let totalRel = 0;
+        let totalStrokes = 0;
         let holesScored = 0;
         for (const h of allHoles) {
           const s = scores.find(
@@ -269,6 +349,7 @@ function FinalTotals({ styles, allHoles, scorers, scores }: FinalProps) {
           );
           if (s) {
             totalRel += s.strokes - h.par;
+            totalStrokes += s.strokes;
             holesScored++;
           }
         }
@@ -276,8 +357,8 @@ function FinalTotals({ styles, allHoles, scorers, scores }: FinalProps) {
         const status = !hasAnyScore
           ? 'No scores yet'
           : holesScored === allHoles.length
-          ? formatScore(totalRel)
-          : `${formatScore(totalRel)} · ${holesScored}/${allHoles.length}`;
+          ? `${totalStrokes}  ·  ${formatScore(totalRel)}`
+          : `${totalStrokes}  ·  ${formatScore(totalRel)} · ${holesScored}/${allHoles.length}`;
         return (
           <View key={scorer.id} style={styles.totalRow}>
             <View style={[styles.scorerSwatch, { backgroundColor: scorer.color }]} />
@@ -306,6 +387,38 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderWidth: 1,
       padding: 8,
     },
+    tabs: {
+      flexDirection: 'row',
+      gap: 4,
+      backgroundColor: colors.chipBg,
+      borderRadius: 10,
+      padding: 3,
+      marginBottom: 8,
+    },
+    tab: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 7,
+      borderRadius: 7,
+    },
+    tabActive: {
+      backgroundColor: colors.cardBg,
+      shadowColor: '#000',
+      shadowOpacity: 0.05,
+      shadowRadius: 2,
+      shadowOffset: { width: 0, height: 1 },
+      elevation: 1,
+    },
+    tabText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textMuted,
+      letterSpacing: 0.4,
+    },
+    tabTextActive: {
+      color: colors.primaryDark,
+    },
     row: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -323,17 +436,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'center',
     },
-    editableCell: {
+    cellPressable: {
       flex: 1,
-      backgroundColor: 'rgba(124,179,66,0.12)',
-      borderRadius: 4,
-    },
-    editingCell: {
-      backgroundColor: 'rgba(124,179,66,0.40)',
-      borderWidth: 1.5,
-      borderColor: colors.primaryDark,
-      borderStyle: 'dashed',
-      borderRadius: 4,
     },
     cellNum: {
       flex: 1,
@@ -353,6 +457,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.primaryDark,
       fontWeight: '800',
     },
+    cellColCurrent: {
+      backgroundColor: 'rgba(124,179,66,0.18)',
+      borderRadius: 4,
+    },
     cellTotal: {
       width: 36,
       textAlign: 'right',
@@ -365,6 +473,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '800',
       fontSize: 10,
       letterSpacing: 0.4,
+    },
+    headTextCurrent: {
+      color: colors.primaryDark,
+      backgroundColor: 'rgba(124,179,66,0.25)',
+      borderRadius: 4,
     },
     parText: {
       color: colors.textMuted,

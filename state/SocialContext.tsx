@@ -369,8 +369,8 @@ export function SocialProvider({ children }: PropsWithChildren) {
 
       // Auto-create a roster entry for the new friend so they show up in
       // the Friends list immediately. We do NOT auto-merge any existing
-      // unlinked roster entries — that's an explicit user action under the
-      // v6 redesign.
+      // local roster entries — under Path 3a local players are an
+      // implementation detail with no merge-to-friend flow.
       const newFriendProfile =
         profileCacheRef.current[req.fromUserId] ??
         (await ensureProfilesCached([req.fromUserId]))[req.fromUserId];

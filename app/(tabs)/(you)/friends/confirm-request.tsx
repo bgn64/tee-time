@@ -2,7 +2,7 @@
  * Confirm friend request screen.
  *
  * Reached from the search results. On send, dispatches `sendFriendRequest`
- * and pops back to the People tab.
+ * and pops back to the Friends list.
  *
  * Loads the target profile from `useSocial().profileCache`. The cache is
  * populated by the search step that preceded us; if that cache miss

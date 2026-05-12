@@ -275,11 +275,11 @@ describe('buildRoundTitle', () => {
     expect(buildRoundTitle(r, undefined, resolveName)).toBe('Mike, Ben, and Sarah played');
   });
 
-  test('excludes unlinked participants', () => {
+  test('excludes local participants', () => {
     const r = makeRound({
       participants: [
         { participantKey: 'a', linkedUserId: 'u1' },
-        { participantKey: 'c', unlinkedDisplayName: 'Dad' },
+        { participantKey: 'c', localDisplayName: 'Dad' },
       ],
     });
     expect(buildRoundTitle(r, undefined, resolveName)).toBe('Mike played');

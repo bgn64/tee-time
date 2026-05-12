@@ -104,15 +104,17 @@ tee-time/
 │       │   ├── _layout.tsx     # Stack: index → player-config → scoring
 │       │   ├── index.tsx       # Course Selection (tab root, no active round)
 │       │   ├── player-config.tsx   # Add players / pick format
-│       │   ├── scoring.tsx     # Locked-round scoring screen
-│       │   ├── scorecard.tsx   # Read-only grid (stub)
+│       │   ├── scoring.tsx     # Locked-round scoring screen (entry + inline grid)
 │       │   └── new-course.tsx  # Create a custom course
-│       └── (you)/              # Profile / settings / theme picker
+│       └── (you)/              # Profile / settings / theme picker / friends stack
 │
 ├── components/                 # Shared, route-agnostic UI
 │   ├── AppHeader.tsx           # Persistent top bar (renders header slots)
 │   ├── PlayerBottomSheet.tsx   # Modal: search/select/create players
-│   ├── RoundActionsSheet.tsx   # ⋯ overflow menu inside a locked round
+│   ├── HoleNavBar.tsx          # ‹ HOLE N › chevron control for scoring/edit
+│   ├── ScoreEntryRow.tsx       # Per-scorer entry: avatar · name · − score +
+│   ├── ReadOnlyScorecard.tsx   # Holes×scorers grid (tap-to-jump in scoring/edit)
+│   ├── IncomingRequestsBanner.tsx  # Pinned friend-requests banner
 │   ├── ConfirmAbandonSheet.tsx # "Abandon round?" confirmation
 │   └── …                       # Themed text/link helpers, color-scheme hooks
 │
@@ -275,8 +277,8 @@ type RoundParticipant = {
   participantKey;            // local Player.id on the scorer's device
   linkedUserId?;             // set when the participant has a real account
   teamId?;                   // set in scramble rounds
-  unlinkedDisplayName?;      // snapshot, populated ONLY when linkedUserId is absent
-  unlinkedDisplayColor?;     // snapshot, populated ONLY when linkedUserId is absent
+  localDisplayName?;         // snapshot, populated ONLY when linkedUserId is absent
+  localDisplayColor?;        // snapshot, populated ONLY when linkedUserId is absent
 };
 
 type Round = {
@@ -299,7 +301,7 @@ type Round = {
 Design choices to internalize:
 
 1. **A Round belongs to its scorer.** RLS is `owner OR friend-of-owner`. Other named players have no edit-rights, no stats credit, no opportunity to confirm/deny. If a named friend wants the scores to count for them, they score the round themselves (or, future feature, import the scoreline).
-2. **Live name/color rendering for linked participants.** `lib/participantIdentity.ts:resolveParticipantIdentity` is the single resolver every UI surface uses. Linked participants render live from the current profile (the viewer's account / `SocialContext.profileCache` / roster fallback). Unlinked participants have no live source, so their name/color is snapshotted on the participant row at scorecard-creation time.
+2. **Live name/color rendering for linked participants.** `lib/participantIdentity.ts:resolveParticipantIdentity` is the single resolver every UI surface uses. Linked participants render live from the current profile (the viewer's account / `SocialContext.profileCache` / roster fallback). Local participants (no `linkedUserId`) have no live source, so their name/color is snapshotted on the participant row at scorecard-creation time as `localDisplayName` / `localDisplayColor`.
 3. **References, not embedding for Players.** `Player`s are looked up via `PlayerContext`. If a player is renamed locally, every Round (active and historical) sees the new name. Linked participants resolve to their account's current displayName.
 4. **Polymorphic `scorerId`.** A `RoundScore` doesn't know whether it scores a player or a team — that's determined by `Round.scoringRule`. Stroke and scramble share the same score-storage shape and most of the same UI helpers (`getScorerTotalRelative`).
 5. **`mentioned_user_ids` is informational.** It's a denorm of linked participants' user_ids, used by the feed's "with you" line and (future) "Rounds I'm named in" import discovery. It does NOT drive RLS visibility.

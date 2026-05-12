@@ -14,9 +14,13 @@
  *
  * Three empty states:
  *   1. Pre-account — orange "Sign in to unlock" banner over a generic empty.
- *   2. Signed-in but no friends — "Find friends" CTA → /(tabs)/(people)/search.
+ *   2. Signed-in but no friends — "Find friends" CTA → /(tabs)/(you)/friends/search.
  *   3. Signed-in with friends but no friend-scored rounds yet — "View Rounds"
  *      CTA → /(tabs)/(rounds).
+ *
+ * The populated feed also renders a pinned IncomingRequestsBanner above
+ * the round list whenever there are pending friend requests, so users
+ * always see them at the moment they open the app.
  */
 
 import { router } from 'expo-router';
@@ -30,6 +34,7 @@ import {
   View,
 } from 'react-native';
 
+import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
 import { formatRelativeTime, formatScore, getRoundTotalRelative } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
@@ -121,7 +126,7 @@ export default function FeedScreen() {
           </Text>
           <Pressable
             style={styles.primaryCta}
-            onPress={() => router.push('/(tabs)/(people)/search')}>
+            onPress={() => router.push('/(tabs)/(you)/friends/search')}>
             <Text style={styles.primaryCtaText}>+  Find friends</Text>
           </Pressable>
         </View>
@@ -163,6 +168,7 @@ export default function FeedScreen() {
         />
       }>
       <Text style={styles.title}>Feed</Text>
+      <IncomingRequestsBanner />
       {friendRounds.map((round) => (
         <FeedCard
           key={round.id}
@@ -210,7 +216,7 @@ function FeedCard({
   profileCache,
 }: FeedCardProps) {
   // Owner display: live from profileCache for linked friends; fall back to
-  // local roster if cache misses. Snapshots only exist on unlinked
+  // local roster if cache misses. Snapshots only exist on local
   // participant rows (not the owner — the owner is always linked).
   const ownerProfile = round.ownerUserId ? profileCache[round.ownerUserId] : undefined;
   const ownerLocal = round.ownerUserId
@@ -248,9 +254,9 @@ function FeedCard({
 
   // Participant strip & with-line: in v7 every named participant is shown
   // (no blur, no pending). Linked entries render live from profile cache;
-  // unlinked entries fall back to their snapshot fields.
+  // local entries fall back to their snapshot fields.
   const resolveParticipantName = (
-    p: { linkedUserId?: string; unlinkedDisplayName?: string }
+    p: { linkedUserId?: string; localDisplayName?: string }
   ): string => {
     if (p.linkedUserId) {
       if (myUserId && p.linkedUserId === myUserId) return 'you';
@@ -259,10 +265,10 @@ function FeedCard({
       const local = allPlayers.find((q) => q.userId === p.linkedUserId);
       return local?.displayName ?? local?.nickname ?? 'Friend';
     }
-    return p.unlinkedDisplayName ?? 'Player';
+    return p.localDisplayName ?? 'Player';
   };
   const resolveParticipantColor = (
-    p: { linkedUserId?: string; unlinkedDisplayColor?: string }
+    p: { linkedUserId?: string; localDisplayColor?: string }
   ): string => {
     if (p.linkedUserId) {
       const prof = profileCache[p.linkedUserId];
@@ -270,7 +276,7 @@ function FeedCard({
       const local = allPlayers.find((q) => q.userId === p.linkedUserId);
       return local?.color ?? colors.primary;
     }
-    return p.unlinkedDisplayColor ?? colors.primary;
+    return p.localDisplayColor ?? colors.primary;
   };
 
   const stackSources: Array<{ id: string; name: string; color: string }> =
