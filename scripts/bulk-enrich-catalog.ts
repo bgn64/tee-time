@@ -1,27 +1,29 @@
 /**
- * Bulk-enrich every catalog course that has no per-hole yardages.
+ * Bulk-enrich catalog courses (the favorites by default).
  *
- *   tsx scripts/bulk-enrich-catalog.ts            # run for real
- *   tsx scripts/bulk-enrich-catalog.ts --dry-run  # print plan only
- *   tsx scripts/bulk-enrich-catalog.ts --filter Holmes   # only courses whose name matches
+ *   tsx scripts/bulk-enrich-catalog.ts                 # only courses someone has played
+ *   tsx scripts/bulk-enrich-catalog.ts --dry-run       # print plan only
+ *   tsx scripts/bulk-enrich-catalog.ts --filter Holmes # only rows whose name matches
+ *   tsx scripts/bulk-enrich-catalog.ts --all           # every unenriched catalog row (~17k!)
  *
- * Iterates every `source = 'opengolf'` row in `public.courses` that the
- * one-time data fix in migration 015 reset (`last_enriched_at IS NULL`,
- * regardless of whether it had tees before). For each row:
+ * Default scope ("played"): walks every opengolf course referenced by at
+ * least one row in `public.scorecards.course_snapshot` (i.e. the
+ * courses that any user has actually scored a round on). Fetches
+ * /v1/courses/:id + /tees + /holes from OpenGolfAPI, mirrors the
+ * client-side dedupeTees + buildHoles, and writes back directly via
+ * the service-role client (bypasses the RPC's authenticated-user
+ * check). Stamps last_enriched_at so the client guard short-circuits
+ * cleanly thereafter.
  *
- *   1. Fetch `/v1/courses/:id`, `/v1/courses/:id/tees`,
- *      `/v1/courses/:id/holes` from OpenGolfAPI.
- *   2. Build the rich `holes` + `tees` jsonb the way the client does
- *      (mirrors dedupeTees + buildHoles in state/GolfRoundContext).
- *   3. Write directly via the service-role client (bypasses the RPC's
- *      authenticated-user check). Sets `last_enriched_at = now()` so the
- *      next client to open the course short-circuits cleanly.
+ * Rows that already have last_enriched_at set are skipped — the
+ * one-time data fix in migration 015 reset rows that needed re-
+ * enrichment, so the script picks up exactly those after the
+ * migration runs.
  *
  * Throttled to ~3 req/sec to stay polite with the public API.
+ * Idempotent: re-running only hits rows still flagged as unenriched.
  *
- * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env (same as the
- * other scripts in this folder). Idempotent — re-running only hits rows
- * that are still unenriched.
+ * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env.
  */
 
 import { createClient } from '@supabase/supabase-js';
@@ -42,6 +44,7 @@ const admin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 });
 
 const dryRun = process.argv.includes('--dry-run');
+const enrichAll = process.argv.includes('--all');
 const filterIdx = process.argv.indexOf('--filter');
 const filter = filterIdx >= 0 ? process.argv[filterIdx + 1]?.toLowerCase() : null;
 
@@ -157,13 +160,52 @@ async function fetchUpstream(externalId: string) {
 async function main() {
   console.log('=== Bulk catalog enrichment ===');
   if (dryRun) console.log('(dry-run mode)');
+  console.log(
+    `scope: ${enrichAll ? 'all unenriched catalog rows (~17k!)' : 'courses any user has played'}`
+  );
   if (filter) console.log(`filter: name ILIKE %${filter}%`);
+
+  // Gather candidate course ids.
+  let candidateIds: string[] | null = null; // null = no id restriction (--all)
+  if (!enrichAll) {
+    // Collect the set of opengolf course ids referenced by any
+    // non-fake scorecard. This represents the "favorites" — courses
+    // someone has actually played a round on. Fake-seeded rounds
+    // (id like 'fake:%') are excluded so we don't enrich noise; the
+    // seed script's pool will be re-fetched naturally when those
+    // rounds get re-seeded.
+    const { data: rows, error } = await admin
+      .from('scorecards')
+      .select('course_snapshot')
+      .not('id', 'like', 'fake:%');
+    if (error) throw error;
+    const set = new Set<string>();
+    for (const r of rows ?? []) {
+      const snap = (r as { course_snapshot: { id?: string; source?: string } })
+        .course_snapshot;
+      if (snap && snap.source === 'opengolf' && typeof snap.id === 'string') {
+        set.add(snap.id);
+      }
+    }
+    candidateIds = [...set];
+    console.log(`Distinct opengolf courses played across all users: ${candidateIds.length}`);
+    if (candidateIds.length === 0) {
+      console.log(
+        'No real rounds have been played against the opengolf catalog. ' +
+          'Nothing to enrich. Pass --all to enrich every catalog row.'
+      );
+      return;
+    }
+  }
 
   let query = admin
     .from('courses')
     .select('id, name, source_external_id, last_enriched_at, tees, holes')
     .eq('source', 'opengolf')
     .is('last_enriched_at', null);
+  if (candidateIds) {
+    query = query.in('id', candidateIds);
+  }
   if (filter) {
     query = query.ilike('name', `%${filter}%`);
   }
