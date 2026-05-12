@@ -114,6 +114,11 @@ export function PlayerProvider({ children }: PropsWithChildren) {
 
   const { account, hydrated: accountHydrated } = useAccount();
 
+  // Stable primitive — see GolfRoundContext for the same pattern.
+  // Use in effect deps when only WHICH user is signed in matters, not
+  // cosmetic profile updates (avatar color picker on the You tab).
+  const accountUserId = account?.userId ?? null;
+
   const allPlayersRef = useRef(allPlayers);
   allPlayersRef.current = allPlayers;
 
@@ -158,15 +163,15 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     saveJSON(STORAGE_KEYS.DEFAULT_PLAYER_ID, defaultPlayerId);
   }, [defaultPlayerId, hydrated]);
 
-  // Sign-out reset: when account transitions non-null -> null, wipe the
-  // local cloud-cached roster back to seed defaults. The persistence
-  // effects above will then write the cleared state to AsyncStorage.
-  // Theme and other purely local state stay intact (they live in their
-  // own contexts).
+  // Sign-out reset: when accountUserId transitions non-null -> null,
+  // wipe the local cloud-cached roster back to seed defaults. The
+  // persistence effects above will then write the cleared state to
+  // AsyncStorage. Theme and other purely local state stay intact (they
+  // live in their own contexts).
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
     const prev = prevAccountUserIdRef.current;
-    const curr = account?.userId ?? null;
+    const curr = accountUserId;
     if (prev !== null && curr === null) {
       setAllPlayers(defaultPlayers);
       setRecentIds(DEFAULT_RECENT_IDS);
@@ -174,7 +179,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
       cloudSyncedAccountRef.current = null;
     }
     prevAccountUserIdRef.current = curr;
-  }, [account, accountHydrated, hydrated]);
+  }, [accountUserId, accountHydrated, hydrated]);
 
   const cloudUpsertPlayer = useCallback(
     async (player: Player) => {
@@ -196,17 +201,19 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     [account]
   );
 
-  // One-time-per-account initial sync
+  // One-time-per-account initial sync. Keyed by accountUserId so
+  // cosmetic profile updates (avatar color picker on You tab) don't
+  // re-run the sync gate.
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
-    if (!account) {
+    if (!accountUserId) {
       cloudSyncedAccountRef.current = null;
       return;
     }
-    if (cloudSyncedAccountRef.current === account.userId) return;
+    if (cloudSyncedAccountRef.current === accountUserId) return;
 
     let cancelled = false;
-    const ownerUserId = account.userId;
+    const ownerUserId = accountUserId;
 
     const sync = async () => {
       const { data: cloudRowsRaw, error } = await supabase
@@ -269,7 +276,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     return () => {
       cancelled = true;
     };
-  }, [account, hydrated, accountHydrated]);
+  }, [accountUserId, hydrated, accountHydrated]);
 
   const addPlayer = useCallback(
     (player: Player) => {

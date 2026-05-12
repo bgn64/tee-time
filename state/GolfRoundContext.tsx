@@ -254,6 +254,12 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const { allPlayers: playerRoster, defaultPlayerId } = usePlayers();
   const { account, hydrated: accountHydrated } = useAccount();
 
+  // Stable primitive derived from account. Use this in effect deps when
+  // the effect only cares about WHICH user is signed in — not cosmetic
+  // profile updates (like the avatar color picker on the You tab) that
+  // would otherwise re-fire heavyweight syncs and realtime resubscribes.
+  const accountUserId = account?.userId ?? null;
+
   const coursesRef = useRef(courses);
   coursesRef.current = courses;
 
@@ -306,7 +312,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
     const prev = prevAccountUserIdRef.current;
-    const curr = account?.userId ?? null;
+    const curr = accountUserId;
     if (prev !== null && curr === null) {
       // Clear all locally-cached courses; both customs (account-specific)
       // and any catalog rows the previous user had interacted with.
@@ -317,7 +323,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       cloudRoundsSyncedAccountRef.current = null;
     }
     prevAccountUserIdRef.current = curr;
-  }, [account, accountHydrated, hydrated]);
+  }, [accountUserId, accountHydrated, hydrated]);
 
   // ===========================================================================
   // Courses cloud sync (customs only; catalog comes via on-demand search)
@@ -409,17 +415,19 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   );
 
   // Initial pull: only user-owned customs. Catalog discovery happens via
-  // searchCatalogCourses on demand.
+  // searchCatalogCourses on demand. Keyed by account.userId (not the
+  // whole account object) so cosmetic profile updates don't re-run the
+  // sync gate.
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
-    if (!account) {
+    if (!accountUserId) {
       cloudCoursesSyncedAccountRef.current = null;
       return;
     }
-    if (cloudCoursesSyncedAccountRef.current === account.userId) return;
+    if (cloudCoursesSyncedAccountRef.current === accountUserId) return;
 
     let cancelled = false;
-    const ownerUserId = account.userId;
+    const ownerUserId = accountUserId;
 
     const sync = async () => {
       const { data, error } = await supabase
@@ -475,7 +483,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     return () => {
       cancelled = true;
     };
-  }, [account, hydrated, accountHydrated, cloudCourseRowToLocal, cloudUpsertCourse]);
+  }, [accountUserId, hydrated, accountHydrated, cloudCourseRowToLocal, cloudUpsertCourse]);
 
   // Catalog search (server-side, no client-side preload).
   const searchCatalogCourses = useCallback(
@@ -777,17 +785,18 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     [account]
   );
 
-  // Initial pull.
+  // Initial pull. Keyed by accountUserId so cosmetic profile updates
+  // don't re-trigger.
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
-    if (!account) {
+    if (!accountUserId) {
       cloudRoundsSyncedAccountRef.current = null;
       return;
     }
-    if (cloudRoundsSyncedAccountRef.current === account.userId) return;
+    if (cloudRoundsSyncedAccountRef.current === accountUserId) return;
 
     let cancelled = false;
-    const ownerUserId = account.userId;
+    const ownerUserId = accountUserId;
 
     const sync = async () => {
       const { data, error } = await supabase.from('scorecards').select('*');
@@ -845,11 +854,14 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     return () => {
       cancelled = true;
     };
-  }, [account, hydrated, accountHydrated, cloudToLocalRound, cloudUpsertRound]);
+  }, [accountUserId, hydrated, accountHydrated, cloudToLocalRound, cloudUpsertRound]);
 
   // Realtime: scorecards table only. Inline participants ride along.
+  // Depend on accountUserId (not the whole account object) so cosmetic
+  // profile updates — like the avatar color picker on the You tab —
+  // don't tear down + resubscribe the channel.
   useEffect(() => {
-    if (!account) return;
+    if (!accountUserId) return;
 
     const channel = supabase
       .channel('scorecards-stream')
@@ -879,7 +891,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [account, cloudToLocalRound]);
+  }, [accountUserId, cloudToLocalRound]);
 
   const value = useMemo<GolfRoundContextValue>(
     () => ({
