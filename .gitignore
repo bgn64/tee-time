@@ -48,3 +48,5 @@ docs/
 
 # Local script artifact cache (e.g., downloaded OpenGolf CSV)
 .cache/
+# Build output
+dist/
