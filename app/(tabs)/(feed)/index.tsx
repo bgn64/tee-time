@@ -1,26 +1,13 @@
 /**
  * Feed tab — chronological list of friends' completed rounds.
  *
- * Data flow: `completedRounds` from GolfRoundContext already includes any
- * rounds the local user has visibility to (via the v6 RLS, which uses the
- * union of friend graphs across confirmed participants). The Feed tab
- * filters that to "rounds I didn't score and that aren't pending my
- * confirmation."
+ * Each round renders as a large, self-contained FeedCardLarge — no
+ * tap-through, optional caption + tee swatches handled gracefully.
+ * The in-page "Feed" title is dropped (the persistent app header
+ * already labels the tab).
  *
- * Sort: most recent first by `completedAt`. Realtime subscriptions pushed
- * by Phase D keep the feed up to date without explicit polling. Pull-to-
- * refresh is wired anyway as a belt-and-suspenders for cases where the
- * websocket drops during long backgrounds.
- *
- * Three empty states:
- *   1. Pre-account — orange "Sign in to unlock" banner over a generic empty.
- *   2. Signed-in but no friends — "Find friends" CTA → /(tabs)/(you)/friends/search.
- *   3. Signed-in with friends but no friend-scored rounds yet — "View Rounds"
- *      CTA → /(tabs)/(rounds).
- *
- * The populated feed also renders a pinned IncomingRequestsBanner above
- * the round list whenever there are pending friend requests, so users
- * always see them at the moment they open the app.
+ * Three empty states (pre-account / no friends / no friend rounds)
+ * keep the previous shape and CTAs.
  */
 
 import { router } from 'expo-router';
@@ -34,23 +21,21 @@ import {
   View,
 } from 'react-native';
 
+import { FeedCardLarge } from '@/components/FeedCardLarge';
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
-import { formatRelativeTime, formatScore, getRoundTotalRelative } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
-import { Player, Round } from '@/types/golf';
 
 export default function FeedScreen() {
   const { colors } = useTheme();
   const { account } = useAccount();
-  const { friends } = useSocial();
-  const { profileCache } = useSocial();
+  const { friends, profileCache } = useSocial();
   const { completedRounds } = useGolfRound();
-  const { allPlayers, defaultPlayerId, getPlayer } = usePlayers();
+  const { allPlayers, getPlayer } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [refreshing, setRefreshing] = useState(false);
@@ -60,8 +45,6 @@ export default function FeedScreen() {
     right: { kind: 'profile' },
   });
 
-  // Feed shows rounds where at least one confirmed linked participant is
-  // NOT the current user. That includes friends' solo rounds and any shared
   // Feed: every Round visible to the viewer that isn't owned by them.
   // RLS already restricts visibility to owner-or-friend-of-owner, so the
   // remaining rows are friend-owned. Sort by completedAt desc.
@@ -76,10 +59,6 @@ export default function FeedScreen() {
   }, [completedRounds, account]);
 
   const onRefresh = useCallback(async () => {
-    // The cloud-sync effects in GolfRoundContext re-run when `account`
-    // changes; for an explicit refresh we do nothing fancy yet — a future
-    // improvement would expose a public `refreshRounds()` helper. Today we
-    // just pause briefly so the spinner gives feedback.
     setRefreshing(true);
     await new Promise((r) => setTimeout(r, 600));
     setRefreshing(false);
@@ -88,10 +67,7 @@ export default function FeedScreen() {
   // -------- Empty states --------
   if (!account) {
     return (
-      <ScrollView
-        style={styles.container}
-        contentContainerStyle={styles.contentEmpty}>
-        <Text style={styles.title}>Feed</Text>
+      <ScrollView style={styles.container} contentContainerStyle={styles.contentEmpty}>
         <View style={styles.preaccountBanner}>
           <Text style={styles.preaccountHead}>✦  SIGN IN TO UNLOCK</Text>
           <Text style={styles.preaccountBody}>
@@ -116,7 +92,6 @@ export default function FeedScreen() {
   if (friends.length === 0) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.contentEmpty}>
-        <Text style={styles.title}>Feed</Text>
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>👥</Text>
           <Text style={styles.emptyTitle}>Find friends to see their rounds</Text>
@@ -137,7 +112,6 @@ export default function FeedScreen() {
   if (friendRounds.length === 0) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.contentEmpty}>
-        <Text style={styles.title}>Feed</Text>
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>⛳</Text>
           <Text style={styles.emptyTitle}>No friend rounds yet</Text>
@@ -167,193 +141,18 @@ export default function FeedScreen() {
           tintColor={colors.primary}
         />
       }>
-      <Text style={styles.title}>Feed</Text>
       <IncomingRequestsBanner />
       {friendRounds.map((round) => (
-        <FeedCard
+        <FeedCardLarge
           key={round.id}
           round={round}
-          allPlayers={allPlayers}
-          defaultPlayerId={defaultPlayerId}
-          getPlayer={getPlayer}
-          colors={colors}
-          styles={styles}
           myUserId={account?.userId}
+          allPlayers={allPlayers}
+          getPlayer={getPlayer}
           profileCache={profileCache}
-          onPress={() =>
-            router.push({
-              pathname: '/(tabs)/(rounds)/[id]',
-              params: { id: round.id },
-            })
-          }
         />
       ))}
     </ScrollView>
-  );
-}
-
-type FeedCardProps = {
-  round: Round;
-  allPlayers: Player[];
-  defaultPlayerId: string | null;
-  getPlayer: (id: string) => Player | undefined;
-  colors: ReturnType<typeof useTheme>['colors'];
-  styles: ReturnType<typeof makeStyles>;
-  myUserId?: string;
-  profileCache: Record<string, { displayName: string; handle: string; avatarColor: string; userId: string }>;
-  onPress: () => void;
-};
-
-function FeedCard({
-  round,
-  allPlayers,
-  defaultPlayerId,
-  getPlayer,
-  colors,
-  styles,
-  onPress,
-  myUserId,
-  profileCache,
-}: FeedCardProps) {
-  // Owner display: live from profileCache for linked friends; fall back to
-  // local roster if cache misses. Snapshots only exist on local
-  // participant rows (not the owner — the owner is always linked).
-  const ownerProfile = round.ownerUserId ? profileCache[round.ownerUserId] : undefined;
-  const ownerLocal = round.ownerUserId
-    ? allPlayers.find((p) => p.userId === round.ownerUserId)
-    : undefined;
-  const ownerName =
-    ownerProfile?.displayName ?? ownerLocal?.displayName ?? ownerLocal?.nickname ?? 'A friend';
-  const ownerHandle = ownerProfile?.handle ?? ownerLocal?.handle;
-  const ownerColor =
-    ownerProfile?.avatarColor ?? ownerLocal?.color ?? colors.primary;
-  const ownerInitial = ownerName[0]?.toUpperCase() ?? '?';
-
-  const isScramble = round.scoringRule === 'scramble';
-
-  // Score chip = the round owner's score (in stroke). For scramble we still
-  // show round-total since there's no clear "owner team."
-  const ownerParticipantKey = (round.participants ?? []).find(
-    (p) => p.linkedUserId === round.ownerUserId
-  )?.participantKey;
-  const ownerScorerId = isScramble ? undefined : ownerParticipantKey;
-  const totalRel = ownerScorerId
-    ? getRoundTotalRelative(round, ownerScorerId)
-    : getRoundTotalRelative(round);
-  const scoreChipStyle =
-    totalRel > 0 ? styles.scoreChipOver : totalRel < 0 ? styles.scoreChipUnder : styles.scoreChipEven;
-  const scoreTextStyle =
-    totalRel > 0
-      ? styles.scoreChipTextOver
-      : totalRel < 0
-      ? styles.scoreChipTextUnder
-      : styles.scoreChipTextEven;
-
-  const dateLabel = formatRelativeTime(round.completedAt ?? round.startedAt);
-  const holeCount = round.course.holes.length;
-
-  // Participant strip & with-line: in v7 every named participant is shown
-  // (no blur, no pending). Linked entries render live from profile cache;
-  // local entries fall back to their snapshot fields.
-  const resolveParticipantName = (
-    p: { linkedUserId?: string; localDisplayName?: string }
-  ): string => {
-    if (p.linkedUserId) {
-      if (myUserId && p.linkedUserId === myUserId) return 'you';
-      const prof = profileCache[p.linkedUserId];
-      if (prof) return prof.displayName;
-      const local = allPlayers.find((q) => q.userId === p.linkedUserId);
-      return local?.displayName ?? local?.nickname ?? 'Friend';
-    }
-    return p.localDisplayName ?? 'Player';
-  };
-  const resolveParticipantColor = (
-    p: { linkedUserId?: string; localDisplayColor?: string }
-  ): string => {
-    if (p.linkedUserId) {
-      const prof = profileCache[p.linkedUserId];
-      if (prof) return prof.avatarColor;
-      const local = allPlayers.find((q) => q.userId === p.linkedUserId);
-      return local?.color ?? colors.primary;
-    }
-    return p.localDisplayColor ?? colors.primary;
-  };
-
-  const stackSources: Array<{ id: string; name: string; color: string }> =
-    isScramble && round.teams
-      ? round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }))
-      : (round.participants ?? []).map((p) => ({
-          id: p.linkedUserId ?? p.participantKey,
-          name: resolveParticipantName(p),
-          color: resolveParticipantColor(p),
-        }));
-
-  // "with Y, Z" — exclude the owner; include "you" first if the viewer is
-  // named on the round.
-  const meIsMentioned =
-    !!myUserId && (round.mentionedUserIds ?? []).includes(myUserId);
-  const otherNames = (round.participants ?? [])
-    .filter(
-      (p) => p.linkedUserId !== round.ownerUserId && p.linkedUserId !== myUserId
-    )
-    .map(resolveParticipantName);
-  const withParts: string[] = [];
-  if (meIsMentioned) withParts.push('you');
-  withParts.push(...otherNames);
-  const withText = withParts.length > 0 ? `with ${withParts.join(', ')}` : '';
-
-  return (
-    <Pressable style={styles.card} onPress={onPress}>
-      <View style={styles.cardTop}>
-        <View style={[styles.avatar, { backgroundColor: ownerColor }]}>
-          <Text style={styles.avatarText}>{ownerInitial}</Text>
-        </View>
-        <View style={styles.cardWho}>
-          <Text style={styles.cardWhoName} numberOfLines={1}>
-            {ownerName}
-          </Text>
-          {ownerHandle ? (
-            <Text style={styles.cardWhoHandle} numberOfLines={1}>
-              @{ownerHandle}
-            </Text>
-          ) : null}
-        </View>
-        <Text style={styles.cardWhen}>{dateLabel}</Text>
-      </View>
-
-      <View style={styles.cardCourse}>
-        <View style={styles.cardCourseInfo}>
-          <Text style={styles.cardCourseName} numberOfLines={1}>
-            {round.course.name}
-          </Text>
-          <Text style={styles.cardCourseMeta}>
-            {isScramble ? 'Scramble' : 'Stroke'} · {holeCount} {holeCount === 1 ? 'hole' : 'holes'}
-          </Text>
-        </View>
-        <View style={[styles.scoreChip, scoreChipStyle]}>
-          <Text style={[styles.scoreChipText, scoreTextStyle]}>{formatScore(totalRel)}</Text>
-        </View>
-      </View>
-
-      <View style={styles.cardBottom}>
-        <View style={styles.stack}>
-          {stackSources.slice(0, 4).map((src, i) => (
-            <View
-              key={src.id}
-              style={[
-                styles.stackAvatar,
-                { backgroundColor: src.color, marginLeft: i === 0 ? 0 : -6 },
-              ]}>
-              <Text style={styles.stackAvatarText}>{src.name[0]?.toUpperCase()}</Text>
-            </View>
-          ))}
-        </View>
-        <Text style={styles.withText} numberOfLines={1}>
-          {withText}
-        </Text>
-        <Text style={styles.viewLink}>View round  →</Text>
-      </View>
-    </Pressable>
   );
 }
 
@@ -364,7 +163,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.background,
     },
     content: {
-      padding: 20,
+      padding: 14,
       paddingBottom: 40,
     },
     contentEmpty: {
@@ -372,148 +171,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingBottom: 40,
       flexGrow: 1,
     },
-    title: {
-      fontSize: 22,
-      fontWeight: '800',
-      color: colors.textTitle,
-      marginBottom: 12,
-    },
 
-    // Card
-    card: {
-      backgroundColor: colors.cardBg,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: 12,
-      marginBottom: 10,
-    },
-    cardTop: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 10,
-    },
-    avatar: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    avatarText: {
-      color: '#ffffff',
-      fontSize: 14,
-      fontWeight: '800',
-    },
-    cardWho: {
-      flex: 1,
-      minWidth: 0,
-    },
-    cardWhoName: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
-    cardWhoHandle: {
-      fontSize: 11,
-      color: colors.primaryDark,
-      fontWeight: '700',
-      marginTop: 1,
-    },
-    cardWhen: {
-      fontSize: 10.5,
-      color: colors.textMuted,
-      fontWeight: '600',
-    },
-
-    cardCourse: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      marginBottom: 10,
-    },
-    cardCourseInfo: {
-      flex: 1,
-      minWidth: 0,
-    },
-    cardCourseName: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
-    cardCourseMeta: {
-      fontSize: 11,
-      color: colors.textMuted,
-      marginTop: 1,
-    },
-    scoreChip: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 9,
-    },
-    scoreChipText: {
-      fontSize: 14,
-      fontWeight: '800',
-    },
-    scoreChipEven: {
-      backgroundColor: colors.chipBg,
-    },
-    scoreChipTextEven: {
-      color: colors.textTitle,
-    },
-    scoreChipOver: {
-      backgroundColor: colors.accent + '22',
-    },
-    scoreChipTextOver: {
-      color: colors.accent,
-    },
-    scoreChipUnder: {
-      backgroundColor: colors.primary + '22',
-    },
-    scoreChipTextUnder: {
-      color: colors.primaryDark,
-    },
-
-    cardBottom: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingTop: 10,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-    },
-    stack: {
-      flexDirection: 'row',
-    },
-    stackAvatar: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1.5,
-      borderColor: colors.cardBg,
-    },
-    stackAvatarText: {
-      color: '#ffffff',
-      fontSize: 9,
-      fontWeight: '800',
-    },
-    withText: {
-      flex: 1,
-      fontSize: 11,
-      color: colors.textMuted,
-      marginLeft: 4,
-    },
-    viewLink: {
-      fontSize: 11,
-      fontWeight: '800',
-      color: colors.primaryDark,
-      letterSpacing: 0.3,
-    },
-
-    // Empty / pre-account states
     empty: {
       alignItems: 'center',
       paddingTop: 40,
