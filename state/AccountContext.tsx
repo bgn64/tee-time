@@ -47,6 +47,13 @@ type AccountContextValue = {
   verifyMagicCode: (code: string) => Promise<AuthResult>;
   completeProfile: (handle: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
+  /**
+   * Update the signed-in user's `profiles.avatar_color`. Writes to
+   * Supabase and refreshes the local Account state so participant
+   * identity (feed band, scorer rows, etc.) re-renders live. No-op
+   * when signed out.
+   */
+  updateAvatarColor: (color: string) => Promise<AuthResult>;
   postRoundPromptDismissCount: number;
   postRoundPromptSuppressed: boolean;
   markPostRoundPromptDismissed: () => void;
@@ -210,6 +217,24 @@ export function AccountProvider({ children }: PropsWithChildren) {
     await supabase.auth.signOut();
   }, []);
 
+  const updateAvatarColor = useCallback(
+    async (color: string): Promise<AuthResult> => {
+      if (!account) return { ok: false, error: 'Not signed in' };
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_color: color })
+        .eq('user_id', account.userId);
+      if (error) return { ok: false, error: error.message };
+      // Optimistic local update so the You tab + everywhere reading
+      // `account.avatarColor` refreshes immediately. The next
+      // refreshFromSession (e.g. on auth state change) will re-pull
+      // the canonical value, but until then we trust our own write.
+      setAccount((prev) => (prev ? { ...prev, avatarColor: color } : prev));
+      return { ok: true, value: undefined };
+    },
+    [account]
+  );
+
   const markPostRoundPromptDismissed = useCallback(() => {
     setPostRoundPromptDismissCount((prev) =>
       prev >= POST_ROUND_PROMPT_SUPPRESS_THRESHOLD ? prev : prev + 1
@@ -225,6 +250,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       verifyMagicCode,
       completeProfile,
       signOut,
+      updateAvatarColor,
       postRoundPromptDismissCount,
       postRoundPromptSuppressed:
         postRoundPromptDismissCount >= POST_ROUND_PROMPT_SUPPRESS_THRESHOLD,
@@ -239,6 +265,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       verifyMagicCode,
       completeProfile,
       signOut,
+      updateAvatarColor,
       postRoundPromptDismissCount,
       markPostRoundPromptDismissed,
       hydrated,
