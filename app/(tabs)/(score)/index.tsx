@@ -128,18 +128,61 @@ export default function CourseSelectionScreen() {
     }, [currentRound])
   );
 
-  // Decorate + sort every locally-known course by most-recent play.
+  // Decorate + sort the recent-course list. The set is built from two
+  // sources because each one fills a gap in the other:
+  //
+  //   1. The viewer's completedRounds (filtered to their own — see
+  //      myCompletedRounds). Every Round carries the full
+  //      course_snapshot inline, so we can derive recent-played
+  //      entries without having to ensure the catalog cache is
+  //      populated. This is what powers the "things I've played"
+  //      list across app installs / data clears.
+  //
+  //   2. The local `courses` cache. Custom courses the user authored
+  //      live here and may not have a Round yet — we surface them so
+  //      the user can find their own creations without searching.
+  //
+  // Rounds-derived entries override catalog/custom entries with the
+  // same id (the Round carries the most recently completed
+  // snapshot). Sort: most recently played first; un-played entries
+  // (customs with no round yet) by name.
   const decoratedAll = useMemo<RecentCourseEntry[]>(() => {
-    return courses
-      .map((course) => ({ course, lastPlayedAt: lastPlayedAt(course.id, myCompletedRounds) }))
-      .sort((a, b) => {
-        if (a.lastPlayedAt && b.lastPlayedAt) {
-          return a.lastPlayedAt < b.lastPlayedAt ? 1 : -1;
-        }
-        if (a.lastPlayedAt) return -1;
-        if (b.lastPlayedAt) return 1;
-        return a.course.name.localeCompare(b.course.name);
+    const byId = new Map<string, RecentCourseEntry>();
+
+    // 1. From the viewer's own rounds.
+    for (const r of myCompletedRounds) {
+      if (!r.course?.id || !r.completedAt) continue;
+      const existing = byId.get(r.course.id);
+      if (!existing) {
+        byId.set(r.course.id, { course: r.course, lastPlayedAt: r.completedAt });
+      } else if (
+        existing.lastPlayedAt === null ||
+        r.completedAt > existing.lastPlayedAt
+      ) {
+        // Keep the newer snapshot.
+        byId.set(r.course.id, { course: r.course, lastPlayedAt: r.completedAt });
+      }
+    }
+
+    // 2. Top up with locally-cached courses that aren't already covered.
+    //    Use lastPlayedAt against myCompletedRounds so the result is
+    //    consistent across both sources.
+    for (const course of courses) {
+      if (byId.has(course.id)) continue;
+      byId.set(course.id, {
+        course,
+        lastPlayedAt: lastPlayedAt(course.id, myCompletedRounds),
       });
+    }
+
+    return [...byId.values()].sort((a, b) => {
+      if (a.lastPlayedAt && b.lastPlayedAt) {
+        return a.lastPlayedAt < b.lastPlayedAt ? 1 : -1;
+      }
+      if (a.lastPlayedAt) return -1;
+      if (b.lastPlayedAt) return 1;
+      return a.course.name.localeCompare(b.course.name);
+    });
   }, [courses, myCompletedRounds]);
 
   // Recents = locally-known courses that have actually been played + any
