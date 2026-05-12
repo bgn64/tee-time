@@ -303,14 +303,9 @@ export function FeedCardLarge({
           {companyBody}
         </View>
 
-        {ownerScorerId ? (
+        {round.scores.length > 0 ? (
           <View style={styles.scorecardWrap}>
-            <ReadOnlyScorecard
-              round={round}
-              scorerIds={[ownerScorerId]}
-              compact
-              hideFinalTotals
-            />
+            <ReadOnlyScorecard round={round} hideFinalTotals />
           </View>
         ) : null}
       </View>

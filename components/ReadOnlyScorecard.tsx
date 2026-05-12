@@ -49,19 +49,6 @@ type Props = {
   onHolePress?: (holeNumber: number) => void;
   /** Suppress the bottom FINAL totals section (live scoring uses this). */
   hideFinalTotals?: boolean;
-  /**
-   * When provided, only render scorer rows whose id is in this list.
-   * For stroke rounds these are participant keys; for scramble they're
-   * team ids. Used by the feed card to render just the round-owner's
-   * perspective. Final totals row (if shown) is also filtered.
-   */
-  scorerIds?: string[];
-  /**
-   * Compact mode for embedding in feed cards. Drops the tee-yardage
-   * rows and the HCP row so the grid stays narrow. Score rows + par
-   * row + hole-number row remain.
-   */
-  compact?: boolean;
 };
 
 const TEE_COLOR_HEX: Record<string, string> = {
@@ -89,8 +76,6 @@ export function ReadOnlyScorecard({
   currentHoleNumber,
   onHolePress,
   hideFinalTotals,
-  scorerIds,
-  compact,
 }: Props) {
   const { colors } = useTheme();
   const { allPlayers } = usePlayers();
@@ -150,10 +135,30 @@ export function ReadOnlyScorecard({
           allPlayers,
         });
         const isMe = !!account?.userId && p.linkedUserId === account.userId;
+        // During live scoring `participants[]` is seeded with only
+        // `{ participantKey, teeId?, teamId? }` — no linkedUserId and no
+        // localDisplayName snapshot until the round is completed. In
+        // that case resolveParticipantIdentity returns the generic
+        // "Player" string. Fall back to the local roster by
+        // participantKey so the real name renders mid-round too.
+        let displayName: string;
+        let color: string | undefined;
+        if (isMe) {
+          displayName = 'You';
+          color = identity.color;
+        } else if (p.linkedUserId || p.localDisplayName) {
+          displayName = identity.displayName;
+          color = identity.color;
+        } else {
+          const roster = allPlayers.find((q) => q.id === p.participantKey);
+          displayName =
+            roster?.displayName ?? roster?.nickname ?? identity.displayName;
+          color = roster?.color ?? identity.color;
+        }
         return {
           id: p.participantKey,
-          name: isMe ? 'You' : identity.displayName,
-          color: identity.color ?? colors.primary,
+          name: displayName,
+          color: color ?? colors.primary,
           teeId: p.teeId,
         };
       });
@@ -170,12 +175,8 @@ export function ReadOnlyScorecard({
         };
       });
     }
-    if (scorerIds && scorerIds.length > 0) {
-      const allowed = new Set(scorerIds);
-      raw = raw.filter((s) => allowed.has(s.id));
-    }
     return raw;
-  }, [round, isScramble, account, profileCache, allPlayers, colors.primary, scorerIds]);
+  }, [round, isScramble, account, profileCache, allPlayers, colors.primary]);
 
   const front9 = useMemo(
     () => round.course.holes.filter((h) => h.number <= 9),
@@ -252,8 +253,8 @@ export function ReadOnlyScorecard({
         totalLabel={visibleTotalLabel}
         currentHoleNumber={currentHoleNumber}
         onHolePress={onHolePress}
-        teesInPlay={compact ? [] : teesInPlay}
-        showHcp={hasHcp && !compact}
+        teesInPlay={teesInPlay}
+        showHcp={hasHcp}
       />
       {!hideFinalTotals && (
         <View style={{ marginTop: 14 }}>
@@ -344,10 +345,15 @@ function NineSection({
         }, 0);
         return (
           <View key={`yd-${tee.id}`} style={[styles.row, styles.tintedRow]}>
-            <View style={[styles.cellName, styles.teeNameCell]}>
-              <View
-                style={[styles.teeDot, { backgroundColor: teeSwatchColor(tee) }]}
-              />
+            <View
+              style={[styles.teeBar, { backgroundColor: teeSwatchColor(tee) }]}
+            />
+            <View
+              style={[
+                styles.cellName,
+                styles.teeNameCell,
+                styles.cellNameWithBar,
+              ]}>
               <Text style={styles.teeNameText} numberOfLines={1}>
                 {tee.name}
               </Text>
@@ -425,16 +431,19 @@ function NineSection({
 
         return (
           <View key={scorer.id} style={styles.row}>
-            <View style={styles.cellName}>
-              {scorerTee ? (
-                <View
-                  style={[
-                    styles.teeDot,
-                    styles.teeDotInline,
-                    { backgroundColor: teeSwatchColor(scorerTee) },
-                  ]}
-                />
-              ) : null}
+            {scorerTee ? (
+              <View
+                style={[
+                  styles.teeBar,
+                  { backgroundColor: teeSwatchColor(scorerTee) },
+                ]}
+              />
+            ) : null}
+            <View
+              style={[
+                styles.cellName,
+                scorerTee && styles.cellNameWithBar,
+              ]}>
               <Text
                 style={{ color: scorer.color, fontSize: 11, fontWeight: '700' }}
                 numberOfLines={1}>
@@ -597,6 +606,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 4,
       borderBottomColor: colors.border,
       borderBottomWidth: StyleSheet.hairlineWidth,
+      // Anchor for the absolutely-positioned tee bar (Option C).
+      position: 'relative',
     },
     tintedRow: {
       backgroundColor: '#faf6ec',
@@ -676,6 +687,21 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     teeDotInline: {
       marginRight: 5,
+    },
+    // Option C: 3px colored stripe pinned to the left edge of any row
+    // that's associated with a tee (yardage rows + scorer rows with a
+    // teeId). The row is `position: relative` so this absolute bar
+    // overlays at the left without disturbing the cell flex layout.
+    teeBar: {
+      position: 'absolute',
+      left: 0,
+      top: 3,
+      bottom: 3,
+      width: 3,
+      borderRadius: 2,
+    },
+    cellNameWithBar: {
+      paddingLeft: 7,
     },
     teeNameText: {
       fontSize: 10,
