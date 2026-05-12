@@ -39,7 +39,7 @@ import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Hole, Round, RoundScore } from '@/types/golf';
 
-type Scorer = { id: string; name: string; color: string };
+type Scorer = { id: string; name: string; color: string; teeId?: string };
 
 type Props = {
   round: Round;
@@ -50,6 +50,26 @@ type Props = {
   /** Suppress the bottom FINAL totals section (live scoring uses this). */
   hideFinalTotals?: boolean;
 };
+
+const TEE_COLOR_HEX: Record<string, string> = {
+  black: '#1a1a1a',
+  blue: '#4a90e2',
+  white: '#ddd6c4',
+  gold: '#c9a64a',
+  red: '#d54848',
+  green: '#7cb342',
+  yellow: '#f5d020',
+  burgundy: '#722f37',
+};
+
+function teeSwatchColor(tee: { name: string; color?: string }): string {
+  if (tee.color) {
+    const known = TEE_COLOR_HEX[tee.color.toLowerCase()];
+    if (known) return known;
+    if (tee.color.startsWith('#')) return tee.color;
+  }
+  return TEE_COLOR_HEX[tee.name.toLowerCase()] ?? '#888';
+}
 
 export function ReadOnlyScorecard({
   round,
@@ -64,6 +84,44 @@ export function ReadOnlyScorecard({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const isScramble = round.scoringRule === 'scramble';
+
+  // For scramble, participants carry teeIds but they belong to team
+  // members (not the team itself). We aggregate per-team by taking
+  // the most common teeId across members — but the simpler rule is:
+  // tees-in-play for the scorecard means the union of teeIds referenced
+  // by ANY participant, period. The scorer rows in scramble are teams,
+  // not players, so they don't get a tee dot prefix (teams don't pick
+  // a tee directly). See the score-row rendering below.
+  const teeIdsInPlay: string[] = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of round.participants ?? []) {
+      if (p.teeId) set.add(p.teeId);
+    }
+    return [...set];
+  }, [round.participants]);
+
+  const teesInPlay = useMemo(() => {
+    const courseTees = round.course.tees ?? [];
+    const byId = new Map(courseTees.map((t) => [t.id, t]));
+    const tees = teeIdsInPlay
+      .map((id) => byId.get(id))
+      .filter((t): t is NonNullable<typeof t> => !!t)
+      // Only render rows for tees that actually have per-hole yardages
+      // somewhere in the course; tees declared in metadata but missing
+      // hole data are silently skipped.
+      .filter((t) =>
+        round.course.holes.some(
+          (h) => h.yardages && Number.isFinite(h.yardages[t.id])
+        )
+      );
+    // Longest first; tees missing totalYardage sink to the bottom.
+    return tees.sort((a, b) => (b.totalYardage ?? -1) - (a.totalYardage ?? -1));
+  }, [teeIdsInPlay, round.course.tees, round.course.holes]);
+
+  const hasHcp = useMemo(
+    () => round.course.holes.some((h) => h.handicapIndex != null),
+    [round.course.holes]
+  );
 
   const scorers: Scorer[] = useMemo(() => {
     if (isScramble && round.teams) {
@@ -85,6 +143,7 @@ export function ReadOnlyScorecard({
           id: p.participantKey,
           name: isMe ? 'You' : identity.displayName,
           color: identity.color ?? colors.primary,
+          teeId: p.teeId,
         };
       });
     }
@@ -176,6 +235,8 @@ export function ReadOnlyScorecard({
         totalLabel={visibleTotalLabel}
         currentHoleNumber={currentHoleNumber}
         onHolePress={onHolePress}
+        teesInPlay={teesInPlay}
+        showHcp={hasHcp}
       />
       {!hideFinalTotals && (
         <View style={{ marginTop: 14 }}>
@@ -199,6 +260,10 @@ type SectionProps = {
   totalLabel: string;
   currentHoleNumber?: number;
   onHolePress?: (holeNumber: number) => void;
+  /** Tees to render yardage rows for, longest-first. */
+  teesInPlay: Array<{ id: string; name: string; color?: string; totalYardage?: number }>;
+  /** Whether to render the HCP row (suppressed when no hole carries handicap_index). */
+  showHcp: boolean;
 };
 
 function NineSection({
@@ -209,6 +274,8 @@ function NineSection({
   totalLabel,
   currentHoleNumber,
   onHolePress,
+  teesInPlay,
+  showHcp,
 }: SectionProps) {
   const parTotal = holes.reduce((t, h) => t + h.par, 0);
 
@@ -231,6 +298,7 @@ function NineSection({
 
   return (
     <View style={styles.section}>
+      {/* HOLE (header row) */}
       <View style={[styles.row, styles.headRow]}>
         <Text style={[styles.cellName, styles.headText]}>Hole</Text>
         {holes.map((h) => {
@@ -251,27 +319,73 @@ function NineSection({
         <Text style={[styles.cellTotal, styles.headText]}>{totalLabel}</Text>
       </View>
 
-      <View style={styles.row}>
-        <Text style={[styles.cellName, styles.parText]}>Par</Text>
-        {holes.map((h) => {
-          const isCurrent = h.number === currentHoleNumber;
-          return (
-            <CellWrap key={h.number} holeNumber={h.number}>
-              <Text
-                style={[
-                  styles.cellNum,
-                  styles.parText,
-                  isCurrent && styles.cellColCurrent,
-                ]}>
-                {h.par}
+      {/* TEE YARDAGES — one row per tee in play, longest first. */}
+      {teesInPlay.map((tee) => {
+        const sectionTotal = holes.reduce((t, h) => {
+          const y = h.yardages?.[tee.id];
+          return Number.isFinite(y as number) ? t + (y as number) : t;
+        }, 0);
+        return (
+          <View key={`yd-${tee.id}`} style={styles.row}>
+            <View style={[styles.cellName, styles.teeNameCell]}>
+              <View
+                style={[styles.teeDot, { backgroundColor: teeSwatchColor(tee) }]}
+              />
+              <Text style={styles.teeNameText} numberOfLines={1}>
+                {tee.name}
               </Text>
-            </CellWrap>
-          );
-        })}
-        <Text style={[styles.cellTotal, styles.parText]}>{parTotal}</Text>
-      </View>
+            </View>
+            {holes.map((h) => {
+              const y = h.yardages?.[tee.id];
+              const isCurrent = h.number === currentHoleNumber;
+              return (
+                <CellWrap key={h.number} holeNumber={h.number}>
+                  <Text
+                    style={[
+                      styles.cellNum,
+                      styles.yardText,
+                      isCurrent && styles.cellColCurrent,
+                    ]}>
+                    {Number.isFinite(y as number) ? y : '—'}
+                  </Text>
+                </CellWrap>
+              );
+            })}
+            <Text style={[styles.cellTotal, styles.yardText]}>
+              {sectionTotal > 0 ? sectionTotal.toLocaleString() : '—'}
+            </Text>
+          </View>
+        );
+      })}
 
+      {/* HCP — single row. */}
+      {showHcp && (
+        <View style={styles.row}>
+          <Text style={[styles.cellName, styles.hcpText]}>HCP</Text>
+          {holes.map((h) => {
+            const isCurrent = h.number === currentHoleNumber;
+            return (
+              <CellWrap key={h.number} holeNumber={h.number}>
+                <Text
+                  style={[
+                    styles.cellNum,
+                    styles.hcpText,
+                    isCurrent && styles.cellColCurrent,
+                  ]}>
+                  {h.handicapIndex ?? '—'}
+                </Text>
+              </CellWrap>
+            );
+          })}
+          <Text style={[styles.cellTotal, styles.hcpText]} />
+        </View>
+      )}
+
+      {/* SCORES — one row per scorer. */}
       {scorers.map((scorer) => {
+        const scorerTee = scorer.teeId
+          ? teesInPlay.find((t) => t.id === scorer.teeId)
+          : undefined;
         let nineRel = 0;
         let holesScored = 0;
         const cells = holes.map((h) => {
@@ -295,6 +409,15 @@ function NineSection({
         return (
           <View key={scorer.id} style={styles.row}>
             <View style={styles.cellName}>
+              {scorerTee ? (
+                <View
+                  style={[
+                    styles.teeDot,
+                    styles.teeDotInline,
+                    { backgroundColor: teeSwatchColor(scorerTee) },
+                  ]}
+                />
+              ) : null}
               <Text
                 style={{ color: scorer.color, fontSize: 11, fontWeight: '700' }}
                 numberOfLines={1}>
@@ -330,6 +453,27 @@ function NineSection({
           </View>
         );
       })}
+
+      {/* PAR — anchored at the bottom of the section, like real cards. */}
+      <View style={[styles.row, styles.parRow]}>
+        <Text style={[styles.cellName, styles.parText]}>Par</Text>
+        {holes.map((h) => {
+          const isCurrent = h.number === currentHoleNumber;
+          return (
+            <CellWrap key={h.number} holeNumber={h.number}>
+              <Text
+                style={[
+                  styles.cellNum,
+                  styles.parText,
+                  isCurrent && styles.cellColCurrent,
+                ]}>
+                {h.par}
+              </Text>
+            </CellWrap>
+          );
+        })}
+        <Text style={[styles.cellTotal, styles.parText]}>{parTotal}</Text>
+      </View>
     </View>
   );
 }
@@ -491,6 +635,41 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     parText: {
       color: colors.textMuted,
+      fontWeight: '700',
+    },
+    parRow: {
+      backgroundColor: '#faf6ec',
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      borderBottomWidth: 0,
+    },
+    teeNameCell: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    teeDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      flexShrink: 0,
+    },
+    teeDotInline: {
+      marginRight: 5,
+    },
+    teeNameText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
+    yardText: {
+      color: colors.textMuted,
+      fontSize: 9.5,
+      fontWeight: '700',
+    },
+    hcpText: {
+      color: colors.textMuted,
+      fontSize: 9.5,
       fontWeight: '700',
     },
     totalHead: {
