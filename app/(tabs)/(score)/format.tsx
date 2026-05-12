@@ -561,7 +561,11 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
     scroll: { flex: 1 },
-    scrollContent: { padding: 20, paddingBottom: 24 },
+    scrollContent: {
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: 24,
+    },
     title: { fontSize: 22, fontWeight: '800', color: colors.textTitle, marginBottom: 14 },
     greeting: {
       fontSize: 12,
