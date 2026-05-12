@@ -161,23 +161,23 @@ async function main() {
   console.log('=== Bulk catalog enrichment ===');
   if (dryRun) console.log('(dry-run mode)');
   console.log(
-    `scope: ${enrichAll ? 'all unenriched catalog rows (~17k!)' : 'courses any user has played'}`
+    `scope: ${enrichAll ? 'all unenriched catalog rows (~17k!)' : 'courses referenced by any scorecard (real or fake)'}`
   );
   if (filter) console.log(`filter: name ILIKE %${filter}%`);
 
   // Gather candidate course ids.
   let candidateIds: string[] | null = null; // null = no id restriction (--all)
   if (!enrichAll) {
-    // Collect the set of opengolf course ids referenced by any
-    // non-fake scorecard. This represents the "favorites" — courses
-    // someone has actually played a round on. Fake-seeded rounds
-    // (id like 'fake:%') are excluded so we don't enrich noise; the
-    // seed script's pool will be re-fetched naturally when those
-    // rounds get re-seeded.
+    // Collect the set of opengolf course ids referenced by ANY
+    // scorecard (real OR fake-seeded). Fakes are intentionally
+    // included because they're seeded against the user's preferred
+    // catalog rows — they're our best proxy for "favorites" when
+    // real round history is thin. The set is naturally idempotent:
+    // re-seeding fakes against this list (after bulk enrichment)
+    // doesn't change which courses are favorites.
     const { data: rows, error } = await admin
       .from('scorecards')
-      .select('course_snapshot')
-      .not('id', 'like', 'fake:%');
+      .select('course_snapshot');
     if (error) throw error;
     const set = new Set<string>();
     for (const r of rows ?? []) {
@@ -188,10 +188,12 @@ async function main() {
       }
     }
     candidateIds = [...set];
-    console.log(`Distinct opengolf courses played across all users: ${candidateIds.length}`);
+    console.log(
+      `Distinct opengolf courses referenced by any scorecard (real or fake): ${candidateIds.length}`
+    );
     if (candidateIds.length === 0) {
       console.log(
-        'No real rounds have been played against the opengolf catalog. ' +
+        'No scorecards reference the opengolf catalog. ' +
           'Nothing to enrich. Pass --all to enrich every catalog row.'
       );
       return;
