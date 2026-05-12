@@ -24,10 +24,11 @@ import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'reac
 
 import { ConfirmAbandonSheet } from '@/components/ConfirmAbandonSheet';
 import { HoleNavBar } from '@/components/HoleNavBar';
+import { RangeDropdown, rangeLabel } from '@/components/RangeDropdown';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import { ScoreEntryRow } from '@/components/ScoreEntryRow';
 import { confirm } from '@/lib/dialog';
-import { formatScore } from '@/lib/scoring';
+import { formatScore, holesInRange } from '@/lib/scoring';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
@@ -46,12 +47,14 @@ export default function ScoringScreen() {
     currentRound,
     setCustomHoleScore,
     setCurrentHole,
+    setHoleRange,
     completeCurrentRound,
     abandonCurrentRound,
   } = useGolfRound();
   const { getPlayer } = usePlayers();
 
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
+  const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const isScramble =
@@ -59,10 +62,11 @@ export default function ScoringScreen() {
 
   const handleFinish = useCallback(async () => {
     if (!currentRound) return;
+    const inRange = holesInRange(currentRound.course.holes, currentRound.holeRange);
     const requiredIds = isScramble
       ? currentRound.teams!.map((t) => t.id)
       : currentRound.playerIds;
-    const fullyScored = currentRound.course.holes.every((h) =>
+    const fullyScored = inRange.every((h) =>
       requiredIds.every((sid) =>
         currentRound.scores.some(
           (s) => s.scorerId === sid && s.holeNumber === h.number
@@ -72,7 +76,7 @@ export default function ScoringScreen() {
     if (!fullyScored) {
       const ok = await confirm({
         title: 'Finish with missing scores?',
-        message: `Not every hole has a score yet (${currentRound.course.holes.length} total). You can finish anyway and edit later from the Rounds tab.`,
+        message: `Not every hole has a score yet (${inRange.length} total). You can finish anyway and edit later from the Rounds tab.`,
         confirmLabel: 'Finish anyway',
       });
       if (!ok) return;
@@ -155,6 +159,30 @@ export default function ScoringScreen() {
                 {isScramble ? 'SCRAMBLE' : 'STROKE'}
               </Text>
             </View>
+            {currentRound.course.holes.length >= 18 && (
+              <Pressable
+                style={[
+                  styles.rangePill,
+                  rangeMenuOpen && styles.rangePillActive,
+                ]}
+                onPress={() => setRangeMenuOpen(true)}
+                hitSlop={4}>
+                <Text
+                  style={[
+                    styles.rangePillText,
+                    rangeMenuOpen && styles.rangePillTextActive,
+                  ]}>
+                  {rangeLabel(currentRound.holeRange)}
+                </Text>
+                <Text
+                  style={[
+                    styles.rangePillChev,
+                    rangeMenuOpen && styles.rangePillChevActive,
+                  ]}>
+                  {rangeMenuOpen ? '▴' : '▾'}
+                </Text>
+              </Pressable>
+            )}
           </View>
         </View>
 
@@ -230,6 +258,16 @@ export default function ScoringScreen() {
           }, 0);
         }}
       />
+
+      <RangeDropdown
+        visible={rangeMenuOpen}
+        current={currentRound.holeRange}
+        onCancel={() => setRangeMenuOpen(false)}
+        onPick={(next) => {
+          setRangeMenuOpen(false);
+          setHoleRange(next);
+        }}
+      />
     </View>
   );
 }
@@ -287,6 +325,31 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       letterSpacing: 0.6,
       color: colors.primaryDark,
     },
+    rangePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      backgroundColor: colors.chipBg,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    rangePillActive: {
+      backgroundColor: colors.primary,
+    },
+    rangePillText: {
+      fontSize: 9.5,
+      fontWeight: '800',
+      letterSpacing: 0.4,
+      color: colors.primaryDark,
+    },
+    rangePillTextActive: { color: '#fff' },
+    rangePillChev: {
+      fontSize: 10,
+      color: colors.textMuted,
+      fontWeight: '800',
+    },
+    rangePillChevActive: { color: '#fff' },
     entryCard: {
       backgroundColor: colors.cardBg,
       borderRadius: 14,

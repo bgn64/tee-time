@@ -127,31 +127,41 @@ export function ReadOnlyScorecard({
     setVisibleNine(currentHoleNumber > 9 ? 'back' : 'front');
   }, [currentHoleNumber, hasBack9]);
 
-  const visibleHoles = !hasBack9 ? front9 : visibleNine === 'front' ? front9 : back9;
-  const visibleTotalLabel = visibleNine === 'front' ? 'OUT' : 'IN';
+  // When the round restricts to one nine only, hide the tabs and force
+  // the visible section accordingly. This also keeps "tap a cell to
+  // jump" working since the in-play holes are the only ones rendered.
+  const rangeRestricted = round.holeRange === 'front9' || round.holeRange === 'back9';
+  const showTabs = hasBack9 && !rangeRestricted;
+  const forcedSection: 'front' | 'back' | null =
+    round.holeRange === 'front9' ? 'front' : round.holeRange === 'back9' ? 'back' : null;
+  const effectiveSection: 'front' | 'back' =
+    forcedSection ?? visibleNine;
+
+  const visibleHoles = !hasBack9 ? front9 : effectiveSection === 'front' ? front9 : back9;
+  const visibleTotalLabel = effectiveSection === 'front' ? 'OUT' : 'IN';
 
   return (
     <View>
-      {hasBack9 && (
+      {showTabs && (
         <View style={styles.tabs}>
           <Pressable
             onPress={() => setVisibleNine('front')}
-            style={[styles.tab, visibleNine === 'front' && styles.tabActive]}>
+            style={[styles.tab, effectiveSection === 'front' && styles.tabActive]}>
             <Text
               style={[
                 styles.tabText,
-                visibleNine === 'front' && styles.tabTextActive,
+                effectiveSection === 'front' && styles.tabTextActive,
               ]}>
               FRONT
             </Text>
           </Pressable>
           <Pressable
             onPress={() => setVisibleNine('back')}
-            style={[styles.tab, visibleNine === 'back' && styles.tabActive]}>
+            style={[styles.tab, effectiveSection === 'back' && styles.tabActive]}>
             <Text
               style={[
                 styles.tabText,
-                visibleNine === 'back' && styles.tabTextActive,
+                effectiveSection === 'back' && styles.tabTextActive,
               ]}>
               BACK
             </Text>
