@@ -128,6 +128,18 @@ export type Course = {
 
 export type ScoringRule = 'stroke' | 'scramble';
 
+/**
+ * Which subset of the course's holes is in play for a Round.
+ *   'all'    — every hole on the course (typical 18-hole or 9-hole round).
+ *   'front9' — only holes 1–9. Defined for courses with at least 9 holes.
+ *   'back9'  — only holes 10–18. Defined for courses with 18 holes.
+ *
+ * Existing scores for out-of-range holes are preserved in the data (so a
+ * mid-round swap back to 'all' doesn't lose work) but ignored by every
+ * totals / "thru N" / finish-validation helper.
+ */
+export type HoleRange = 'all' | 'front9' | 'back9';
+
 export type RoundScore = {
   // In stroke rounds this is a player id; in scramble rounds it is a team id.
   scorerId: string;
@@ -169,6 +181,13 @@ export type RoundParticipant = {
   localDisplayName?: string;
   /** Snapshot, populated only when `linkedUserId` is absent. */
   localDisplayColor?: string;
+  /**
+   * Tee this participant is playing from. References `Course.tees[].id`.
+   * Optional — if unset, no per-tee yardage row is shown for this player
+   * on the scorecard. Fixed at round-creation time; not editable during
+   * scoring (only via post-round edit).
+   */
+  teeId?: string;
 };
 
 export type Round = {
@@ -182,6 +201,13 @@ export type Round = {
   playerIds: string[];
   // Required when scoringRule === 'scramble'; absent in stroke rounds.
   teams?: Team[];
+  /**
+   * Which subset of the course's holes is in play. Defaults to `'all'`
+   * for rounds created before this field existed. See `HoleRange` for
+   * the per-value semantics. Mutable mid-round via a UI toggle; the
+   * change is persisted along with the rest of the round state.
+   */
+  holeRange: HoleRange;
   currentHoleNumber: number;
   scores: RoundScore[];
   startedAt: string;

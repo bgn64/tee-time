@@ -6,7 +6,7 @@
  * pure — given the same input they produce the same output.
  */
 
-import { Round, RoundParticipant, RoundScore } from '@/types/golf';
+import { Hole, HoleRange, Round, RoundParticipant, RoundScore } from '@/types/golf';
 
 const MS_PER_MIN = 60 * 1000;
 const MS_PER_HOUR = 60 * MS_PER_MIN;
@@ -71,14 +71,17 @@ export function formatRelativeTime(iso: string, nowMs: number = Date.now()): str
 }
 
 /**
- * Sum of (strokes - par) across the round. When `scorerId` is provided,
- * scoped to scores for that scorer only (used to render "your" total in
- * the rounds list, or the owner's total in the feed).
+ * Sum of (strokes - par) across the round, filtered by `holeRange`. When
+ * `scorerId` is provided, scoped to scores for that scorer only (used to
+ * render "your" total in the rounds list, or the owner's total in the
+ * feed). Scores for holes outside the active range are excluded.
  */
 export function getRoundTotalRelative(round: Round, scorerId?: string): number {
+  const allowed = holeNumbersInRange(round.course.holes, round.holeRange);
   let total = 0;
   for (const score of round.scores) {
     if (scorerId && score.scorerId !== scorerId) continue;
+    if (!allowed.has(score.holeNumber)) continue;
     const hole = round.course.holes.find((h) => h.number === score.holeNumber);
     if (hole) total += score.strokes - hole.par;
   }
@@ -87,13 +90,16 @@ export function getRoundTotalRelative(round: Round, scorerId?: string): number {
 
 /**
  * "+3 thru 9" / "E thru 7" / "" — used by the in-flight scoring screen to
- * show a per-scorer running total. Empty string when no holes scored yet.
+ * show a per-scorer running total. Empty string when no holes scored yet
+ * within the active range. Out-of-range holes are excluded.
  */
 export function getScorerTotalRelative(round: Round, scorerId: string): string {
+  const allowed = holeNumbersInRange(round.course.holes, round.holeRange);
   let total = 0;
   let holesScored = 0;
   for (const score of round.scores) {
     if (score.scorerId !== scorerId) continue;
+    if (!allowed.has(score.holeNumber)) continue;
     const hole = round.course.holes.find((h) => h.number === score.holeNumber);
     if (!hole) continue;
     total += score.strokes - hole.par;
@@ -103,6 +109,20 @@ export function getScorerTotalRelative(round: Round, scorerId: string): string {
   if (total === 0) return `E thru ${holesScored}`;
   const prefix = total > 0 ? '+' : '';
   return `${prefix}${total} thru ${holesScored}`;
+}
+
+/**
+ * Subset of `holes` that falls inside the given range. Pure, used by
+ * every helper that needs to ignore out-of-range scores.
+ */
+export function holesInRange(holes: Hole[], range: HoleRange): Hole[] {
+  if (range === 'front9') return holes.filter((h) => h.number <= 9);
+  if (range === 'back9') return holes.filter((h) => h.number >= 10);
+  return holes;
+}
+
+function holeNumbersInRange(holes: Hole[], range: HoleRange): Set<number> {
+  return new Set(holesInRange(holes, range).map((h) => h.number));
 }
 
 /**

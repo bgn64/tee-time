@@ -29,6 +29,7 @@ function makeRound(overrides: Partial<Round> = {}): Round {
     course: par72Course,
     scoringRule: 'stroke',
     playerIds: ['a', 'b'],
+    holeRange: 'all',
     currentHoleNumber: 1,
     scores: [],
     startedAt: '2026-05-01T10:00:00Z',
@@ -152,6 +153,31 @@ describe('getRoundTotalRelative', () => {
     });
     expect(getRoundTotalRelative(r, 'a')).toBe(1);
   });
+
+  test('excludes out-of-range holes when holeRange = front9', () => {
+    const r = makeRound({
+      holeRange: 'front9',
+      scores: [
+        { scorerId: 'a', holeNumber: 1, strokes: 5 }, // +1 in range
+        { scorerId: 'a', holeNumber: 9, strokes: 3 }, // -1 in range
+        { scorerId: 'a', holeNumber: 10, strokes: 6 }, // +2 OUT of range — preserved but ignored
+        { scorerId: 'a', holeNumber: 15, strokes: 6 }, // +2 OUT of range — preserved but ignored
+      ],
+    });
+    expect(getRoundTotalRelative(r, 'a')).toBe(0);
+  });
+
+  test('excludes out-of-range holes when holeRange = back9', () => {
+    const r = makeRound({
+      holeRange: 'back9',
+      scores: [
+        { scorerId: 'a', holeNumber: 1, strokes: 6 }, // +2 OUT
+        { scorerId: 'a', holeNumber: 10, strokes: 5 }, // +1 IN
+        { scorerId: 'a', holeNumber: 18, strokes: 3 }, // -1 IN
+      ],
+    });
+    expect(getRoundTotalRelative(r, 'a')).toBe(0);
+  });
 });
 
 // ---------- getScorerTotalRelative ----------
@@ -190,6 +216,28 @@ describe('getScorerTotalRelative', () => {
       ],
     });
     expect(getScorerTotalRelative(r, 'a')).toBe('-2 thru 2');
+  });
+
+  test('respects holeRange front9 (out-of-range scores excluded from count + total)', () => {
+    const r = makeRound({
+      holeRange: 'front9',
+      scores: [
+        { scorerId: 'a', holeNumber: 1, strokes: 5 }, // +1 in range
+        { scorerId: 'a', holeNumber: 12, strokes: 3 }, // -1 OUT of range — ignored
+      ],
+    });
+    // Only hole 1 counts → "+1 thru 1"
+    expect(getScorerTotalRelative(r, 'a')).toBe('+1 thru 1');
+  });
+
+  test('respects holeRange back9 (returns empty when no in-range scores)', () => {
+    const r = makeRound({
+      holeRange: 'back9',
+      scores: [
+        { scorerId: 'a', holeNumber: 1, strokes: 5 }, // front-9 — ignored
+      ],
+    });
+    expect(getScorerTotalRelative(r, 'a')).toBe('');
   });
 });
 

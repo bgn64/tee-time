@@ -33,6 +33,7 @@ import { supabase } from '@/state/supabaseClient';
 import {
   Course,
   Hole,
+  HoleRange,
   Round,
   RoundParticipant,
   RoundScore,
@@ -157,7 +158,12 @@ type GolfRoundContextValue = {
     courseId: string,
     playerIds?: string[],
     scoringRule?: ScoringRule,
-    teams?: Team[]
+    teams?: Team[],
+    opts?: {
+      holeRange?: HoleRange;
+      /** Map of participantKey → teeId. Optional per player. */
+      teeIds?: Record<string, string | undefined>;
+    }
   ) => void;
   setHoleScore: (scorerId: string, holeNumber: number, relativeScore: number) => void;
   setCustomHoleScore: (scorerId: string, holeNumber: number, strokes: number) => void;
@@ -165,6 +171,13 @@ type GolfRoundContextValue = {
   goToNextHole: () => void;
   /** Jump to an arbitrary hole within the current round (clamped to [1, holes.length]). */
   setCurrentHole: (holeNumber: number) => void;
+  /**
+   * Update the in-flight round's hole range. Used by the range
+   * dropdown on the scoring screen. Existing scores outside the new
+   * range are preserved but excluded from totals + "Finish" checks.
+   * Clamps `currentHoleNumber` into the new range.
+   */
+  setHoleRange: (range: HoleRange) => void;
   completeCurrentRound: () => void;
   abandonCurrentRound: () => void;
   /**
@@ -649,12 +662,16 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   };
 
   const cloudToLocalRound = useCallback((row: CloudScorecardRow): Round => {
+    const rawRange = (row as any).hole_range;
+    const holeRange: HoleRange =
+      rawRange === 'front9' || rawRange === 'back9' ? rawRange : 'all';
     return {
       id: row.id,
       course: row.course_snapshot,
       scoringRule: row.scoring_rule,
       playerIds: row.player_ids,
       teams: row.teams ?? undefined,
+      holeRange,
       currentHoleNumber: row.current_hole_number,
       scores: row.scores ?? [],
       startedAt: row.started_at,
@@ -670,13 +687,19 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
    * Build the participants[] inline jsonb for a freshly completed Round
    * from the local roster. Linked participants get NO snapshot
    * (name/color render live from profile); local participants snapshot
-   * the nickname and color captured at completion time.
+   * the nickname and color captured at completion time. `teeId` is
+   * copied through from the in-flight round's existing participants
+   * array (set at startRound time).
    */
   const buildParticipants = useCallback((round: Round): RoundParticipant[] => {
     const teamForPlayer = (playerId: string): string | undefined => {
       if (!round.teams) return undefined;
       return round.teams.find((t) => t.playerIds.includes(playerId))?.id;
     };
+    const teeByKey = new Map<string, string>();
+    for (const p of round.participants ?? []) {
+      if (p.teeId) teeByKey.set(p.participantKey, p.teeId);
+    }
 
     const out: RoundParticipant[] = [];
     for (const playerId of round.playerIds) {
@@ -685,12 +708,14 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       const linkedUserId =
         p.userId && UUID_REGEX.test(p.userId) ? p.userId : undefined;
       const teamId = teamForPlayer(playerId);
+      const teeId = teeByKey.get(playerId);
 
       if (linkedUserId) {
         out.push({
           participantKey: playerId,
           linkedUserId,
           teamId,
+          ...(teeId ? { teeId } : {}),
         });
       } else {
         out.push({
@@ -698,6 +723,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           teamId,
           localDisplayName: p.nickname,
           localDisplayColor: p.color,
+          ...(teeId ? { teeId } : {}),
         });
       }
     }
@@ -736,6 +762,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             participants: round.participants,
             mentioned_user_ids: round.mentionedUserIds,
             round_id: round.roundId ?? null,
+            hole_range: round.holeRange,
             current_hole_number: round.currentHoleNumber,
             started_at: round.startedAt,
             completed_at: round.completedAt ?? null,
@@ -878,22 +905,50 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         setCourses((prev) => prev.filter((c) => c.id !== courseId));
         void cloudDeleteCourse(courseId);
       },
-      startRound: (courseId, playerIds = [], scoringRule = 'stroke', teams) => {
+      startRound: (courseId, playerIds = [], scoringRule = 'stroke', teams, opts) => {
         const course = courses.find((c) => c.id === courseId);
         if (!course) {
           throw new Error(`Cannot start round for unknown course: ${courseId}`);
         }
+        const requestedRange = opts?.holeRange ?? 'all';
+        const totalHoles = course.holes.length;
+        // 9-hole courses can only play 'all'. front9/back9 require >=18
+        // for full semantics; we don't validate aggressively but clamp
+        // to a sensible value.
+        const holeRange: HoleRange =
+          totalHoles < 18 && requestedRange !== 'all' ? 'all' : requestedRange;
+        const startingHole = holeRange === 'back9' ? 10 : 1;
+
+        // Seed participants[] with teeIds when supplied. Linked-user
+        // resolution + name/color snapshots are deferred to
+        // completeCurrentRound; here we just need to capture teeId
+        // alongside participantKey + teamId for the scorecard UI.
+        const teamForPlayer = (playerId: string): string | undefined => {
+          if (!teams) return undefined;
+          return teams.find((t) => t.playerIds.includes(playerId))?.id;
+        };
+        const participants: RoundParticipant[] = playerIds.map((pid) => {
+          const teeId = opts?.teeIds?.[pid];
+          const teamId = teamForPlayer(pid);
+          return {
+            participantKey: pid,
+            ...(teamId ? { teamId } : {}),
+            ...(teeId ? { teeId } : {}),
+          };
+        });
+
         setCurrentRound({
           id: `round-${Date.now()}`,
           course,
           scoringRule,
           playerIds,
           teams,
-          currentHoleNumber: 1,
+          holeRange,
+          currentHoleNumber: startingHole,
           scores: [],
           startedAt: new Date().toISOString(),
           ownerUserId: account?.userId,
-          participants: [],
+          participants,
           mentionedUserIds: [],
         });
       },
@@ -955,6 +1010,24 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           if (!round) throw new Error('Cannot set current hole without a current round.');
           const clamped = Math.max(1, Math.min(round.course.holes.length, holeNumber));
           return { ...round, currentHoleNumber: clamped };
+        });
+      },
+      setHoleRange: (range) => {
+        setCurrentRound((round) => {
+          if (!round) throw new Error('Cannot set hole range without a current round.');
+          // 9-hole courses can't meaningfully restrict to front/back.
+          const totalHoles = round.course.holes.length;
+          const next: HoleRange =
+            totalHoles < 18 && range !== 'all' ? 'all' : range;
+          if (next === round.holeRange) return round;
+          // Clamp currentHoleNumber into the new range so the next
+          // render of the scoring screen lands on a hole the user can
+          // actually score. Existing out-of-range scores stay in the
+          // `scores` array (preserved for a future swap back).
+          let nextHole = round.currentHoleNumber;
+          if (next === 'front9' && nextHole > 9) nextHole = 9;
+          if (next === 'back9' && nextHole < 10) nextHole = 10;
+          return { ...round, holeRange: next, currentHoleNumber: nextHole };
         });
       },
       completeCurrentRound: () => {
