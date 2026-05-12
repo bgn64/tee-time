@@ -1,23 +1,21 @@
 /**
  * Persistent app header. Three slots: left (tab name OR back button),
- * center (the brand mark + "tee time" wordmark), and right (profile dot
- * OR ⋯ overflow).
+ * center (the brand mark + "tee time" wordmark), and right (settings
+ * gear OR ⋯ overflow OR text action).
  *
  * Slot contents are driven by HeaderContext, which screens populate via
- * the `useScreenHeader` hook.
- *
- * The profile dot opens an anchored ProfileMenu with shortcuts to
- * Settings / Theme / Notifications / About / Sign out. Menu state lives
- * in AppHeader so it persists across screens that re-mount.
+ * the `useScreenHeader` hook. The `kind: 'profile'` slot used to render
+ * a colored avatar dot that opened a menu — it now renders a gear icon
+ * that pushes the Settings screen directly. Profile content (name,
+ * avatar, color picker, stats, friends) lives on the You tab itself.
  */
 
-import { useMemo, useState } from 'react';
+import { router } from 'expo-router';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Logo } from '@/components/Logo';
-import { ProfileMenu } from '@/components/ProfileMenu';
-import { useAccount } from '@/state/AccountContext';
 import { useHeaderSlots } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 
@@ -25,11 +23,9 @@ const HEADER_HEIGHT = 52;
 
 export function AppHeader() {
   const { colors } = useTheme();
-  const { account } = useAccount();
   const insets = useSafeAreaInsets();
   const slots = useHeaderSlots();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, height: HEADER_HEIGHT + insets.top }]}>
@@ -41,11 +37,8 @@ export function AppHeader() {
             <Text style={styles.logo}>tee time</Text>
           </View>
         </View>
-        <View style={styles.rightSlot}>
-          {renderRight(slots.right, styles, account, () => setMenuOpen(true))}
-        </View>
+        <View style={styles.rightSlot}>{renderRight(slots.right, styles)}</View>
       </View>
-      <ProfileMenu visible={menuOpen} onClose={() => setMenuOpen(false)} />
     </View>
   );
 }
@@ -65,12 +58,7 @@ function renderLeft(left: ReturnType<typeof useHeaderSlots>['left'], styles: Hea
   );
 }
 
-function renderRight(
-  right: ReturnType<typeof useHeaderSlots>['right'],
-  styles: HeaderStyles,
-  account: ReturnType<typeof useAccount>['account'],
-  onOpenProfileMenu: () => void
-) {
+function renderRight(right: ReturnType<typeof useHeaderSlots>['right'], styles: HeaderStyles) {
   if (right.kind === 'none') {
     return null;
   }
@@ -102,21 +90,18 @@ function renderRight(
       </Pressable>
     );
   }
-  // right.kind === 'profile'
-  const onPress = right.onPress ?? onOpenProfileMenu;
-  const initial = account?.displayName?.[0]?.toUpperCase();
-  const bg = account?.avatarColor;
+  // right.kind === 'profile' — historically an avatar dot that opened a
+  // menu. Now a settings gear that pushes the Settings screen. Any
+  // caller-supplied onPress still wins (no current caller uses it but
+  // the option stays in the type for future flexibility).
+  const onPress = right.onPress ?? (() => router.push('/(tabs)/(you)/settings'));
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.profileDot,
-        bg ? { backgroundColor: bg } : null,
-        pressed && styles.pressed,
-      ]}
+      style={({ pressed }) => [styles.settingsBtn, pressed && styles.pressed]}
       hitSlop={8}
-      accessibilityLabel="Profile">
-      {initial ? <Text style={styles.profileDotText}>{initial}</Text> : null}
+      accessibilityLabel="Settings">
+      <Text style={styles.settingsGlyph}>⚙</Text>
     </Pressable>
   );
 }
@@ -189,18 +174,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.primaryDark,
       fontWeight: '600',
     },
-    profileDot: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: colors.chipBg,
+    settingsBtn: {
+      width: 32,
+      height: 32,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    profileDotText: {
-      color: '#ffffff',
-      fontSize: 12,
-      fontWeight: '800',
+    settingsGlyph: {
+      fontSize: 20,
+      color: colors.textMuted,
+      lineHeight: 22,
     },
     menuBtn: {
       width: 32,
