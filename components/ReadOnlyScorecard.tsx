@@ -326,7 +326,7 @@ function NineSection({
           return Number.isFinite(y as number) ? t + (y as number) : t;
         }, 0);
         return (
-          <View key={`yd-${tee.id}`} style={styles.row}>
+          <View key={`yd-${tee.id}`} style={[styles.row, styles.tintedRow]}>
             <View style={[styles.cellName, styles.teeNameCell]}>
               <View
                 style={[styles.teeDot, { backgroundColor: teeSwatchColor(tee) }]}
@@ -360,7 +360,7 @@ function NineSection({
 
       {/* HCP — single row. */}
       {showHcp && (
-        <View style={styles.row}>
+        <View style={[styles.row, styles.tintedRow]}>
           <Text style={[styles.cellName, styles.hcpText]}>HCP</Text>
           {holes.map((h) => {
             const isCurrent = h.number === currentHoleNumber;
@@ -580,6 +580,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 4,
       borderBottomColor: colors.border,
       borderBottomWidth: StyleSheet.hairlineWidth,
+    },
+    tintedRow: {
+      backgroundColor: '#faf6ec',
     },
     headRow: {
       borderBottomColor: colors.border,

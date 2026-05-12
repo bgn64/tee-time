@@ -259,14 +259,12 @@ export default function CourseSelectionScreen() {
     // Catalog row: cache + ensure we have a scorecard.
     rememberCatalogCourse(course);
 
-    if (course.holes && course.holes.length > 0) {
-      router.push({
-        pathname: '/(tabs)/(score)/players',
-        params: { courseId: course.id },
-      });
-      return;
-    }
-
+    // Always route catalog picks through ensureCourseScorecard. The
+    // guard inside short-circuits cheaply when the course is already
+    // fully enriched (holes + tees, or holes + an attempt timestamp).
+    // The old fast-path here that bypassed the guard whenever holes
+    // were populated meant pre-Phase-1 catalog rows could never
+    // upgrade to include tees.
     setLoadingCourseId(course.id);
     const result = await ensureCourseScorecard(course);
     setLoadingCourseId(null);

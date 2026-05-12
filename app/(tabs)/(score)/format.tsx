@@ -164,6 +164,9 @@ export default function FormatScreen() {
             resolveName={resolveName}
             getPlayer={getPlayer}
             defaultPlayerId={defaultPlayerId}
+            courseTees={course?.tees ?? []}
+            teeIds={teeIds}
+            onOpenPicker={(pid) => setPickerFor(pid)}
           />
         ) : (
           <ScrambleBody
@@ -176,20 +179,11 @@ export default function FormatScreen() {
             onTapMember={(playerId, fromGroup) =>
               setMoveSource({ playerId, fromGroup })
             }
+            courseTees={course?.tees ?? []}
+            teeIds={teeIds}
+            onOpenPicker={(pid) => setPickerFor(pid)}
           />
         )}
-
-        <TeesDropdown
-          styles={styles}
-          colors={colors}
-          courseTees={course?.tees ?? []}
-          playerIds={playerIds}
-          teeIds={teeIds}
-          resolveName={resolveName}
-          getPlayer={getPlayer}
-          defaultPlayerId={defaultPlayerId}
-          onOpenPicker={(pid) => setPickerFor(pid)}
-        />
       </ScrollView>
 
       <View style={styles.footer}>
@@ -240,6 +234,9 @@ function StrokeBody({
   resolveName,
   getPlayer,
   defaultPlayerId,
+  courseTees,
+  teeIds,
+  onOpenPicker,
 }: {
   styles: Styles;
   colors: ThemeColors;
@@ -251,7 +248,17 @@ function StrokeBody({
     ? R
     : never;
   defaultPlayerId: string | null;
+  courseTees: Tee[];
+  teeIds: Record<string, string | undefined>;
+  onOpenPicker: (playerId: string) => void;
 }) {
+  const teeById = useMemo(() => {
+    const m = new Map<string, Tee>();
+    for (const t of courseTees) m.set(t.id, t);
+    return m;
+  }, [courseTees]);
+  const hasTees = courseTees.length > 0;
+
   return (
     <>
       <View style={styles.help}>
@@ -267,12 +274,34 @@ function StrokeBody({
           const isYou = defaultPlayerId === id;
           const color = p?.color ?? colors.primary;
           const letter = (p?.displayName ?? p?.nickname ?? '?')[0]?.toUpperCase() ?? '?';
+          const tee = teeIds[id] ? teeById.get(teeIds[id]!) : undefined;
           return (
             <View key={id} style={styles.rowCard}>
               <View style={[styles.rowAvatar, { backgroundColor: color }]}>
                 <Text style={styles.rowAvatarText}>{letter}</Text>
               </View>
-              <Text style={styles.rowName}>{isYou ? 'You' : resolveName(id)}</Text>
+              <Text style={styles.rowName} numberOfLines={1}>
+                {isYou ? 'You' : resolveName(id)}
+              </Text>
+              {hasTees && (
+                <Pressable
+                  style={[styles.teePill, !tee && styles.teePillEmpty]}
+                  onPress={() => onOpenPicker(id)}>
+                  {tee ? (
+                    <>
+                      <View
+                        style={[styles.teePillDot, { backgroundColor: teeSwatch(tee) }]}
+                      />
+                      <Text style={styles.teePillText} numberOfLines={1}>
+                        {tee.name}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={styles.teePillTextEmpty}>+ Tee</Text>
+                  )}
+                  <Text style={styles.teePillChev}>▾</Text>
+                </Pressable>
+              )}
             </View>
           );
         })}
@@ -289,6 +318,9 @@ function ScrambleBody({
   getPlayer,
   defaultPlayerId,
   onTapMember,
+  courseTees,
+  teeIds,
+  onOpenPicker,
 }: {
   styles: Styles;
   colors: ThemeColors;
@@ -297,7 +329,18 @@ function ScrambleBody({
   getPlayer: ReturnType<typeof usePlayers>['getPlayer'];
   defaultPlayerId: string | null;
   onTapMember: (playerId: string, fromGroup: number) => void;
+  courseTees: Tee[];
+  teeIds: Record<string, string | undefined>;
+  onOpenPicker: (playerId: string) => void;
 }) {
+  const teeById = useMemo(() => {
+    const m = new Map<string, Tee>();
+    for (const t of courseTees) m.set(t.id, t);
+    return m;
+  }, [courseTees]);
+  const hasTees = courseTees.length > 0;
+  const flatPlayerIds = useMemo(() => groups.flat(), [groups]);
+
   return (
     <>
       <View style={styles.help}>
@@ -349,109 +392,49 @@ function ScrambleBody({
           );
         })}
       </View>
-    </>
-  );
-}
 
-/**
- * Expandable Tees row. Header summarizes the current state ("Not set" /
- * "All on Blue" / "Mixed"); tap to expand and reveal per-player rows
- * with tee pills. Hidden when the course has no published tee data.
- */
-function TeesDropdown({
-  styles,
-  colors,
-  courseTees,
-  playerIds,
-  teeIds,
-  resolveName,
-  getPlayer,
-  defaultPlayerId,
-  onOpenPicker,
-}: {
-  styles: Styles;
-  colors: ThemeColors;
-  courseTees: Tee[];
-  playerIds: string[];
-  teeIds: Record<string, string | undefined>;
-  resolveName: (id: string) => string;
-  getPlayer: ReturnType<typeof usePlayers>['getPlayer'];
-  defaultPlayerId: string | null;
-  onOpenPicker: (playerId: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-
-  if (courseTees.length === 0) return null;
-
-  const teeById = useMemo(() => {
-    const m = new Map<string, Tee>();
-    for (const t of courseTees) m.set(t.id, t);
-    return m;
-  }, [courseTees]);
-
-  const assigned = playerIds.map((pid) => teeIds[pid]).filter((id): id is string => !!id);
-  let summary: string;
-  if (assigned.length === 0) {
-    summary = 'Not set  ·  optional';
-  } else {
-    const unique = new Set(assigned);
-    if (unique.size === 1) {
-      const t = teeById.get([...unique][0]);
-      summary = t ? `All on ${t.name}` : 'All on the same tee';
-    } else {
-      summary = 'Mixed';
-    }
-  }
-
-  return (
-    <View style={styles.teesCard}>
-      <Pressable style={styles.teesHead} onPress={() => setExpanded((v) => !v)}>
-        <View style={styles.teesIcon}>
-          <Text style={styles.teesIconText}>🏌️</Text>
-        </View>
-        <View style={styles.teesBody}>
-          <Text style={styles.teesLabel}>Tees</Text>
-          <Text style={styles.teesMeta}>{summary}</Text>
-        </View>
-        <Text style={styles.teesChev}>{expanded ? '▴' : '▾'}</Text>
-      </Pressable>
-      {expanded && (
-        <View style={styles.teesRows}>
-          {playerIds.map((pid) => {
-            const p = getPlayer(pid);
-            const isYou = defaultPlayerId === pid;
-            const avatarColor = p?.color ?? colors.primary;
-            const letter = (p?.displayName ?? p?.nickname ?? '?')[0]?.toUpperCase() ?? '?';
-            const tee = teeIds[pid] ? teeById.get(teeIds[pid]!) : undefined;
-            return (
-              <View key={pid} style={styles.teesRow}>
-                <View style={styles.teesRowWho}>
-                  <View style={[styles.teesRowAvatar, { backgroundColor: avatarColor }]}>
-                    <Text style={styles.teesRowAvatarText}>{letter}</Text>
+      {hasTees && (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 14 }]}>TEES</Text>
+          <View style={styles.list}>
+            {flatPlayerIds.map((id) => {
+              const p = getPlayer(id);
+              const isYou = defaultPlayerId === id;
+              const color = p?.color ?? colors.primary;
+              const letter = (p?.displayName ?? p?.nickname ?? '?')[0]?.toUpperCase() ?? '?';
+              const tee = teeIds[id] ? teeById.get(teeIds[id]!) : undefined;
+              return (
+                <View key={id} style={styles.rowCard}>
+                  <View style={[styles.rowAvatar, { backgroundColor: color }]}>
+                    <Text style={styles.rowAvatarText}>{letter}</Text>
                   </View>
-                  <Text style={styles.teesRowName} numberOfLines={1}>
-                    {isYou ? 'You' : resolveName(pid)}
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {isYou ? 'You' : resolveName(id)}
                   </Text>
+                  <Pressable
+                    style={[styles.teePill, !tee && styles.teePillEmpty]}
+                    onPress={() => onOpenPicker(id)}>
+                    {tee ? (
+                      <>
+                        <View
+                          style={[styles.teePillDot, { backgroundColor: teeSwatch(tee) }]}
+                        />
+                        <Text style={styles.teePillText} numberOfLines={1}>
+                          {tee.name}
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={styles.teePillTextEmpty}>+ Tee</Text>
+                    )}
+                    <Text style={styles.teePillChev}>▾</Text>
+                  </Pressable>
                 </View>
-                <Pressable
-                  style={[styles.teePill, !tee && styles.teePillEmpty]}
-                  onPress={() => onOpenPicker(pid)}>
-                  {tee ? (
-                    <>
-                      <View style={[styles.teePillDot, { backgroundColor: teeSwatch(tee) }]} />
-                      <Text style={styles.teePillText}>{tee.name}</Text>
-                    </>
-                  ) : (
-                    <Text style={styles.teePillTextEmpty}>+ Tee</Text>
-                  )}
-                  <Text style={styles.teePillChev}>▾</Text>
-                </Pressable>
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        </>
       )}
-    </View>
+    </>
   );
 }
 
@@ -675,55 +658,6 @@ function makeStyles(colors: ThemeColors) {
     memberAvatarText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
     memberLabel: { fontSize: 11.5, fontWeight: '700', color: colors.textTitle },
 
-    teesCard: {
-      marginTop: 14,
-      backgroundColor: colors.cardBg,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: 12,
-    },
-    teesHead: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-    },
-    teesIcon: {
-      width: 32,
-      height: 32,
-      borderRadius: 8,
-      backgroundColor: colors.chipBg,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    teesIconText: { fontSize: 16 },
-    teesBody: { flex: 1, minWidth: 0 },
-    teesLabel: { fontSize: 13, fontWeight: '800', color: colors.textTitle },
-    teesMeta: { fontSize: 10.5, color: colors.textMuted, fontWeight: '600', marginTop: 1 },
-    teesChev: { fontSize: 14, color: colors.textMuted, paddingHorizontal: 4 },
-    teesRows: {
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      paddingVertical: 4,
-    },
-    teesRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      gap: 10,
-    },
-    teesRowWho: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
-    teesRowAvatar: {
-      width: 26,
-      height: 26,
-      borderRadius: 13,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    teesRowAvatarText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
-    teesRowName: { flex: 1, fontSize: 12.5, fontWeight: '800', color: colors.textTitle },
     teePill: {
       flexDirection: 'row',
       alignItems: 'center',
