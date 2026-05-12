@@ -38,9 +38,111 @@ import {
   RoundScore,
   ScoringRule,
   Team,
+  Tee,
 } from '@/types/golf';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// =========================================================================
+// OpenGolfAPI enrichment helpers (Phase 1)
+// =========================================================================
+//
+// The basic /v1/courses/:id response carries only par + handicap per hole
+// (no tees, no per-tee yardages). The richer data lives on two extra
+// endpoints:
+//   · /v1/courses/:id/tees   → { tees: TeeRow[] }
+//   · /v1/courses/:id/holes  → { holes: HoleRow[] }
+// See scripts/survey-opengolf-tees.ts and plan.md (Phase 1 findings)
+// for the schema notes that justify the shape and tolerances below.
+
+function numOrUndef(v: unknown): number | undefined {
+  if (v == null) return undefined;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Dedupe the OpenGolfAPI tees array by lowercased tee_name. The upstream
+ * sometimes returns the same tee twice (one with full ratings, one with
+ * partials); we keep the first occurrence's id/name and merge missing
+ * fields from later duplicates so we don't lose data.
+ */
+function dedupeTees(raw: any[]): Tee[] {
+  const seen = new Map<string, Tee>();
+  for (const r of raw ?? []) {
+    const name = String(r?.tee_name ?? '').trim();
+    if (!name) continue;
+    const key = name.toLowerCase();
+    const next: Tee = {
+      id: typeof r?.id === 'string' && r.id ? r.id : key,
+      name,
+      color: typeof r?.tee_color === 'string' && r.tee_color ? r.tee_color : undefined,
+      slope: numOrUndef(r?.slope_rating),
+      rating: numOrUndef(r?.course_rating),
+      totalYardage: numOrUndef(r?.total_yardage),
+      gender: r?.gender === 'Male' ? 'M' : r?.gender === 'Female' ? 'F' : undefined,
+    };
+    const existing = seen.get(key);
+    if (!existing) {
+      seen.set(key, next);
+    } else {
+      seen.set(key, {
+        ...existing,
+        color: existing.color ?? next.color,
+        slope: existing.slope ?? next.slope,
+        rating: existing.rating ?? next.rating,
+        totalYardage: existing.totalYardage ?? next.totalYardage,
+        gender: existing.gender ?? next.gender,
+      });
+    }
+  }
+  return Array.from(seen.values());
+}
+
+/**
+ * Build the Hole[] array from the OpenGolfAPI per-hole entries. Accepts
+ * the shape returned by /v1/courses/:id/holes (with the per-hole
+ * `yardages` object) and falls back gracefully to the legacy
+ * /v1/courses/:id `scorecard` shape (no yardages).
+ *
+ * The per-hole `yardages` object is keyed by lowercased tee_name in the
+ * API; we re-key it to `Tee.id` so the rest of the app can join cleanly
+ * without re-lowercasing every name.
+ */
+function buildHoles(raw: any[], tees: Tee[]): Hole[] {
+  const teeIdByName = new Map<string, string>();
+  for (const t of tees) teeIdByName.set(t.name.toLowerCase(), t.id);
+
+  return (raw ?? [])
+    .map((entry) => {
+      const number = Number(entry?.hole_number ?? entry?.hole);
+      const par = Number(entry?.par);
+      if (!Number.isFinite(number) || !Number.isFinite(par)) return null;
+
+      const handicapIndex = numOrUndef(entry?.handicap_index ?? entry?.handicap);
+
+      const yardagesObj = entry?.yardages;
+      let yardages: Record<string, number> | undefined;
+      if (yardagesObj && typeof yardagesObj === 'object' && !Array.isArray(yardagesObj)) {
+        const out: Record<string, number> = {};
+        for (const [k, v] of Object.entries(yardagesObj)) {
+          const teeId = teeIdByName.get(String(k).toLowerCase());
+          const n = Number(v);
+          if (teeId && Number.isFinite(n)) out[teeId] = n;
+        }
+        if (Object.keys(out).length > 0) yardages = out;
+      }
+
+      return {
+        number,
+        par,
+        ...(handicapIndex !== undefined ? { handicapIndex } : {}),
+        ...(yardages ? { yardages } : {}),
+      } as Hole;
+    })
+    .filter((h): h is Hole => h !== null)
+    .sort((a, b) => a.number - b.number);
+}
 
 type GolfRoundContextValue = {
   completedRounds: Round[];
@@ -236,6 +338,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       website: row.website ?? undefined,
       tees: row.tees ?? [],
       sourceExternalId: row.source_external_id ?? undefined,
+      lastEnrichedAt: row.last_enriched_at ?? undefined,
     };
   }, []);
 
@@ -418,7 +521,20 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       course: Course
     ): Promise<{ ok: true; course: Course } | { ok: false; error: string }> => {
       if (course.source !== 'opengolf') return { ok: true, course };
-      if (course.holes && course.holes.length > 0) return { ok: true, course };
+      // Re-fetch only when we genuinely have no data yet. Three skip
+      // conditions:
+      //   1. We have both holes AND tees (fully enriched).
+      //   2. We have holes and have previously attempted to fetch
+      //      tees (`lastEnrichedAt` set) — the API genuinely had none
+      //      for this course; retrying would just burn rate-limit
+      //      budget.
+      // Pre-Phase-1 enriched courses have holes but no
+      // `lastEnrichedAt` → they'll re-fetch once to upgrade, then the
+      // attempt timestamp keeps them quiet thereafter.
+      const hasHoles = !!(course.holes && course.holes.length > 0);
+      const hasTees = !!(course.tees && course.tees.length > 0);
+      const alreadyTried = !!course.lastEnrichedAt;
+      if (hasHoles && (hasTees || alreadyTried)) return { ok: true, course };
 
       const externalId =
         course.sourceExternalId ??
@@ -427,50 +543,47 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         return { ok: false, error: 'Catalog course is missing its OpenGolf id.' };
       }
 
-      let payload: any;
+      // Fan out to all three endpoints in parallel. /courses/:id carries
+      // top-level holes_count + par_total; /tees and /holes carry the
+      // richer per-tee data we want to populate. Only the base endpoint
+      // is required — the others are best-effort.
+      let basePayload: any;
+      let teesPayload: any = { tees: [] };
+      let holesPayload: any = { holes: [] };
       try {
-        const res = await fetch(`https://api.opengolfapi.org/v1/courses/${externalId}`);
-        if (!res.ok) {
-          return {
-            ok: false,
-            error: `OpenGolfAPI returned HTTP ${res.status}.`,
-          };
+        const [baseRes, teesRes, holesRes] = await Promise.all([
+          fetch(`https://api.opengolfapi.org/v1/courses/${externalId}`),
+          fetch(`https://api.opengolfapi.org/v1/courses/${externalId}/tees`),
+          fetch(`https://api.opengolfapi.org/v1/courses/${externalId}/holes`),
+        ]);
+        if (!baseRes.ok) {
+          return { ok: false, error: `OpenGolfAPI returned HTTP ${baseRes.status}.` };
         }
-        payload = await res.json();
+        basePayload = await baseRes.json();
+        if (teesRes.ok) teesPayload = await teesRes.json();
+        if (holesRes.ok) holesPayload = await holesRes.json();
       } catch (err: any) {
         return { ok: false, error: err?.message ?? 'Network error contacting OpenGolfAPI.' };
       }
 
-      const rawScorecard: any[] = Array.isArray(payload?.scorecard) ? payload.scorecard : [];
-      if (rawScorecard.length === 0) {
-        return {
-          ok: false,
-          error: 'OpenGolfAPI returned no scorecard for this course.',
-        };
-      }
+      // Build deduped tees first so buildHoles can join the per-hole
+      // yardages object (keyed by lowercased tee_name) onto stable
+      // Tee.id keys.
+      const tees: Tee[] = dedupeTees(teesPayload?.tees ?? []);
 
-      const holes: Hole[] = rawScorecard
-        .map((entry) => {
-          const number = Number(entry.hole_number ?? entry.hole);
-          const par = Number(entry.par);
-          if (!Number.isFinite(number) || !Number.isFinite(par)) return null;
-          const hcpRaw = entry.handicap_index ?? entry.handicap;
-          const handicapIndex =
-            hcpRaw != null && Number.isFinite(Number(hcpRaw)) ? Number(hcpRaw) : undefined;
-          return {
-            number,
-            par,
-            ...(handicapIndex !== undefined ? { handicapIndex } : {}),
-          } as Hole;
-        })
-        .filter((h): h is Hole => h !== null)
-        .sort((a, b) => a.number - b.number);
+      // Prefer /holes (richer) and fall back to /courses/:id's
+      // `scorecard` array if the dedicated endpoint returned nothing.
+      const rawHoles: any[] =
+        Array.isArray(holesPayload?.holes) && holesPayload.holes.length > 0
+          ? holesPayload.holes
+          : Array.isArray(basePayload?.scorecard)
+          ? basePayload.scorecard
+          : [];
+
+      const holes: Hole[] = buildHoles(rawHoles, tees);
 
       if (holes.length === 0) {
-        return {
-          ok: false,
-          error: 'OpenGolfAPI scorecard entries were unreadable.',
-        };
+        return { ok: false, error: 'OpenGolfAPI returned no scorecard for this course.' };
       }
 
       // Trust the API's holes_count / par_total over our bulk-derived
@@ -478,15 +591,17 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       // computed sums from the scorecard itself when the API doesn't
       // ship those fields.
       const computedTotalPar = holes.reduce((t, h) => t + h.par, 0);
-      const apiHoleCount = Number(payload?.holes_count);
-      const apiTotalPar = Number(payload?.par_total);
+      const apiHoleCount = Number(basePayload?.holes_count);
+      const apiTotalPar = Number(basePayload?.par_total);
       const enrichedHoleCount = Number.isFinite(apiHoleCount) ? apiHoleCount : holes.length;
       const enrichedTotalPar = Number.isFinite(apiTotalPar) ? apiTotalPar : computedTotalPar;
 
       const enriched: Course = {
         ...course,
         holes,
+        tees,
         totalPar: enrichedTotalPar,
+        lastEnrichedAt: new Date().toISOString(),
       };
 
       // Write back to the shared catalog row. Best-effort: if the RPC
@@ -496,7 +611,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         const { error } = await supabase.rpc('enrich_catalog_course', {
           p_id: course.id,
           p_holes: holes,
-          p_tees: course.tees ?? [],
+          p_tees: tees,
           p_hole_count: enrichedHoleCount,
           p_total_par: enrichedTotalPar,
         });

@@ -111,6 +111,19 @@ export type Course = {
   tees?: Tee[];
   /** The OpenGolfAPI UUID for catalog rows. Stable across re-imports. */
   sourceExternalId?: string;
+  /**
+   * ISO timestamp of the last enrichment attempt for this catalog
+   * course. Persisted on the shared catalog row (migration 012) so
+   * every device sees "the upstream fetch has been attempted" — even
+   * when it returned an empty tees array. Used by
+   * `ensureCourseScorecard` to short-circuit retries on courses where
+   * OpenGolfAPI has no tee data, preserving public-API rate-limit
+   * budget across users.
+   *
+   * Falsy on pre-Phase-1 enriched rows that predate the column; those
+   * trigger one upgrade fetch.
+   */
+  lastEnrichedAt?: string;
 };
 
 export type ScoringRule = 'stroke' | 'scramble';
