@@ -659,6 +659,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     current_hole_number: number;
     started_at: string;
     completed_at: string | null;
+    caption: string | null;
   };
 
   const cloudToLocalRound = useCallback((row: CloudScorecardRow): Round => {
@@ -680,6 +681,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       participants: row.participants ?? [],
       mentionedUserIds: row.mentioned_user_ids ?? [],
       roundId: row.round_id ?? undefined,
+      caption: row.caption ?? undefined,
     };
   }, []);
 
@@ -766,6 +768,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             current_hole_number: round.currentHoleNumber,
             started_at: round.startedAt,
             completed_at: round.completedAt ?? null,
+            caption: round.caption ?? null,
           },
           { onConflict: 'id' }
         );

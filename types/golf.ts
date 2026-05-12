@@ -236,4 +236,12 @@ export type Round = {
    * of-owner only.
    */
   mentionedUserIds: string[];
+  /**
+   * User-authored caption added after a round completes. Optional;
+   * undefined when the user hasn't written one. Rendered as the lead
+   * body of the Feed card. v1 has no in-app editor — captions arrive
+   * via the seed script today and a future round-detail edit
+   * affordance.
+   */
+  caption?: string;
 };

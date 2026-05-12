@@ -121,6 +121,24 @@ const LOCAL_NAME_POOL = [
   'Mark', 'Uncle Pete', 'Coworker', 'Ben Sr.', 'Casey', 'Pat',
 ] as const;
 
+const CAPTIONS = [
+  "Course was playing long — wind on every par 5 — still snuck in two birdies on the back.",
+  "Finally broke 90 🎉  Aunt Sally drained a 30-footer on 7 to seal it.",
+  "Birthday round with Dad. Sneaking in birdies on 13 and 17 made it 🎂.",
+  "Beautiful morning, fog burned off by hole 4. Putts were dropping today.",
+  "Tee shot on 12 ended up under a pine. Made the recovery shot of my life.",
+  "First time playing the back tees here. Humbling but I'll be back.",
+  "Lost 4 balls in the same pond. Course 1, me 0.",
+  "Played as a twosome and finished in 2:45 — bliss.",
+  "Birdied the 18th to tie. We took it to a sudden death playoff.",
+  "Drove the par 4 on 6 — pin high, 18 feet for eagle. Two-putted.",
+  "Walked the whole thing. Knees are wrecked, scorecard is intact.",
+  "Played in a downpour for 4 holes. Should have called it but glad we stuck it out.",
+  "Three-putted from 10 feet on the last green. Golf is a cruel game.",
+  "Saw a bald eagle on 14. Felt like an omen. Wasn't an omen.",
+  "Hit it solid all day, couldn't find a putt. Storyline of my golf life.",
+] as const;
+
 const PLAYER_COLORS = [
   '#42a5f5', '#ab47bc', '#7cb342', '#ff8f00', '#26a69a',
   '#ef5350', '#5c6bc0', '#ec407a', '#ffa726', '#66bb6a',
@@ -466,6 +484,10 @@ async function main() {
     const completedAt = new Date(now - rnd() * SIX_MONTHS_MS);
     const startedAt = new Date(completedAt.getTime() - 4 * 60 * 60 * 1000);
 
+    // Captions on roughly a third of rounds so the Feed has a mix of
+    // captioned + un-captioned cards to validate both layouts.
+    const caption = rnd() < 0.35 ? pick(CAPTIONS) : null;
+
     const id = `fake:${owner.handle}:${i.toString().padStart(2, '0')}-${rnd()
       .toString(36)
       .slice(2, 7)}`;
@@ -484,6 +506,7 @@ async function main() {
       current_hole_number: activeHoles[activeHoles.length - 1]?.number ?? 1,
       started_at: startedAt.toISOString(),
       completed_at: completedAt.toISOString(),
+      caption,
     });
 
     console.log(
