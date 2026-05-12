@@ -243,9 +243,12 @@ async function main() {
     console.log('(skipped in dry-run)');
   }
 
-  // 6. Collect catalog course ids bgn64 has played, then load their full
-  //    enriched rows.
-  console.log("\n=== Reading bgn64's played catalog courses ===");
+  // 6. Collect the pool of catalog courses to seed against. Prefer the
+  //    courses bgn64 has personally played — those are the user's
+  //    favorites and are guaranteed to have enriched tee data. Top that
+  //    up from any other enriched catalog rows so the pool stays varied
+  //    even if scorecard history has been pruned.
+  console.log("\n=== Building course pool ===");
   const { data: pastCards, error: pastErr } = await admin
     .from('scorecards')
     .select('course_snapshot')
@@ -253,30 +256,48 @@ async function main() {
     .not('id', 'like', 'fake:%');
   if (pastErr) throw pastErr;
 
-  const seenIds = new Set<string>();
+  const preferredIds = new Set<string>();
   for (const row of pastCards ?? []) {
     const snap = (row as { course_snapshot: { id?: string; source?: string } }).course_snapshot;
     if (snap && snap.source === 'opengolf' && typeof snap.id === 'string') {
-      seenIds.add(snap.id);
+      preferredIds.add(snap.id);
     }
   }
-  console.log(`bgn64 has played ${seenIds.size} distinct catalog courses`);
-  if (seenIds.size === 0) {
-    console.error('No catalog course history for bgn64 to seed against. Aborting.');
-    process.exit(1);
-  }
+  console.log(`bgn64 has played ${preferredIds.size} distinct catalog courses`);
 
-  const { data: courseRows, error: courseErr } = await admin
+  // Pull every enriched catalog row (last_enriched_at IS NOT NULL) so
+  // we always have a healthy variety even when history is thin.
+  const { data: enrichedRows, error: enrichedErr } = await admin
     .from('courses')
     .select('*')
-    .in('id', [...seenIds]);
-  if (courseErr) throw courseErr;
-  const courses = (courseRows ?? []) as CourseRow[];
-  console.log(`Loaded ${courses.length} catalog rows`);
+    .eq('source', 'opengolf')
+    .not('last_enriched_at', 'is', null);
+  if (enrichedErr) throw enrichedErr;
+  const enriched = (enrichedRows ?? []) as CourseRow[];
+
+  // Prefer history first, then top up with other enriched courses up to
+  // a cap so we don't seed on hundreds of distinct courses.
+  const COURSE_POOL_TARGET = 8;
+  const byId = new Map(enriched.map((c) => [c.id, c] as const));
+  const courses: CourseRow[] = [];
+  for (const id of preferredIds) {
+    const row = byId.get(id);
+    if (row) courses.push(row);
+  }
+  for (const row of enriched) {
+    if (courses.length >= COURSE_POOL_TARGET) break;
+    if (!courses.some((c) => c.id === row.id)) courses.push(row);
+  }
+  if (courses.length === 0) {
+    console.error('No enriched catalog courses available. Aborting.');
+    process.exit(1);
+  }
+  console.log(`Course pool (${courses.length}):`);
   for (const c of courses) {
     const teeCount = (c.tees ?? []).length;
     const holeCount = (c.holes ?? []).length;
-    console.log(`  ${c.name} (${c.city ?? ''})  holes=${holeCount}  tees=${teeCount}`);
+    const fromHistory = preferredIds.has(c.id) ? '★' : ' ';
+    console.log(`  ${fromHistory} ${c.name} (${c.city ?? ''})  holes=${holeCount}  tees=${teeCount}`);
   }
 
   // 7. Build the fake scorecards.
@@ -350,29 +371,50 @@ async function main() {
       }
     }
 
-    // Teams for scramble: split into 2 teams of 1-2.
+    // Teams for scramble: split into 2 teams of 1-2. Mirrors
+    // lib/teams.ts: team `name` is the Oxford-comma join of member
+    // display names with the owner shown as "You"; color comes from the
+    // owner's color when present else the first member's color else a
+    // fallback. The Feed/Rounds tabs render these strings directly, so
+    // generic "Team A" / "Team B" labels won't show the players.
     let teams:
       | Array<{ id: string; name: string; color: string; playerIds: string[] }>
       | undefined;
     if (isScramble) {
+      const labelFor = (p: FakePlayer): string => {
+        if (p.participantKey === 'user') return 'You';
+        if (p.linkedUserId) {
+          return p.linkedUserId === bgn64.user_id ? bgn64.handle : benjaming.handle;
+        }
+        return p.localDisplayName ?? 'Player';
+      };
+      const colorFor = (p: FakePlayer): string | undefined =>
+        p.participantKey === 'user' ? '#7cb342' : p.localDisplayColor;
+      const joinWithAnd = (parts: string[]): string => {
+        if (parts.length === 1) return parts[0];
+        if (parts.length === 2) return `${parts[0]} & ${parts[1]}`;
+        return `${parts.slice(0, -1).join(', ')} & ${parts[parts.length - 1]}`;
+      };
+      const TEAM_FALLBACK_COLORS = ['#7cb342', '#4a90e2', '#9c5dde', '#ff8f00'];
+
       const shuffled = pickN(players, players.length);
       const half = Math.ceil(shuffled.length / 2);
-      const team1Players = shuffled.slice(0, half).map((p) => p.participantKey);
-      const team2Players = shuffled.slice(half).map((p) => p.participantKey);
-      teams = [
-        {
-          id: 'team-1',
-          name: 'Team A',
-          color: '#42a5f5',
-          playerIds: team1Players,
-        },
-        {
-          id: 'team-2',
-          name: 'Team B',
-          color: '#ef5350',
-          playerIds: team2Players,
-        },
-      ];
+      const teamMembers = [shuffled.slice(0, half), shuffled.slice(half)];
+
+      teams = teamMembers.map((members, ti) => {
+        const ownerInTeam = members.find((p) => p.participantKey === 'user');
+        const firstColored = members.find((p) => colorFor(p));
+        const color =
+          (ownerInTeam && colorFor(ownerInTeam)) ??
+          (firstColored && colorFor(firstColored)) ??
+          TEAM_FALLBACK_COLORS[ti % TEAM_FALLBACK_COLORS.length];
+        return {
+          id: `team-${ti + 1}`,
+          name: joinWithAnd(members.map(labelFor)),
+          color,
+          playerIds: members.map((p) => p.participantKey),
+        };
+      });
     }
 
     // Generate scores: one stroke per scoring entity per active hole.
