@@ -1,6 +1,9 @@
 /**
  * Format selection — Step 2 of the Score-tab round-setup flow.
  *
+ * Re-titled "How are you scoring?" to match the question-form prompts of
+ * the previous steps.
+ *
  * Receives `courseId` + comma-separated `playerIds` via URL params.
  * Lets the user pick Stroke (default) or Scramble. In Scramble the
  * players are auto-grouped into pairs; the user can re-group via a
@@ -8,14 +11,22 @@
  * no fixed Team 1/2 slots. A group's display name and color are
  * derived from its members at render time.
  *
- * Tap "Start round" → calls `startRound(...)` and replaces into
- * `/scoring`.
+ * Phase 3 additions: an expandable "Tees" row below the format/groups
+ * section. Hidden entirely when the course has no published tee data
+ * (custom courses, unenriched catalog rows, OpenGolfAPI courses with
+ * empty tees). Each player (or scramble team) has a tee pill that
+ * opens TeePickerSheet to choose from the course's tees. Tees are
+ * optional — the round can start with none assigned.
+ *
+ * Tap "Start round" → calls `startRound(..., { teeIds })` and replaces
+ * into `/scoring`.
  */
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { TeePickerSheet, teeSwatch } from '@/components/TeePickerSheet';
 import {
   buildTeamsFromGroups,
   defaultScrambleGroups,
@@ -26,7 +37,7 @@ import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
-import type { ScoringRule } from '@/types/golf';
+import type { ScoringRule, Tee } from '@/types/golf';
 
 export default function FormatScreen() {
   const { courseId, playerIds: rawPlayerIds } = useLocalSearchParams<{
@@ -61,6 +72,13 @@ export default function FormatScreen() {
     Array.from({ length: 4 }, (_, i) => `team-${i + 1}-${Date.now()}`)
   );
 
+  // Per-player tee selection. Map: participantKey (== Player.id) → teeId.
+  // Empty when no one has been assigned a tee yet. Survives format
+  // switches between stroke/scramble.
+  const [teeIds, setTeeIds] = useState<Record<string, string | undefined>>({});
+  // Active tee-picker target: which player are we picking a tee for?
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
+
   // "Move X" bottom sheet state. `moveSource` carries the playerId we
   // tapped + the index of the group they currently belong to.
   const [moveSource, setMoveSource] = useState<{ playerId: string; fromGroup: number } | null>(
@@ -92,23 +110,24 @@ export default function FormatScreen() {
   function handleStart() {
     if (!courseId || playerIds.length === 0) return;
     if (scoringRule === 'stroke') {
-      startRound(courseId, playerIds, 'stroke');
+      startRound(courseId, playerIds, 'stroke', undefined, { teeIds });
     } else {
       const teams = buildTeamsFromGroups(groups, getPlayer, defaultPlayerId, groupIds);
-      startRound(courseId, groups.flat(), 'scramble', teams);
+      startRound(courseId, groups.flat(), 'scramble', teams, { teeIds });
     }
     router.replace('/(tabs)/(score)/scoring');
   }
 
-  const subtitleNames = playerIds.map(resolveName).join(', ');
-
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>Choose a format</Text>
+        <Text style={styles.title}>How are you scoring?</Text>
         {course && (
           <Text style={styles.subtitle} numberOfLines={1}>
-            {course.name} · {subtitleNames}
+            {course.name} ·{' '}
+            {playerIds.length === 1
+              ? 'solo'
+              : `${playerIds.length} players`}
           </Text>
         )}
 
@@ -159,6 +178,18 @@ export default function FormatScreen() {
             }
           />
         )}
+
+        <TeesDropdown
+          styles={styles}
+          colors={colors}
+          courseTees={course?.tees ?? []}
+          playerIds={playerIds}
+          teeIds={teeIds}
+          resolveName={resolveName}
+          getPlayer={getPlayer}
+          defaultPlayerId={defaultPlayerId}
+          onOpenPicker={(pid) => setPickerFor(pid)}
+        />
       </ScrollView>
 
       <View style={styles.footer}>
@@ -180,6 +211,19 @@ export default function FormatScreen() {
           if (!moveSource) return;
           moveMember(moveSource.playerId, moveSource.fromGroup, toGroup);
           setMoveSource(null);
+        }}
+      />
+
+      <TeePickerSheet
+        visible={!!pickerFor && (course?.tees?.length ?? 0) > 0}
+        scorerName={pickerFor ? resolveName(pickerFor) : ''}
+        tees={course?.tees ?? []}
+        selectedTeeId={pickerFor ? teeIds[pickerFor] : undefined}
+        onCancel={() => setPickerFor(null)}
+        onPick={(teeId) => {
+          if (!pickerFor) return;
+          setTeeIds((prev) => ({ ...prev, [pickerFor]: teeId }));
+          setPickerFor(null);
         }}
       />
     </View>
@@ -306,6 +350,108 @@ function ScrambleBody({
         })}
       </View>
     </>
+  );
+}
+
+/**
+ * Expandable Tees row. Header summarizes the current state ("Not set" /
+ * "All on Blue" / "Mixed"); tap to expand and reveal per-player rows
+ * with tee pills. Hidden when the course has no published tee data.
+ */
+function TeesDropdown({
+  styles,
+  colors,
+  courseTees,
+  playerIds,
+  teeIds,
+  resolveName,
+  getPlayer,
+  defaultPlayerId,
+  onOpenPicker,
+}: {
+  styles: Styles;
+  colors: ThemeColors;
+  courseTees: Tee[];
+  playerIds: string[];
+  teeIds: Record<string, string | undefined>;
+  resolveName: (id: string) => string;
+  getPlayer: ReturnType<typeof usePlayers>['getPlayer'];
+  defaultPlayerId: string | null;
+  onOpenPicker: (playerId: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  if (courseTees.length === 0) return null;
+
+  const teeById = useMemo(() => {
+    const m = new Map<string, Tee>();
+    for (const t of courseTees) m.set(t.id, t);
+    return m;
+  }, [courseTees]);
+
+  const assigned = playerIds.map((pid) => teeIds[pid]).filter((id): id is string => !!id);
+  let summary: string;
+  if (assigned.length === 0) {
+    summary = 'Not set  ·  optional';
+  } else {
+    const unique = new Set(assigned);
+    if (unique.size === 1) {
+      const t = teeById.get([...unique][0]);
+      summary = t ? `All on ${t.name}` : 'All on the same tee';
+    } else {
+      summary = 'Mixed';
+    }
+  }
+
+  return (
+    <View style={styles.teesCard}>
+      <Pressable style={styles.teesHead} onPress={() => setExpanded((v) => !v)}>
+        <View style={styles.teesIcon}>
+          <Text style={styles.teesIconText}>🏌️</Text>
+        </View>
+        <View style={styles.teesBody}>
+          <Text style={styles.teesLabel}>Tees</Text>
+          <Text style={styles.teesMeta}>{summary}</Text>
+        </View>
+        <Text style={styles.teesChev}>{expanded ? '▴' : '▾'}</Text>
+      </Pressable>
+      {expanded && (
+        <View style={styles.teesRows}>
+          {playerIds.map((pid) => {
+            const p = getPlayer(pid);
+            const isYou = defaultPlayerId === pid;
+            const avatarColor = p?.color ?? colors.primary;
+            const letter = (p?.displayName ?? p?.nickname ?? '?')[0]?.toUpperCase() ?? '?';
+            const tee = teeIds[pid] ? teeById.get(teeIds[pid]!) : undefined;
+            return (
+              <View key={pid} style={styles.teesRow}>
+                <View style={styles.teesRowWho}>
+                  <View style={[styles.teesRowAvatar, { backgroundColor: avatarColor }]}>
+                    <Text style={styles.teesRowAvatarText}>{letter}</Text>
+                  </View>
+                  <Text style={styles.teesRowName} numberOfLines={1}>
+                    {isYou ? 'You' : resolveName(pid)}
+                  </Text>
+                </View>
+                <Pressable
+                  style={[styles.teePill, !tee && styles.teePillEmpty]}
+                  onPress={() => onOpenPicker(pid)}>
+                  {tee ? (
+                    <>
+                      <View style={[styles.teePillDot, { backgroundColor: teeSwatch(tee) }]} />
+                      <Text style={styles.teePillText}>{tee.name}</Text>
+                    </>
+                  ) : (
+                    <Text style={styles.teePillTextEmpty}>+ Tee</Text>
+                  )}
+                  <Text style={styles.teePillChev}>▾</Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -528,6 +674,75 @@ function makeStyles(colors: ThemeColors) {
     },
     memberAvatarText: { color: '#ffffff', fontSize: 10, fontWeight: '800' },
     memberLabel: { fontSize: 11.5, fontWeight: '700', color: colors.textTitle },
+
+    teesCard: {
+      marginTop: 14,
+      backgroundColor: colors.cardBg,
+      borderColor: colors.border,
+      borderWidth: 1,
+      borderRadius: 12,
+    },
+    teesHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 11,
+    },
+    teesIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: colors.chipBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    teesIconText: { fontSize: 16 },
+    teesBody: { flex: 1, minWidth: 0 },
+    teesLabel: { fontSize: 13, fontWeight: '800', color: colors.textTitle },
+    teesMeta: { fontSize: 10.5, color: colors.textMuted, fontWeight: '600', marginTop: 1 },
+    teesChev: { fontSize: 14, color: colors.textMuted, paddingHorizontal: 4 },
+    teesRows: {
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      paddingVertical: 4,
+    },
+    teesRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      gap: 10,
+    },
+    teesRowWho: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
+    teesRowAvatar: {
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    teesRowAvatarText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
+    teesRowName: { flex: 1, fontSize: 12.5, fontWeight: '800', color: colors.textTitle },
+    teePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: colors.chipBg,
+      borderRadius: 7,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+    },
+    teePillEmpty: {
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: colors.border,
+      backgroundColor: 'transparent',
+    },
+    teePillDot: { width: 8, height: 8, borderRadius: 4 },
+    teePillText: { fontSize: 11, fontWeight: '800', color: colors.textTitle },
+    teePillTextEmpty: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
+    teePillChev: { fontSize: 11, color: colors.textMuted },
 
     footer: {
       paddingHorizontal: 20,
