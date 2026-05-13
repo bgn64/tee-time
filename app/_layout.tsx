@@ -11,7 +11,7 @@
 
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFonts } from 'expo-font';
-import { router, Stack } from 'expo-router';
+import { router, Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import { View, StyleSheet } from 'react-native';
@@ -75,6 +75,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
+  const pathname = usePathname();
   const { colors, hydrated: themeHydrated } = useTheme();
   const { hydrated: playerHydrated } = usePlayers();
   const { hydrated: roundHydrated } = useGolfRound();
@@ -107,11 +108,13 @@ function RootLayoutNav() {
     if (!nextPrimer) return;
     const path: '/onboarding/account' | '/onboarding/location' =
       nextPrimer === 'account' ? '/onboarding/account' : '/onboarding/location';
+    if (pathname === path) return;
+    if (nextPrimer === 'account' && pathname === '/sign-in') return;
     const id = setTimeout(() => {
       router.replace(path);
     }, 0);
     return () => clearTimeout(id);
-  }, [allHydrated, nextPrimer]);
+  }, [allHydrated, nextPrimer, pathname]);
 
   // If the auth flow lands a freshly-signed-in user without a profile
   // (e.g. Google OAuth bounces back to the app at '/'), surface the

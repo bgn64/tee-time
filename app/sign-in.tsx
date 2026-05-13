@@ -21,7 +21,6 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -29,7 +28,6 @@ import {
   View,
 } from 'react-native';
 
-import { GoogleGLogo } from '@/components/GoogleGLogo';
 import { DevAccountPicker } from '@/components/DevAccountPicker';
 import { showAlert } from '@/lib/dialog';
 
@@ -48,7 +46,6 @@ export default function SignInScreen() {
     sendMagicCode,
     verifyMagicCode,
     completeProfile,
-    signInWithGoogle,
   } = useAccount();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -100,19 +97,6 @@ export default function SignInScreen() {
     setStep('code');
   };
 
-  const onGoogle = async () => {
-    console.log('[sign-in/diag] Google button tapped');
-    setSubmitting(true);
-    const result = await signInWithGoogle();
-    console.log('[sign-in/diag] signInWithGoogle resolved', result);
-    // signInWithOAuth navigates the browser away — only get here on
-    // an error before the redirect.
-    if (!result.ok) {
-      setSubmitting(false);
-      showAlert('Could not sign in with Google', result.error);
-    }
-  };
-
   const onVerifyCode = async () => {
     setSubmitting(true);
     const result = await verifyMagicCode(code);
@@ -158,24 +142,6 @@ export default function SignInScreen() {
 
           <DevAccountPicker />
 
-          {Platform.OS === 'web' ? (
-            <>
-              <Pressable
-                style={[styles.googleButton, submitting && styles.googleButtonDisabled]}
-                onPress={onGoogle}
-                disabled={submitting}>
-                <GoogleGLogo size={18} />
-                <Text style={styles.googleButtonText}>Sign in with Google</Text>
-              </Pressable>
-
-              <View style={styles.divider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>or with email</Text>
-                <View style={styles.dividerLine} />
-              </View>
-            </>
-          ) : null}
-
           <View style={[styles.field, valid && styles.fieldValid]}>
             <TextInput
               style={styles.fieldInput}
@@ -207,9 +173,7 @@ export default function SignInScreen() {
   }
 
   if (step === 'code') {
-    // Supabase OTP length is configurable (6-10 digits depending on project
-    // settings). Stay flexible rather than hardcoding to 6.
-    const valid = /^\d{6,10}$/.test(code);
+    const valid = /^\d{6}$/.test(code);
     return (
       <View style={styles.container}>
         <View style={styles.body}>
@@ -219,18 +183,18 @@ export default function SignInScreen() {
             an hour.
           </Text>
 
-          <View style={[styles.field, valid && styles.fieldValid]}>
+          <View style={[styles.field, styles.codeField, valid && styles.fieldValid]}>
             <TextInput
               style={[styles.fieldInput, styles.codeInput]}
               value={code}
-              onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 10))}
+              onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="one-time-code"
               keyboardType="number-pad"
               autoFocus
-              maxLength={10}
-              placeholder="enter code"
+              maxLength={6}
+              placeholder="000000"
               placeholderTextColor={colors.textMuted}
             />
           </View>
@@ -391,6 +355,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     fieldValid: {
       borderColor: colors.primary,
     },
+    codeField: {
+      alignSelf: 'center',
+      width: '100%',
+      maxWidth: 220,
+    },
     fieldPrefix: {
       fontSize: 18,
       fontWeight: '700',
@@ -495,50 +464,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.primaryDark,
       fontSize: 13,
       fontWeight: '700',
-    },
-    googleButton: {
-      // Per Google's Sign-In Branding Guidelines: white background with
-      // a 1px border (#dadce0), 40px+ minimum height, 12px horizontal
-      // padding, official 4-color "G" logo, "Sign in with Google" text
-      // in Roboto Medium 14sp (we approximate with system font weight 500).
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 12,
-      backgroundColor: '#ffffff',
-      borderWidth: 1,
-      borderColor: '#dadce0',
-      borderRadius: 4,
-      paddingVertical: 11,
-      paddingHorizontal: 16,
-      marginTop: 12,
-    },
-    googleButtonDisabled: {
-      opacity: 0.5,
-    },
-    googleButtonText: {
-      color: '#3c4043',
-      fontSize: 14,
-      fontWeight: '500',
-      letterSpacing: 0.25,
-    },
-    divider: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      marginVertical: 18,
-    },
-    dividerLine: {
-      flex: 1,
-      height: 1,
-      backgroundColor: colors.border,
-    },
-    dividerText: {
-      color: colors.textMuted,
-      fontSize: 11,
-      fontWeight: '700',
-      letterSpacing: 0.4,
-      textTransform: 'uppercase',
     },
   });
 }

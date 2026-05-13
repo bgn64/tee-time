@@ -224,8 +224,8 @@ export function AccountProvider({ children }: PropsWithChildren) {
         return { ok: false, error: 'No pending sign-in. Request a new code.' };
       }
       const trimmed = code.trim();
-      if (!/^\d{6,10}$/.test(trimmed)) {
-        return { ok: false, error: 'Enter the code from your email.' };
+      if (!/^\d{6}$/.test(trimmed)) {
+        return { ok: false, error: 'Enter the 6-digit code from your email.' };
       }
       const { error } = await supabase.auth.verifyOtp({
         email: pendingEmail,

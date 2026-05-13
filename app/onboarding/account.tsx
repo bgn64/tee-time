@@ -1,8 +1,8 @@
 /**
  * Account primer — first-launch soft prompt to sign in. Routes to the
  * existing sign-in flow on accept, marks `accountPrimer` as dismissed
- * on Skip / Maybe later, and continues to the location primer either
- * way via the root layout's nextPrimer effect.
+ * on Skip / Maybe later, and continues to the location primer only after
+ * a real account exists or the user explicitly skips this step.
  */
 
 import { router } from 'expo-router';
@@ -33,13 +33,11 @@ export default function AccountPrimerScreen() {
   const { setStatus } = useOnboarding();
 
   const onPrimary = useCallback(() => {
-    // AccountContext.account flipping to non-null on successful sign-in
-    // will also flip the primer to 'accepted' via OnboardingContext's
-    // effect, but we set it here too so dismissing the sign-in modal
-    // without completing still counts as having seen the primer.
-    setStatus('account', 'accepted');
-    router.replace('/sign-in');
-  }, [setStatus]);
+    // Do not mark this primer accepted here. The account context does that
+    // only after sign-in succeeds, which keeps users from skipping auth by
+    // backing out of the sign-in screen.
+    router.push('/sign-in');
+  }, []);
 
   const onDismiss = useCallback(() => {
     setStatus('account', 'dismissed');
@@ -50,9 +48,9 @@ export default function AccountPrimerScreen() {
     <PrimerScreen
       heroIcon="👋"
       title="Welcome to Tee Time"
-      body="Score a round in seconds. Sign in to keep your history, see friends' rounds, and play across devices."
+      body="Score a round in seconds. Sign in with your invited email to keep your history, see friends' rounds, and play across devices."
       bullets={BULLETS}
-      primaryLabel="Get started"
+      primaryLabel="Sign in"
       onPrimary={onPrimary}
       onDismiss={onDismiss}
     />
