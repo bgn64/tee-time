@@ -83,8 +83,10 @@ export default function SignInScreen() {
   };
 
   const onGoogle = async () => {
+    console.log('[sign-in/diag] Google button tapped');
     setSubmitting(true);
     const result = await signInWithGoogle();
+    console.log('[sign-in/diag] signInWithGoogle resolved', result);
     // signInWithOAuth navigates the browser away — only get here on
     // an error before the redirect.
     if (!result.ok) {

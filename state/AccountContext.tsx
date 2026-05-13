@@ -122,12 +122,23 @@ export function AccountProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
+    // Diagnostic: log the URL the app loaded on. If we just came back
+    // from Google OAuth the URL hash contains the access_token + refresh_token.
+    if (typeof window !== 'undefined') {
+      console.log('[auth/diag] initial location', {
+        href: window.location.href,
+        hash: window.location.hash?.slice(0, 80),
+        search: window.location.search,
+      });
+    }
     let cancelled = false;
     const run = async () => {
       const count = await loadJSON<number>(STORAGE_KEYS.POST_ROUND_PROMPT_DISMISS_COUNT, 0);
       if (cancelled) return;
       setPostRoundPromptDismissCount(count);
+      console.log('[auth/diag] refreshFromSession start');
       await refreshFromSession();
+      console.log('[auth/diag] refreshFromSession done');
       if (cancelled) return;
       setHydrated(true);
     };
@@ -138,7 +149,12 @@ export function AccountProvider({ children }: PropsWithChildren) {
   }, [refreshFromSession]);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log('[auth/diag] onAuthStateChange', {
+        event,
+        hasSession: !!session,
+        userId: session?.user?.id,
+      });
       if (event === 'SIGNED_OUT') {
         setAccount(null);
         setNeedsProfile(false);
@@ -235,7 +251,9 @@ export function AccountProvider({ children }: PropsWithChildren) {
    * the UI can hide the button.
    */
   const signInWithGoogle = useCallback(async (): Promise<AuthResult> => {
+    console.log('[auth/diag] signInWithGoogle: enter', { platform: Platform.OS });
     if (Platform.OS !== 'web') {
+      console.log('[auth/diag] signInWithGoogle: refused (non-web)');
       return {
         ok: false,
         error: 'Google sign-in is only available on the web build for now.',
@@ -243,9 +261,18 @@ export function AccountProvider({ children }: PropsWithChildren) {
     }
     const redirectTo =
       typeof window !== 'undefined' ? window.location.origin : undefined;
-    const { error } = await supabase.auth.signInWithOAuth({
+    console.log('[auth/diag] signInWithGoogle: calling supabase.auth.signInWithOAuth', {
+      provider: 'google',
+      redirectTo,
+    });
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: redirectTo ? { redirectTo } : undefined,
+    });
+    console.log('[auth/diag] signInWithGoogle: signInWithOAuth returned', {
+      hasUrl: !!data?.url,
+      url: data?.url?.slice(0, 120),
+      errorMessage: error?.message,
     });
     if (error) return { ok: false, error: error.message };
     // signInWithOAuth navigates the browser away; this resolve is

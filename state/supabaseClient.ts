@@ -46,6 +46,12 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     storage,
     autoRefreshToken: true,
     persistSession: true,
-    detectSessionInUrl: false,
+    // On web we need supabase-js to read the OAuth callback fragment
+    // (#access_token=...&refresh_token=...) that Google -> Supabase
+    // appends to the redirect URL. Without this, Google sign-in
+    // completes server-side but the client never picks up the
+    // resulting session. On native there is no URL hash to read so the
+    // flag is a no-op; safe to enable everywhere.
+    detectSessionInUrl: Platform.OS === 'web',
   },
 });
