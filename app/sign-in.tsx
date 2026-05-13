@@ -29,6 +29,7 @@ import {
   View,
 } from 'react-native';
 
+import { GoogleGLogo } from '@/components/GoogleGLogo';
 import { showAlert } from '@/lib/dialog';
 
 import { isValidHandle, useAccount } from '@/state/AccountContext';
@@ -138,11 +139,11 @@ export default function SignInScreen() {
           {Platform.OS === 'web' ? (
             <>
               <Pressable
-                style={[styles.googleButton, submitting && styles.primaryButtonDisabled]}
+                style={[styles.googleButton, submitting && styles.googleButtonDisabled]}
                 onPress={onGoogle}
                 disabled={submitting}>
-                <Text style={styles.googleG}>G</Text>
-                <Text style={styles.googleButtonText}>Continue with Google</Text>
+                <GoogleGLogo size={18} />
+                <Text style={styles.googleButtonText}>Sign in with Google</Text>
               </Pressable>
 
               <View style={styles.divider}>
@@ -447,32 +448,30 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
     },
     googleButton: {
+      // Per Google's Sign-In Branding Guidelines: white background with
+      // a 1px border (#dadce0), 40px+ minimum height, 12px horizontal
+      // padding, official 4-color "G" logo, "Sign in with Google" text
+      // in Roboto Medium 14sp (we approximate with system font weight 500).
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 10,
+      gap: 12,
       backgroundColor: '#ffffff',
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      paddingVertical: 12,
+      borderColor: '#dadce0',
+      borderRadius: 4,
+      paddingVertical: 11,
+      paddingHorizontal: 16,
       marginTop: 12,
     },
-    googleG: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: '#4285f4',
-      color: '#ffffff',
-      textAlign: 'center',
-      lineHeight: 22,
-      fontWeight: '800',
-      fontSize: 14,
+    googleButtonDisabled: {
+      opacity: 0.5,
     },
     googleButtonText: {
-      color: colors.textTitle,
-      fontSize: 14.5,
-      fontWeight: '700',
+      color: '#3c4043',
+      fontSize: 14,
+      fontWeight: '500',
+      letterSpacing: 0.25,
     },
     divider: {
       flexDirection: 'row',
