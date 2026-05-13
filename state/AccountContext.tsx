@@ -209,7 +209,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
     if (!trimmed) return { ok: false, error: 'Enter an email address.' };
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
-      options: { shouldCreateUser: true },
+      options: { shouldCreateUser: false },
     });
     if (error) {
       return { ok: false, error: error.message };
