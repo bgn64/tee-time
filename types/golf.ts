@@ -244,4 +244,26 @@ export type Round = {
    * affordance.
    */
   caption?: string;
+  /**
+   * Per-round opt-out for the live-strip feature. When false, the
+   * round still syncs to the scorer's own cloud history but is
+   * filtered out of friends' Feed live strips while in progress.
+   * Defaults to true; users flip it off via a toggle on the Format
+   * screen when starting a round they'd rather not broadcast.
+   *
+   * Has no effect once the round is completed — the live strip only
+   * looks at in-progress rows.
+   */
+  isLiveShareable?: boolean;
+  /**
+   * Timestamp of the most recent score-bearing upsert. Distinct from
+   * `updated_at`: only score writes move it, so cosmetic edits (e.g.,
+   * flipping `isLiveShareable`) don't make a stale tab look fresh.
+   *
+   * Used by the live-strip filter to hide abandoned in-progress
+   * rounds: only rows with last_score_at within the last 6 hours are
+   * rendered. Undefined on rounds that predate the live-round
+   * feature.
+   */
+  lastScoreAt?: string;
 };
