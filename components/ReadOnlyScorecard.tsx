@@ -85,19 +85,33 @@ export function ReadOnlyScorecard({
 
   const isScramble = round.scoringRule === 'scramble';
 
-  // For scramble, participants carry teeIds but they belong to team
-  // members (not the team itself). We aggregate per-team by taking
-  // the most common teeId across members — but the simpler rule is:
-  // tees-in-play for the scorecard means the union of teeIds referenced
-  // by ANY participant, period. The scorer rows in scramble are teams,
-  // not players, so they don't get a tee dot prefix (teams don't pick
-  // a tee directly). See the score-row rendering below.
+  // Scramble stores tee selections on each team member participant, even
+  // though the UI picks them once per team. The yardage rows use the union
+  // of all participant teeIds, and team scorer rows derive their marker
+  // from the most common teeId among that team's members.
   const teeIdsInPlay: string[] = useMemo(() => {
     const set = new Set<string>();
     for (const p of round.participants ?? []) {
       if (p.teeId) set.add(p.teeId);
     }
     return [...set];
+  }, [round.participants]);
+
+  const teamTeeIdByTeamId = useMemo(() => {
+    const byTeam = new Map<string, Map<string, number>>();
+    for (const p of round.participants ?? []) {
+      if (!p.teamId || !p.teeId) continue;
+      const counts = byTeam.get(p.teamId) ?? new Map<string, number>();
+      counts.set(p.teeId, (counts.get(p.teeId) ?? 0) + 1);
+      byTeam.set(p.teamId, counts);
+    }
+
+    const result = new Map<string, string>();
+    for (const [teamId, counts] of byTeam) {
+      const [teeId] = [...counts.entries()].sort((a, b) => b[1] - a[1])[0] ?? [];
+      if (teeId) result.set(teamId, teeId);
+    }
+    return result;
   }, [round.participants]);
 
   const teesInPlay = useMemo(() => {
@@ -126,7 +140,12 @@ export function ReadOnlyScorecard({
   const scorers: Scorer[] = useMemo(() => {
     let raw: Scorer[];
     if (isScramble && round.teams) {
-      raw = round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }));
+      raw = round.teams.map((t) => ({
+        id: t.id,
+        name: t.name,
+        color: t.color,
+        teeId: teamTeeIdByTeamId.get(t.id),
+      }));
     } else if (round.participants && round.participants.length > 0) {
       raw = round.participants.map((p) => {
         const identity = resolveParticipantIdentity(p, {
@@ -176,7 +195,7 @@ export function ReadOnlyScorecard({
       });
     }
     return raw;
-  }, [round, isScramble, account, profileCache, allPlayers, colors.primary]);
+  }, [round, isScramble, teamTeeIdByTeamId, account, profileCache, allPlayers, colors.primary]);
 
   const front9 = useMemo(
     () => round.course.holes.filter((h) => h.number <= 9),

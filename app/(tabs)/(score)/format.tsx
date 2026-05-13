@@ -11,12 +11,11 @@
  * no fixed Team 1/2 slots. A group's display name and color are
  * derived from its members at render time.
  *
- * Phase 3 additions: an expandable "Tees" row below the format/groups
- * section. Hidden entirely when the course has no published tee data
+ * Tee selection is hidden entirely when the course has no published tee data
  * (custom courses, unenriched catalog rows, OpenGolfAPI courses with
- * empty tees). Each player (or scramble team) has a tee pill that
- * opens TeePickerSheet to choose from the course's tees. Tees are
- * optional — the round can start with none assigned.
+ * empty tees). Stroke play shows one tee pill per player; scramble shows
+ * one tee pill per team so every member of a team plays the same tees.
+ * Tees are optional — the round can start with none assigned.
  *
  * Tap "Start round" → calls `startRound(..., { teeIds })` and replaces
  * into `/scoring`.
@@ -38,6 +37,11 @@ import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
 import type { ScoringRule, Tee } from '@/types/golf';
+
+type TeePickerTarget =
+  | { kind: 'player'; playerId: string }
+  | { kind: 'team'; groupIndex: number }
+  | null;
 
 export default function FormatScreen() {
   const { courseId, playerIds: rawPlayerIds } = useLocalSearchParams<{
@@ -69,15 +73,14 @@ export default function FormatScreen() {
   // Stable per-group team ids preserved across renders so a member
   // shuffle doesn't generate a fresh id every keystroke.
   const [groupIds] = useState<string[]>(() =>
-    Array.from({ length: 4 }, (_, i) => `team-${i + 1}-${Date.now()}`)
+    Array.from({ length: Math.max(playerIds.length, 1) }, (_, i) => `team-${i + 1}-${Date.now()}`)
   );
 
-  // Per-player tee selection. Map: participantKey (== Player.id) → teeId.
-  // Empty when no one has been assigned a tee yet. Survives format
-  // switches between stroke/scramble.
+  // Per-player tee selection for stroke play. Map: participantKey (== Player.id) → teeId.
   const [teeIds, setTeeIds] = useState<Record<string, string | undefined>>({});
-  // Active tee-picker target: which player are we picking a tee for?
-  const [pickerFor, setPickerFor] = useState<string | null>(null);
+  // Per-team tee selection for scramble. Expanded to each team member when starting.
+  const [teamTeeIds, setTeamTeeIds] = useState<Record<string, string | undefined>>({});
+  const [pickerTarget, setPickerTarget] = useState<TeePickerTarget>(null);
 
   // Live-strip opt-out. Default ON; users can flip OFF to keep the
   // round out of friends' live strips while still syncing to their own
@@ -121,8 +124,16 @@ export default function FormatScreen() {
       });
     } else {
       const teams = buildTeamsFromGroups(groups, getPlayer, defaultPlayerId, groupIds);
+      const scrambleTeeIds: Record<string, string | undefined> = {};
+      teams.forEach((team) => {
+        const teeId = teamTeeIds[team.id];
+        if (!teeId) return;
+        team.playerIds.forEach((playerId) => {
+          scrambleTeeIds[playerId] = teeId;
+        });
+      });
       startRound(courseId, groups.flat(), 'scramble', teams, {
-        teeIds,
+        teeIds: scrambleTeeIds,
         isLiveShareable: shareLive,
       });
     }
@@ -177,7 +188,7 @@ export default function FormatScreen() {
             defaultPlayerId={defaultPlayerId}
             courseTees={course?.tees ?? []}
             teeIds={teeIds}
-            onOpenPicker={(pid) => setPickerFor(pid)}
+            onOpenPicker={(pid) => setPickerTarget({ kind: 'player', playerId: pid })}
           />
         ) : (
           <ScrambleBody
@@ -187,12 +198,13 @@ export default function FormatScreen() {
             resolveName={resolveName}
             getPlayer={getPlayer}
             defaultPlayerId={defaultPlayerId}
+            groupIds={groupIds}
             onTapMember={(playerId, fromGroup) =>
               setMoveSource({ playerId, fromGroup })
             }
             courseTees={course?.tees ?? []}
-            teeIds={teeIds}
-            onOpenPicker={(pid) => setPickerFor(pid)}
+            teamTeeIds={teamTeeIds}
+            onOpenPicker={(groupIndex) => setPickerTarget({ kind: 'team', groupIndex })}
           />
         )}
       </ScrollView>
@@ -247,15 +259,32 @@ export default function FormatScreen() {
       />
 
       <TeePickerSheet
-        visible={!!pickerFor && (course?.tees?.length ?? 0) > 0}
-        scorerName={pickerFor ? resolveName(pickerFor) : ''}
+        visible={!!pickerTarget && (course?.tees?.length ?? 0) > 0}
+        scorerName={
+          pickerTarget?.kind === 'player'
+            ? resolveName(pickerTarget.playerId)
+            : pickerTarget?.kind === 'team'
+            ? deriveTeamName(groups[pickerTarget.groupIndex] ?? [], getPlayer, defaultPlayerId)
+            : ''
+        }
         tees={course?.tees ?? []}
-        selectedTeeId={pickerFor ? teeIds[pickerFor] : undefined}
-        onCancel={() => setPickerFor(null)}
+        selectedTeeId={
+          pickerTarget?.kind === 'player'
+            ? teeIds[pickerTarget.playerId]
+            : pickerTarget?.kind === 'team'
+            ? teamTeeIds[groupIds[pickerTarget.groupIndex]]
+            : undefined
+        }
+        onCancel={() => setPickerTarget(null)}
         onPick={(teeId) => {
-          if (!pickerFor) return;
-          setTeeIds((prev) => ({ ...prev, [pickerFor]: teeId }));
-          setPickerFor(null);
+          if (!pickerTarget) return;
+          if (pickerTarget.kind === 'player') {
+            setTeeIds((prev) => ({ ...prev, [pickerTarget.playerId]: teeId }));
+          } else {
+            const teamId = groupIds[pickerTarget.groupIndex];
+            if (teamId) setTeamTeeIds((prev) => ({ ...prev, [teamId]: teeId }));
+          }
+          setPickerTarget(null);
         }}
       />
     </View>
@@ -280,11 +309,7 @@ function StrokeBody({
   colors: ThemeColors;
   playerIds: string[];
   resolveName: (id: string) => string;
-  getPlayer: (id: string) => ReturnType<typeof useGolfRound>['courses'][number] extends never
-    ? never
-    : ReturnType<typeof usePlayers>['getPlayer'] extends (id: string) => infer R
-    ? R
-    : never;
+  getPlayer: ReturnType<typeof usePlayers>['getPlayer'];
   defaultPlayerId: string | null;
   courseTees: Tee[];
   teeIds: Record<string, string | undefined>;
@@ -322,23 +347,11 @@ function StrokeBody({
                 {isYou ? 'You' : resolveName(id)}
               </Text>
               {hasTees && (
-                <Pressable
-                  style={[styles.teePill, !tee && styles.teePillEmpty]}
-                  onPress={() => onOpenPicker(id)}>
-                  {tee ? (
-                    <>
-                      <View
-                        style={[styles.teePillDot, { backgroundColor: teeSwatch(tee) }]}
-                      />
-                      <Text style={styles.teePillText} numberOfLines={1}>
-                        {tee.name}
-                      </Text>
-                    </>
-                  ) : (
-                    <Text style={styles.teePillTextEmpty}>+ Tee</Text>
-                  )}
-                  <Text style={styles.teePillChev}>▾</Text>
-                </Pressable>
+                <TeeSelectionPill
+                  styles={styles}
+                  tee={tee}
+                  onPress={() => onOpenPicker(id)}
+                />
               )}
             </View>
           );
@@ -355,9 +368,10 @@ function ScrambleBody({
   resolveName,
   getPlayer,
   defaultPlayerId,
+  groupIds,
   onTapMember,
   courseTees,
-  teeIds,
+  teamTeeIds,
   onOpenPicker,
 }: {
   styles: Styles;
@@ -366,10 +380,11 @@ function ScrambleBody({
   resolveName: (id: string) => string;
   getPlayer: ReturnType<typeof usePlayers>['getPlayer'];
   defaultPlayerId: string | null;
+  groupIds: string[];
   onTapMember: (playerId: string, fromGroup: number) => void;
   courseTees: Tee[];
-  teeIds: Record<string, string | undefined>;
-  onOpenPicker: (playerId: string) => void;
+  teamTeeIds: Record<string, string | undefined>;
+  onOpenPicker: (groupIndex: number) => void;
 }) {
   const teeById = useMemo(() => {
     const m = new Map<string, Tee>();
@@ -377,7 +392,6 @@ function ScrambleBody({
     return m;
   }, [courseTees]);
   const hasTees = courseTees.length > 0;
-  const flatPlayerIds = useMemo(() => groups.flat(), [groups]);
 
   return (
     <>
@@ -394,6 +408,8 @@ function ScrambleBody({
         {groups.map((members, i) => {
           const teamName = deriveTeamName(members, getPlayer, defaultPlayerId);
           const teamColor = deriveTeamColor(members, getPlayer, defaultPlayerId, i);
+          const teamId = groupIds[i];
+          const tee = teamId && teamTeeIds[teamId] ? teeById.get(teamTeeIds[teamId]!) : undefined;
           return (
             <View
               key={i}
@@ -405,6 +421,13 @@ function ScrambleBody({
                 <Text style={styles.teamCount}>
                   {members.length === 1 ? '1 player' : `${members.length} players`}
                 </Text>
+                {hasTees && (
+                  <TeeSelectionPill
+                    styles={styles}
+                    tee={tee}
+                    onPress={() => onOpenPicker(i)}
+                  />
+                )}
               </View>
               <View style={styles.teamMembers}>
                 {members.map((id) => {
@@ -430,49 +453,35 @@ function ScrambleBody({
           );
         })}
       </View>
-
-      {hasTees && (
-        <>
-          <Text style={[styles.sectionLabel, { marginTop: 14 }]}>TEES</Text>
-          <View style={styles.list}>
-            {flatPlayerIds.map((id) => {
-              const p = getPlayer(id);
-              const isYou = defaultPlayerId === id;
-              const color = p?.color ?? colors.primary;
-              const letter = (p?.displayName ?? p?.nickname ?? '?')[0]?.toUpperCase() ?? '?';
-              const tee = teeIds[id] ? teeById.get(teeIds[id]!) : undefined;
-              return (
-                <View key={id} style={styles.rowCard}>
-                  <View style={[styles.rowAvatar, { backgroundColor: color }]}>
-                    <Text style={styles.rowAvatarText}>{letter}</Text>
-                  </View>
-                  <Text style={styles.rowName} numberOfLines={1}>
-                    {isYou ? 'You' : resolveName(id)}
-                  </Text>
-                  <Pressable
-                    style={[styles.teePill, !tee && styles.teePillEmpty]}
-                    onPress={() => onOpenPicker(id)}>
-                    {tee ? (
-                      <>
-                        <View
-                          style={[styles.teePillDot, { backgroundColor: teeSwatch(tee) }]}
-                        />
-                        <Text style={styles.teePillText} numberOfLines={1}>
-                          {tee.name}
-                        </Text>
-                      </>
-                    ) : (
-                      <Text style={styles.teePillTextEmpty}>+ Tee</Text>
-                    )}
-                    <Text style={styles.teePillChev}>▾</Text>
-                  </Pressable>
-                </View>
-              );
-            })}
-          </View>
-        </>
-      )}
     </>
+  );
+}
+
+function TeeSelectionPill({
+  styles,
+  tee,
+  onPress,
+}: {
+  styles: Styles;
+  tee: Tee | undefined;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      style={[styles.teePill, !tee && styles.teePillEmpty]}
+      onPress={onPress}>
+      {tee ? (
+        <>
+          <View style={[styles.teePillDot, { backgroundColor: teeSwatch(tee) }]} />
+          <Text style={styles.teePillText} numberOfLines={1}>
+            {tee.name}
+          </Text>
+        </>
+      ) : (
+        <Text style={styles.teePillTextEmpty}>+ Tee</Text>
+      )}
+      <Text style={styles.teePillChev}>▾</Text>
+    </Pressable>
   );
 }
 
