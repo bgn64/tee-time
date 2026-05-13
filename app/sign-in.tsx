@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 
 import { GoogleGLogo } from '@/components/GoogleGLogo';
+import { DevAccountPicker } from '@/components/DevAccountPicker';
 import { showAlert } from '@/lib/dialog';
 
 import { isValidHandle, useAccount } from '@/state/AccountContext';
@@ -154,6 +155,8 @@ export default function SignInScreen() {
           <Text style={styles.subtitle}>
             Back up your rounds and connect with friends.
           </Text>
+
+          <DevAccountPicker />
 
           {Platform.OS === 'web' ? (
             <>

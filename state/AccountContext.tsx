@@ -50,6 +50,15 @@ type AccountContextValue = {
   pendingDisplayName: string | null;
   sendMagicCode: (email: string) => Promise<AuthResult>;
   verifyMagicCode: (code: string) => Promise<AuthResult>;
+  /**
+   * Dev-only: sign in with an email + password tuple. Used by the
+   * `DevAccountPicker` on the sign-in screen to bypass magic-link OTP
+   * for the seeded test accounts (alice / bob / carol / dave). Calls
+   * supabase.auth.signOut() first when a session already exists so the
+   * GolfRoundContext sign-out reset effect fires cleanly between
+   * impersonations.
+   */
+  signInWithPassword: (email: string, password: string) => Promise<AuthResult>;
   completeProfile: (handle: string, displayName?: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   /**
@@ -288,6 +297,29 @@ export function AccountProvider({ children }: PropsWithChildren) {
   }, []);
 
   /**
+   * Dev-only password sign-in. Used by the `DevAccountPicker` to switch
+   * between seeded test accounts (alice / bob / carol / dave). If a
+   * session is already active we sign out first so the rest of the app
+   * (GolfRoundContext, PlayerContext, SocialContext) sees the explicit
+   * SIGNED_OUT → SIGNED_IN transition and resets its caches between
+   * impersonations — otherwise the previous user's courses + rounds
+   * stay mirrored in local memory.
+   */
+  const signInWithPassword = useCallback(
+    async (email: string, password: string): Promise<AuthResult> => {
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (sessionData.session) {
+        await supabase.auth.signOut();
+      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return { ok: false, error: error.message };
+      // refreshFromSession fires automatically via onAuthStateChange.
+      return { ok: true, value: undefined };
+    },
+    []
+  );
+
+  /**
    * Trigger Supabase's Google OAuth flow. Web-only for now — opens
    * Google's auth screen, bounces through Supabase's callback, and
    * lands back on the app with a session in the URL fragment that
@@ -359,6 +391,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       pendingDisplayName,
       sendMagicCode,
       verifyMagicCode,
+      signInWithPassword,
       completeProfile,
       signOut,
       signInWithGoogle,
@@ -377,6 +410,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       pendingDisplayName,
       sendMagicCode,
       verifyMagicCode,
+      signInWithPassword,
       completeProfile,
       signOut,
       signInWithGoogle,

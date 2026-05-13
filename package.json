@@ -12,7 +12,8 @@
     "test:db": "jest --selectProjects db --runInBand",
     "test:all": "jest",
     "icons": "tsx scripts/generate-icons.ts",
-    "ingest:opengolf": "tsx scripts/ingest-opengolf.ts"
+    "ingest:opengolf": "tsx scripts/ingest-opengolf.ts",
+    "seed:test-users": "tsx scripts/seed-test-users.ts"
   },
   "jest": {
     "projects": [
