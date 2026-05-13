@@ -32,14 +32,17 @@ import { useTheme } from '@/state/ThemeContext';
 
 function isDevSupabaseTarget(): boolean {
   // EXPO_PUBLIC_* envvars are inlined at build time. We accept the
-  // common local Supabase hostnames and reject anything else.
+  // common local Supabase hostnames; supabase.co is also allowed
+  // because the developer's personal dev project lives there and the
+  // outer `__DEV__` gate keeps this off production bundles regardless.
   const url = process.env.EXPO_PUBLIC_SUPABASE_URL ?? '';
   return (
     url.includes('localhost') ||
     url.includes('127.0.0.1') ||
     url.includes('host.docker.internal') ||
     url.includes('.supabase.local') ||
-    url.includes('kong:8000')
+    url.includes('kong:8000') ||
+    url.includes('.supabase.co')
   );
 }
 
