@@ -113,6 +113,20 @@ function RootLayoutNav() {
     return () => clearTimeout(id);
   }, [allHydrated, nextPrimer]);
 
+  // If the auth flow lands a freshly-signed-in user without a profile
+  // (e.g. Google OAuth bounces back to the app at '/'), surface the
+  // handle-picker UI by pushing them into the sign-in screen. The
+  // screen's own state machine moves them to the handle step.
+  const { needsProfile } = useAccount();
+  useEffect(() => {
+    if (!allHydrated) return;
+    if (!needsProfile) return;
+    const id = setTimeout(() => {
+      router.replace('/sign-in');
+    }, 0);
+    return () => clearTimeout(id);
+  }, [allHydrated, needsProfile]);
+
   if (!allHydrated) {
     return null;
   }

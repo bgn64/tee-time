@@ -11,10 +11,18 @@
  */
 
 import { router } from 'expo-router';
-import { useEffect, useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 
-import { confirm } from '@/lib/dialog';
+import { confirm, showAlert } from '@/lib/dialog';
 import { useAccount } from '@/state/AccountContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
@@ -27,8 +35,17 @@ const PROVIDER_LABEL = {
 
 export default function AccountScreen() {
   const { colors } = useTheme();
-  const { account, signOut } = useAccount();
+  const { account, signOut, updateDisplayName } = useAccount();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Display-name editing state. Default to the current value; reset
+  // whenever the account changes.
+  const [editingName, setEditingName] = useState(false);
+  const [draftName, setDraftName] = useState(account?.displayName ?? '');
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (account?.displayName) setDraftName(account.displayName);
+  }, [account?.displayName]);
 
   useScreenHeader({
     left: { kind: 'back', label: 'You', onPress: () => router.back() },
@@ -60,13 +77,77 @@ export default function AccountScreen() {
     signOut();
   };
 
+  const onSaveName = async () => {
+    const trimmed = draftName.trim();
+    if (!trimmed) {
+      showAlert('Display name', 'Cannot be empty.');
+      return;
+    }
+    if (trimmed === account?.displayName) {
+      setEditingName(false);
+      return;
+    }
+    setSaving(true);
+    const result = await updateDisplayName(trimmed);
+    setSaving(false);
+    if (!result.ok) {
+      showAlert('Could not update', result.error);
+      return;
+    }
+    setEditingName(false);
+  };
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.profileCard}>
         <View style={[styles.avatar, { backgroundColor: account.avatarColor }]}>
           <Text style={styles.avatarText}>{initial}</Text>
         </View>
-        <Text style={styles.name}>{account.displayName}</Text>
+        {editingName ? (
+          <View style={styles.nameEditWrap}>
+            <TextInput
+              style={styles.nameInput}
+              value={draftName}
+              onChangeText={setDraftName}
+              autoFocus
+              autoCapitalize="words"
+              maxLength={50}
+              placeholder="Your name"
+              placeholderTextColor={colors.textMuted}
+            />
+            <View style={styles.nameEditRow}>
+              <Pressable
+                style={styles.nameEditBtn}
+                onPress={() => {
+                  setDraftName(account.displayName);
+                  setEditingName(false);
+                }}
+                disabled={saving}>
+                <Text style={styles.nameEditBtnText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.nameEditBtn, styles.nameEditBtnPrimary]}
+                onPress={onSaveName}
+                disabled={saving}>
+                {saving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={[styles.nameEditBtnText, styles.nameEditBtnTextPrimary]}>
+                    Save
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <Pressable
+            style={styles.nameRow}
+            onPress={() => setEditingName(true)}
+            hitSlop={6}>
+            <Text style={styles.name}>{account.displayName}</Text>
+            <Text style={styles.editPencil}>✎</Text>
+          </Pressable>
+        )}
         <Text style={styles.handle}>@{account.handle}</Text>
       </View>
 
@@ -140,6 +221,58 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 18,
       fontWeight: '800',
       color: colors.textTitle,
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    editPencil: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    nameEditWrap: {
+      width: '100%',
+      gap: 8,
+      marginTop: 4,
+    },
+    nameInput: {
+      backgroundColor: colors.background,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.textTitle,
+      textAlign: 'center',
+    },
+    nameEditRow: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    nameEditBtn: {
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBg,
+    },
+    nameEditBtnPrimary: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    nameEditBtnText: {
+      color: colors.textTitle,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    nameEditBtnTextPrimary: {
+      color: '#ffffff',
     },
     handle: {
       marginTop: 2,

@@ -40,14 +40,31 @@ type Step = 'email' | 'code' | 'handle' | 'done';
 
 export default function SignInScreen() {
   const { colors } = useTheme();
-  const { account, needsProfile, sendMagicCode, verifyMagicCode, completeProfile, signInWithGoogle } = useAccount();
+  const {
+    account,
+    needsProfile,
+    pendingDisplayName,
+    sendMagicCode,
+    verifyMagicCode,
+    completeProfile,
+    signInWithGoogle,
+  } = useAccount();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [handle, setHandle] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Prefill the display-name field with whatever the OAuth provider
+  // (Google) gave us when the handle step opens.
+  useEffect(() => {
+    if (needsProfile && pendingDisplayName && !displayName) {
+      setDisplayName(pendingDisplayName);
+    }
+  }, [needsProfile, pendingDisplayName, displayName]);
 
   // After OTP verification, AccountContext flips one of two flags. React to
   // them to advance the wizard:
@@ -115,7 +132,7 @@ export default function SignInScreen() {
       return;
     }
     setSubmitting(true);
-    const result = await completeProfile(handle);
+    const result = await completeProfile(handle, displayName);
     setSubmitting(false);
     if (!result.ok) {
       showAlert('Could not create profile', result.error);
@@ -235,17 +252,34 @@ export default function SignInScreen() {
   }
 
   if (step === 'handle') {
-    const valid = isValidHandle(handle);
+    const handleValid = isValidHandle(handle);
+    const displayValid = displayName.trim().length > 0;
+    const valid = handleValid && displayValid;
     return (
       <View style={styles.container}>
         <View style={styles.body}>
-          <Text style={styles.title}>Pick your @handle</Text>
+          <Text style={styles.title}>Finish your profile</Text>
           <Text style={styles.subtitle}>
-            Friends find you by your handle. Lowercase letters, numbers, dots, and underscores.
-            3-20 characters.
+            Tell us what to call you and pick a handle friends can find you by.
           </Text>
 
-          <View style={[styles.field, valid && styles.fieldValid]}>
+          <Text style={styles.fieldLabel}>Display name</Text>
+          <View style={[styles.field, displayValid && styles.fieldValid]}>
+            <TextInput
+              style={styles.fieldInput}
+              value={displayName}
+              onChangeText={setDisplayName}
+              autoCapitalize="words"
+              autoCorrect={false}
+              autoComplete="name"
+              maxLength={50}
+              placeholder="Your name"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+
+          <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>@Handle</Text>
+          <View style={[styles.field, handleValid && styles.fieldValid]}>
             <Text style={styles.fieldPrefix}>@</Text>
             <TextInput
               style={styles.fieldInput}
@@ -254,7 +288,6 @@ export default function SignInScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               autoComplete="off"
-              autoFocus
               maxLength={20}
               placeholder="yourhandle"
               placeholderTextColor={colors.textMuted}
@@ -262,8 +295,8 @@ export default function SignInScreen() {
           </View>
 
           <Text style={styles.fieldHint}>
-            {valid
-              ? '✓ Looks good — uniqueness is checked when you continue.'
+            {handleValid
+              ? '✓ Handle looks good — uniqueness is checked when you continue.'
               : '3-20 chars, start with a letter, lowercase only.'}
           </Text>
 
@@ -377,6 +410,17 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 12,
       color: colors.textMuted,
       marginBottom: 28,
+    },
+    fieldLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+      color: colors.textMuted,
+      marginBottom: 6,
+    },
+    fieldLabelSpaced: {
+      marginTop: 8,
     },
     doneCheck: {
       width: 64,

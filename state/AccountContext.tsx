@@ -45,9 +45,12 @@ type AccountContextValue = {
   account: Account | null;
   needsProfile: boolean;
   pendingEmail: string | null;
+  /** Provider-supplied display name (Google's full_name) shown as a
+   *  default in the handle-picker step. null when no hint available. */
+  pendingDisplayName: string | null;
   sendMagicCode: (email: string) => Promise<AuthResult>;
   verifyMagicCode: (code: string) => Promise<AuthResult>;
-  completeProfile: (handle: string) => Promise<AuthResult>;
+  completeProfile: (handle: string, displayName?: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
   /**
    * Trigger Supabase's Google OAuth flow (web only). Resolves to
@@ -61,6 +64,8 @@ type AccountContextValue = {
    * when signed out.
    */
   updateAvatarColor: (color: string) => Promise<AuthResult>;
+  /** Patch profiles.display_name for the signed-in user. */
+  updateDisplayName: (displayName: string) => Promise<AuthResult>;
   postRoundPromptDismissCount: number;
   postRoundPromptSuppressed: boolean;
   markPostRoundPromptDismissed: () => void;
@@ -73,6 +78,11 @@ export function AccountProvider({ children }: PropsWithChildren) {
   const [account, setAccount] = useState<Account | null>(null);
   const [needsProfile, setNeedsProfile] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  // OAuth providers (Google) populate user_metadata.full_name +
+  // user_metadata.avatar_url. We expose those to the sign-in screen so
+  // the handle-picker step can prefill the display-name field — much
+  // friendlier than defaulting to the handle.
+  const [pendingDisplayName, setPendingDisplayName] = useState<string | null>(null);
   const [postRoundPromptDismissCount, setPostRoundPromptDismissCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
@@ -82,6 +92,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
     if (!session) {
       setAccount(null);
       setNeedsProfile(false);
+      setPendingDisplayName(null);
       return;
     }
 
@@ -102,9 +113,19 @@ export function AccountProvider({ children }: PropsWithChildren) {
     }
 
     if (!profile) {
+      // First-time sign-in. Grab any provider-supplied identity hints so
+      // the handle-picker can prefill the display name with the user's
+      // real name (Google sign-in) rather than echoing the handle.
+      const meta = (session.user.user_metadata ?? {}) as {
+        full_name?: string;
+        name?: string;
+        avatar_url?: string;
+      };
+      const suggestedName = meta.full_name || meta.name || '';
       setAccount(null);
       setNeedsProfile(true);
       setPendingEmail(email);
+      setPendingDisplayName(suggestedName || null);
       return;
     }
 
@@ -119,6 +140,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
     });
     setNeedsProfile(false);
     setPendingEmail(null);
+    setPendingDisplayName(null);
   }, []);
 
   useEffect(() => {
@@ -210,18 +232,19 @@ export function AccountProvider({ children }: PropsWithChildren) {
   );
 
   const completeProfile = useCallback(
-    async (handle: string): Promise<AuthResult> => {
+    async (handle: string, displayName?: string): Promise<AuthResult> => {
       const { data: sessionData } = await supabase.auth.getSession();
       const session = sessionData.session;
       if (!session) {
         return { ok: false, error: 'Not signed in.' };
       }
       const userId = session.user.id;
-      const trimmed = handle.trim().toLowerCase();
+      const trimmedHandle = handle.trim().toLowerCase();
+      const trimmedDisplay = (displayName ?? '').trim();
       const { error } = await supabase.from('profiles').insert({
         user_id: userId,
-        handle: trimmed,
-        display_name: trimmed,
+        handle: trimmedHandle,
+        display_name: trimmedDisplay || trimmedHandle,
         avatar_color: pickAvatarColor(userId),
       });
       if (error) {
@@ -234,6 +257,30 @@ export function AccountProvider({ children }: PropsWithChildren) {
       return { ok: true, value: undefined };
     },
     [refreshFromSession]
+  );
+
+  /**
+   * Patch the signed-in user's display_name in profiles. Optimistically
+   * updates local Account state; participant-identity consumers read
+   * from `account.displayName` so the change propagates everywhere
+   * (feed band 'by line', scoring rows, etc.).
+   */
+  const updateDisplayName = useCallback(
+    async (displayName: string): Promise<AuthResult> => {
+      if (!account) return { ok: false, error: 'Not signed in' };
+      const trimmed = displayName.trim();
+      if (trimmed.length === 0) {
+        return { ok: false, error: 'Display name cannot be empty.' };
+      }
+      const { error } = await supabase
+        .from('profiles')
+        .update({ display_name: trimmed })
+        .eq('user_id', account.userId);
+      if (error) return { ok: false, error: error.message };
+      setAccount((prev) => (prev ? { ...prev, displayName: trimmed } : prev));
+      return { ok: true, value: undefined };
+    },
+    [account]
   );
 
   const signOut = useCallback(async () => {
@@ -309,12 +356,14 @@ export function AccountProvider({ children }: PropsWithChildren) {
       account,
       needsProfile,
       pendingEmail,
+      pendingDisplayName,
       sendMagicCode,
       verifyMagicCode,
       completeProfile,
       signOut,
       signInWithGoogle,
       updateAvatarColor,
+      updateDisplayName,
       postRoundPromptDismissCount,
       postRoundPromptSuppressed:
         postRoundPromptDismissCount >= POST_ROUND_PROMPT_SUPPRESS_THRESHOLD,
@@ -325,12 +374,14 @@ export function AccountProvider({ children }: PropsWithChildren) {
       account,
       needsProfile,
       pendingEmail,
+      pendingDisplayName,
       sendMagicCode,
       verifyMagicCode,
       completeProfile,
       signOut,
       signInWithGoogle,
       updateAvatarColor,
+      updateDisplayName,
       postRoundPromptDismissCount,
       markPostRoundPromptDismissed,
       hydrated,
