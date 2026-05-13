@@ -34,6 +34,8 @@
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 
+import { CourseRow, enrichCourseInPlace, isFullyEnriched } from './lib/enrich';
+
 dotenv.config({ path: '.env.local' });
 dotenv.config({ path: '.env' });
 
@@ -127,43 +129,6 @@ const FAKE_CAPTIONS = [
   'Fairways were running. Pure conditions.',
   'Practice round vibes ahead of the weekend.',
 ];
-
-type CourseRow = {
-  id: string;
-  name: string;
-  source: string;
-  city: string | null;
-  state: string | null;
-  country: string | null;
-  course_type: string | null;
-  hole_count: number;
-  total_par: number | null;
-  total_yardage: number | null;
-  year_built: number | null;
-  architect: string | null;
-  phone: string | null;
-  website: string | null;
-  address: string | null;
-  postal_code: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  holes: Array<{
-    number: number;
-    par: number;
-    handicapIndex?: number;
-    yardages?: Record<string, number>;
-  }>;
-  tees: Array<{
-    id: string;
-    name: string;
-    color?: string;
-    slope?: number;
-    rating?: number;
-    totalYardage?: number;
-  }>;
-  source_external_id: string | null;
-  last_enriched_at: string | null;
-};
 
 function rowToCourseSnapshot(row: CourseRow): Record<string, unknown> {
   const city = row.city ?? undefined;
@@ -263,6 +228,62 @@ async function main() {
     process.exit(1);
   }
 
+  // ---------- 2b. Ensure each venue is fully enriched ----------
+  // The snapshot we embed in each scorecard gets baked in permanently —
+  // even after the catalog row gets enriched later. So we enrich here
+  // before creating the rounds, otherwise demo cards would render with
+  // no tee bars / no yardage rows. enrichCourseInPlace is a no-op when
+  // the row already has tees + per-hole yardages, so this is cheap on
+  // re-runs.
+  console.log('\n=== Enriching venues (one-time per row) ===');
+  if (dryRun) {
+    for (const row of venuePool) {
+      const enriched = isFullyEnriched(row);
+      console.log(
+        `  ${row.name.padEnd(40)} enriched=${enriched}` + (enriched ? '' : '  (would fetch)')
+      );
+    }
+  } else {
+    for (let i = 0; i < venuePool.length; i++) {
+      const row = venuePool[i];
+      if (isFullyEnriched(row)) {
+        console.log(`  ${row.name.padEnd(40)} already enriched, skipping`);
+        continue;
+      }
+      try {
+        await enrichCourseInPlace(admin, row);
+        const after = isFullyEnriched(row);
+        console.log(
+          `  ${row.name.padEnd(40)} ${after ? 'enriched' : 'fetched but no per-hole data upstream'}`
+        );
+      } catch (err) {
+        console.warn(`  ${row.name.padEnd(40)} FAILED: ${(err as Error).message}`);
+      }
+      // Light throttle between fetches.
+      if (i < venuePool.length - 1) await new Promise((r) => setTimeout(r, 350));
+    }
+  }
+
+  // Drop any venues that still lack per-hole data after the enrichment
+  // attempt — embedding their snapshots in demo rounds would leave the
+  // scorecards looking broken. If we end up with zero usable venues,
+  // bail loudly.
+  const usableVenues = venuePool.filter(isFullyEnriched);
+  if (!dryRun) {
+    if (usableVenues.length === 0) {
+      console.error(
+        '\nNo usable enriched venues remained after the enrichment pass. Aborting.'
+      );
+      process.exit(1);
+    }
+    if (usableVenues.length < venuePool.length) {
+      console.log(
+        `\nProceeding with ${usableVenues.length} of ${venuePool.length} venues that have per-hole data.`
+      );
+    }
+  }
+  const finalPool = dryRun ? venuePool : usableVenues;
+
   // ---------- 3. Create the pros ----------
   console.log('\n=== Creating pro imposter accounts ===');
   const proUserIds: string[] = [];
@@ -311,14 +332,14 @@ async function main() {
     if (!ownerUserId || ownerUserId.startsWith('(dry-run')) {
       // dry-run path — still print the plan
       for (let i = 0; i < ROUNDS_PER_PRO; i++) {
-        const venue = venuePool[(pi * ROUNDS_PER_PRO + i) % venuePool.length];
+        const venue = finalPool[(pi * ROUNDS_PER_PRO + i) % finalPool.length];
         console.log(`  [dry-run] ${pro.handle.padEnd(10)} ${venue.name}`);
       }
       continue;
     }
     for (let i = 0; i < ROUNDS_PER_PRO; i++) {
       // Cycle through the venue pool so each pro hits a different mix.
-      const venue = venuePool[(pi * ROUNDS_PER_PRO + i) % venuePool.length];
+      const venue = finalPool[(pi * ROUNDS_PER_PRO + i) % finalPool.length];
 
       const ownerKey = 'user';
       const participants = [
