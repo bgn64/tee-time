@@ -1,4 +1,4 @@
-import { distanceMiles, formatMiles } from '@/lib/geo';
+import { distanceMiles, distanceYards, formatMiles, formatYards } from '@/lib/geo';
 
 describe('distanceMiles', () => {
   test('returns 0 for identical points', () => {
@@ -45,5 +45,39 @@ describe('formatMiles', () => {
     expect(formatMiles(-1)).toBe('');
     expect(formatMiles(NaN)).toBe('');
     expect(formatMiles(Infinity)).toBe('');
+  });
+});
+
+describe('distanceYards', () => {
+  test('returns 0 for identical points', () => {
+    const p = { latitude: 47.6062, longitude: -122.3321 };
+    expect(distanceYards(p, p)).toBeCloseTo(0, 5);
+  });
+
+  test('matches mile conversion', () => {
+    const a = { latitude: 47.6062, longitude: -122.3321 };
+    const b = { latitude: 47.6072, longitude: -122.3321 };
+    expect(distanceYards(a, b)).toBeCloseTo(distanceMiles(a, b) * 1760, 6);
+  });
+
+  test('computes a representative short golf distance', () => {
+    const teeShot = { latitude: 47.6062, longitude: -122.3321 };
+    const target = { latitude: 47.6074, longitude: -122.3321 };
+    const yards = distanceYards(teeShot, target);
+    expect(yards).toBeGreaterThan(140);
+    expect(yards).toBeLessThan(150);
+  });
+});
+
+describe('formatYards', () => {
+  test('rounds to whole yards', () => {
+    expect(formatYards(147.4)).toBe('147 yd');
+    expect(formatYards(147.5)).toBe('148 yd');
+  });
+
+  test('rejects negative / non-finite input', () => {
+    expect(formatYards(-1)).toBe('');
+    expect(formatYards(NaN)).toBe('');
+    expect(formatYards(Infinity)).toBe('');
   });
 });

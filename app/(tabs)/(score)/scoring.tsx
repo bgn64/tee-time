@@ -25,6 +25,7 @@ import { BackHandler, Pressable, ScrollView, StyleSheet, Text, View } from 'reac
 import { ConfirmAbandonSheet } from '@/components/ConfirmAbandonSheet';
 import { HoleNavBar } from '@/components/HoleNavBar';
 import { RangeDropdown, rangeLabel } from '@/components/RangeDropdown';
+import { RangefinderSheet } from '@/components/RangefinderSheet';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import { ScoreEntryRow } from '@/components/ScoreEntryRow';
 import { confirm } from '@/lib/dialog';
@@ -55,6 +56,7 @@ export default function ScoringScreen() {
 
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
+  const [rangefinderOpen, setRangefinderOpen] = useState(false);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const isScramble =
@@ -105,9 +107,14 @@ export default function ScoringScreen() {
   // Block Android hardware back while the locked round is on screen.
   useFocusEffect(
     useCallback(() => {
-      const sub = BackHandler.addEventListener('hardwareBackPress', () => true);
+      const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (rangefinderOpen) {
+          setRangefinderOpen(false);
+        }
+        return true;
+      });
       return () => sub.remove();
-    }, [])
+    }, [rangefinderOpen])
   );
 
   // Defensive bounce if the round disappears.
@@ -125,6 +132,14 @@ export default function ScoringScreen() {
   if (!currentHole) return null;
 
   const maxHole = currentRound.course.holes.length;
+  const courseLocation =
+    Number.isFinite(currentRound.course.latitude) &&
+    Number.isFinite(currentRound.course.longitude)
+      ? {
+          latitude: currentRound.course.latitude!,
+          longitude: currentRound.course.longitude!,
+        }
+      : null;
 
   const scorers: Scorer[] = isScramble
     ? currentRound.teams!.map((t) => ({
@@ -194,6 +209,16 @@ export default function ScoringScreen() {
           onChange={setCurrentHole}
         />
 
+        <Pressable
+          style={styles.rangefinderBtn}
+          onPress={() => setRangefinderOpen(true)}>
+          <View>
+            <Text style={styles.rangefinderLabel}>GPS RANGEFINDER</Text>
+            <Text style={styles.rangefinderText}>Satellite yardage to any target</Text>
+          </View>
+          <Text style={styles.rangefinderIcon}>⌖</Text>
+        </Pressable>
+
         <View style={styles.entryCard}>
           {scorers.map((s, i) => {
             const score = currentRound.scores.find(
@@ -257,6 +282,16 @@ export default function ScoringScreen() {
             router.replace('/(tabs)/(score)');
           }, 0);
         }}
+      />
+
+      <RangefinderSheet
+        visible={rangefinderOpen}
+        courseName={currentRound.course.name}
+        holeNumber={currentHole.number}
+        par={currentHole.par}
+        yardage={currentHole.yardage}
+        courseLocation={courseLocation}
+        onClose={() => setRangefinderOpen(false)}
       />
 
       <RangeDropdown
@@ -356,6 +391,37 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderColor: colors.border,
       padding: 10,
       marginBottom: 12,
+    },
+    rangefinderBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+      paddingHorizontal: 13,
+      paddingVertical: 11,
+      marginBottom: 12,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: 'rgba(124, 179, 66, 0.28)',
+      backgroundColor: colors.chipBg,
+    },
+    rangefinderLabel: {
+      fontSize: 10,
+      fontWeight: '900',
+      letterSpacing: 0.7,
+      color: colors.primaryDark,
+    },
+    rangefinderText: {
+      marginTop: 2,
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
+    rangefinderIcon: {
+      fontSize: 24,
+      lineHeight: 26,
+      fontWeight: '900',
+      color: colors.primaryDark,
     },
     entryRowSep: {
       borderTopWidth: StyleSheet.hairlineWidth,

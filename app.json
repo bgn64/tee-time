@@ -34,8 +34,8 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "Allow Tee Time to use your location to find golf courses near you.",
-          "locationWhenInUsePermission": "Allow Tee Time to use your location to find golf courses near you.",
+          "locationAlwaysAndWhenInUsePermission": "Allow Tee Time to use your location to find golf courses near you and measure distances on the course.",
+          "locationWhenInUsePermission": "Allow Tee Time to use your location to find golf courses near you and measure distances on the course.",
           "isAndroidBackgroundLocationEnabled": false,
           "isIosBackgroundLocationEnabled": false
         }

@@ -4,6 +4,7 @@
  */
 
 const EARTH_RADIUS_MI = 3958.7613;
+const YARDS_PER_MILE = 1760;
 
 function toRadians(deg: number): number {
   return (deg * Math.PI) / 180;
@@ -29,6 +30,15 @@ export function distanceMiles(a: LatLon, b: LatLon): number {
 }
 
 /**
+ * Great-circle distance in yards between two points. Uses the same
+ * haversine source as distanceMiles so short golf-range measurements and
+ * course-search distances stay consistent.
+ */
+export function distanceYards(a: LatLon, b: LatLon): number {
+  return distanceMiles(a, b) * YARDS_PER_MILE;
+}
+
+/**
  * Format a mileage as a short label suitable for badge UI:
  *   "0.4 mi" / "8 mi" / "120 mi".
  * Sub-mile values keep one decimal so 0.4 mi doesn't render as "0 mi".
@@ -37,4 +47,12 @@ export function formatMiles(miles: number): string {
   if (!Number.isFinite(miles) || miles < 0) return '';
   if (miles < 1) return `${miles.toFixed(1)} mi`;
   return `${Math.round(miles)} mi`;
+}
+
+/**
+ * Format yards as a whole-yard golf distance label.
+ */
+export function formatYards(yards: number): string {
+  if (!Number.isFinite(yards) || yards < 0) return '';
+  return `${Math.round(yards)} yd`;
 }

@@ -20,6 +20,12 @@ npm test           # Tier 1 unit tests (helpers in lib/)
 npm run test:db    # Tier 2 backend tests — requires Docker + `npx supabase start`
 ```
 
+Native Android builds that include the mobile rangefinder need a Google Maps
+API key. Set `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` or `GOOGLE_MAPS_API_KEY` in the
+build environment; `app.config.js` injects it into the Android Expo config
+without committing the key. Expo Go may render maps without this local setting,
+but standalone/internal Android builds require it.
+
 ## Testing
 
 The repo has two tiers of automated tests, gated by what infra they need.
