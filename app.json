@@ -4,22 +4,22 @@
     "slug": "tee-time",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/icon-modern-scorecard.png",
     "scheme": "teetime",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/splash-icon.png",
+      "image": "./assets/images/splash-modern-scorecard.png",
       "resizeMode": "contain",
-      "backgroundColor": "#fefcf8"
+      "backgroundColor": "#f6f7f2"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#fefcf8"
+        "foregroundImage": "./assets/images/adaptive-icon-modern-scorecard.png",
+        "backgroundColor": "#f6f7f2"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false

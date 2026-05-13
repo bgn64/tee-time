@@ -5,8 +5,8 @@
  * mark can render inline in any RN view (the app header, the splash, etc.)
  * without going through the rasterized PNG assets.
  *
- * Green tones default to the active theme so the mark adapts to the user's
- * theme, while the red pin stays fixed to the selected brand direction.
+ * Green tones and the flag default to the active theme so the mark adapts
+ * to the user's selected color scheme.
  */
 
 import { useTheme } from '@/state/ThemeContext';
@@ -52,7 +52,7 @@ export function Logo({ size = 28, color, ballFill }: LogoProps) {
         strokeLinecap="round"
       />
       <Ellipse cx={368} cy={564} rx={36} ry={10} fill={cup} opacity={0.5} />
-      <Ellipse cx={368} cy={562} rx={24} ry={5.5} fill="#14280f" opacity={0.72} />
+      <Ellipse cx={368} cy={562} rx={24} ry={5.5} fill="#0b1f15" opacity={0.72} />
       <Path
         d="M368 324 C365 410 365 492 368 562"
         fill="none"
@@ -62,7 +62,7 @@ export function Logo({ size = 28, color, ballFill }: LogoProps) {
       />
       <Path
         d="M368 326 C416 308 456 328 500 310 L500 380 C450 402 416 382 371 398 C368 370 367 346 368 326 Z"
-        fill="#dc2626"
+        fill={colors.accent}
       />
       <Path
         d="M388 341 C418 337 446 347 480 336 L480 366 C449 376 420 368 389 378 Z"

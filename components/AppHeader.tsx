@@ -32,10 +32,7 @@ export function AppHeader() {
       <View style={styles.row}>
         <View style={styles.leftSlot}>{renderLeft(slots.left, styles)}</View>
         <View pointerEvents="none" style={styles.centerSlot}>
-          <View style={styles.brand}>
-            <Logo size={22} color={colors.primaryDark} ballFill={colors.cardBg} />
-            <Text style={styles.logo}>tee time</Text>
-          </View>
+          <Logo size={36} color={colors.primaryDark} ballFill={colors.cardBg} />
         </View>
         <View style={styles.rightSlot}>{renderRight(slots.right, styles)}</View>
       </View>
@@ -146,17 +143,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
       letterSpacing: 0.5,
       color: colors.textMuted,
-    },
-    logo: {
-      fontSize: 16,
-      fontWeight: '800',
-      color: colors.textTitle,
-      letterSpacing: 0.3,
-    },
-    brand: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 7,
     },
     backBtn: {
       flexDirection: 'row',

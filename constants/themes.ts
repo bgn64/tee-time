@@ -22,105 +22,67 @@ export type ThemeColors = {
   tabBarInactive: string;
 };
 
-export type ThemeName = 'earthy' | 'ocean' | 'dark' | 'lavender' | 'navy';
+export type ThemeName = 'light' | 'dark';
 
 export const themes: Record<ThemeName, ThemeColors> = {
-  earthy: {
-    background: '#fefcf8',
-    primary: '#7cb342',
-    primaryDark: '#558b2f',
-    accent: '#ff8f00',
-    textTitle: '#2d5016',
-    textBody: '#3d3d3d',
-    textMuted: '#7c6b4f',
+  light: {
+    background: '#f6f7f2',
+    primary: '#2f7d4b',
+    primaryDark: '#14543a',
+    accent: '#d94835',
+    textTitle: '#123322',
+    textBody: '#39423d',
+    textMuted: '#718077',
     cardBg: '#ffffff',
-    chipBg: '#f5f0e8',
-    chipText: '#555555',
-    chipSelectedBg: '#ff8f00',
+    chipBg: '#edf1e9',
+    chipText: '#39423d',
+    chipSelectedBg: '#d94835',
     chipSelectedText: '#ffffff',
-    border: '#e8e0d4',
+    border: '#dce2d8',
     tabBar: '#ffffff',
-    tabBarActive: '#7cb342',
-    tabBarInactive: '#9e9e9e',
-  },
-  ocean: {
-    background: '#f8fcfd',
-    primary: '#0891b2',
-    primaryDark: '#0e7490',
-    accent: '#f97066',
-    textTitle: '#164e63',
-    textBody: '#334155',
-    textMuted: '#5e8a94',
-    cardBg: '#ffffff',
-    chipBg: '#ecfeff',
-    chipText: '#555555',
-    chipSelectedBg: '#f97066',
-    chipSelectedText: '#ffffff',
-    border: '#d4eef2',
-    tabBar: '#ffffff',
-    tabBarActive: '#0891b2',
-    tabBarInactive: '#9e9e9e',
+    tabBarActive: '#2f7d4b',
+    tabBarInactive: '#718077',
   },
   dark: {
     background: '#0f1419',
-    primary: '#a3e635',
-    primaryDark: '#65a30d',
-    accent: '#fbbf24',
-    textTitle: '#e7e9ea',
-    textBody: '#c8cdd0',
-    textMuted: '#8899a6',
-    cardBg: '#1c2732',
-    chipBg: '#2d3a45',
-    chipText: '#c8cdd0',
-    chipSelectedBg: '#fbbf24',
+    primary: '#91d45f',
+    primaryDark: '#66b34e',
+    accent: '#f97066',
+    textTitle: '#edf5e8',
+    textBody: '#cbd6cf',
+    textMuted: '#91a095',
+    cardBg: '#18222b',
+    chipBg: '#24313a',
+    chipText: '#cbd6cf',
+    chipSelectedBg: '#f97066',
     chipSelectedText: '#0f1419',
-    border: '#38444d',
-    tabBar: '#1c2732',
-    tabBarActive: '#a3e635',
-    tabBarInactive: '#8899a6',
-  },
-  lavender: {
-    background: '#faf8ff',
-    primary: '#a78bfa',
-    primaryDark: '#7c3aed',
-    accent: '#fb923c',
-    textTitle: '#3b1f6e',
-    textBody: '#374151',
-    textMuted: '#8b7aac',
-    cardBg: '#ffffff',
-    chipBg: '#f3f0ff',
-    chipText: '#555555',
-    chipSelectedBg: '#fb923c',
-    chipSelectedText: '#ffffff',
-    border: '#e4dff5',
-    tabBar: '#ffffff',
-    tabBarActive: '#a78bfa',
-    tabBarInactive: '#9e9e9e',
-  },
-  navy: {
-    background: '#f8fafc',
-    primary: '#1e3a5f',
-    primaryDark: '#0f172a',
-    accent: '#f59e0b',
-    textTitle: '#1e293b',
-    textBody: '#374151',
-    textMuted: '#64748b',
-    cardBg: '#ffffff',
-    chipBg: '#f1f5f9',
-    chipText: '#555555',
-    chipSelectedBg: '#f59e0b',
-    chipSelectedText: '#ffffff',
-    border: '#e2e8f0',
-    tabBar: '#ffffff',
-    tabBarActive: '#1e3a5f',
-    tabBarInactive: '#9e9e9e',
+    border: '#34424b',
+    tabBar: '#18222b',
+    tabBarActive: '#91d45f',
+    tabBarInactive: '#91a095',
   },
 };
 
+const legacyThemeMap: Record<string, ThemeName> = {
+  earthy: 'light',
+  ocean: 'light',
+  lavender: 'light',
+  navy: 'light',
+};
+
+export function normalizeThemeName(name: unknown): ThemeName {
+  if (name === 'light' || name === 'dark') {
+    return name;
+  }
+
+  if (typeof name === 'string' && legacyThemeMap[name]) {
+    return legacyThemeMap[name];
+  }
+
+  return 'light';
+}
+
 export const themeNames: { key: ThemeName; label: string }[] = [
-  { key: 'earthy', label: 'Earthy Green' },
-  { key: 'ocean', label: 'Ocean Blue' },
-  { key: 'dark', label: 'Dark + Lime' },
-  { key: 'lavender', label: 'Lavender' },
-  { key: 'navy', label: 'Navy & Gold' },
+  { key: 'light', label: 'Light' },
+  { key: 'dark', label: 'Dark' },
 ];

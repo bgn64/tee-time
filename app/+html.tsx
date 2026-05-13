@@ -26,7 +26,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
             Screen get a standalone launcher with the icon below and a
             native-looking status bar. */}
         <link rel="manifest" href="/manifest.json" />
-        <meta name="theme-color" content="#7cb342" />
+        <meta name="theme-color" content="#2f7d4b" />
         <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -50,10 +50,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
 
 const responsiveBackground = `
 body {
-  background-color: #fff;
+  background-color: #f6f7f2;
 }
 @media (prefers-color-scheme: dark) {
   body {
-    background-color: #000;
+    background-color: #0f1419;
   }
 }`;

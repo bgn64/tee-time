@@ -1,6 +1,5 @@
 /**
- * Theme picker — sub-screen of the You tab. Lifts the previous in-place theme
- * grid out of YouScreen and behind the Theme card. Selection takes effect
+ * Theme picker — sub-screen of the You tab. Selection takes effect
  * immediately (no Save button), matching the existing behavior.
  */
 
@@ -8,7 +7,7 @@ import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { themeNames, ThemeName, themes } from '@/constants/themes';
+import { themeNames, themes } from '@/constants/themes';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
 
@@ -23,7 +22,7 @@ export default function ThemeScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>Theme</Text>
+      <Text style={styles.title}>Color scheme</Text>
       <View style={styles.list}>
         {themeNames.map(({ key, label }) => {
           const isActive = key === themeName;
@@ -32,7 +31,7 @@ export default function ThemeScreen() {
             <Pressable
               key={key}
               style={[styles.themeCard, isActive && styles.themeCardActive]}
-              onPress={() => setThemeName(key as ThemeName)}>
+              onPress={() => setThemeName(key)}>
               <View style={styles.swatchRow}>
                 <View style={[styles.swatch, { backgroundColor: swatch.primary }]} />
                 <View style={[styles.swatch, { backgroundColor: swatch.accent }]} />

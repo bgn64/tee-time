@@ -8,10 +8,10 @@
 
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react';
 
-import { ThemeColors, ThemeName, themes } from '@/constants/themes';
+import { normalizeThemeName, ThemeColors, ThemeName, themes } from '@/constants/themes';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 
-const DEFAULT_THEME: ThemeName = 'earthy';
+const DEFAULT_THEME: ThemeName = 'light';
 
 type ThemeContextValue = {
   colors: ThemeColors;
@@ -29,9 +29,9 @@ export function AppThemeProvider({ children }: PropsWithChildren) {
   // Hydrate from storage on mount.
   useEffect(() => {
     let cancelled = false;
-    loadJSON<ThemeName>(STORAGE_KEYS.THEME_NAME, DEFAULT_THEME).then((name) => {
+    loadJSON<unknown>(STORAGE_KEYS.THEME_NAME, DEFAULT_THEME).then((name) => {
       if (cancelled) return;
-      setThemeName(name);
+      setThemeName(normalizeThemeName(name));
       setHydrated(true);
     });
     return () => {

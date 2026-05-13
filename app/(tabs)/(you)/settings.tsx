@@ -50,7 +50,7 @@ export default function SettingsScreen() {
   });
 
   const themeLabel = useMemo(
-    () => themeNames.find((t) => t.key === themeName)?.label ?? 'Earthy Green',
+    () => themeNames.find((t) => t.key === themeName)?.label ?? 'Light',
     [themeName]
   );
 
