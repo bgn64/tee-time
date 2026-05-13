@@ -23,6 +23,7 @@ import {
 
 import { FeedCardLarge } from '@/components/FeedCardLarge';
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
+import { LiveRoundStrip } from '@/components/LiveRoundStrip';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -34,7 +35,7 @@ export default function FeedScreen() {
   const { colors } = useTheme();
   const { account } = useAccount();
   const { friends, profileCache } = useSocial();
-  const { completedRounds } = useGolfRound();
+  const { completedRounds, liveRounds } = useGolfRound();
   const { allPlayers, getPlayer } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -110,23 +111,28 @@ export default function FeedScreen() {
   }
 
   if (friendRounds.length === 0) {
-    return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentEmpty}>
-        <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>⛳</Text>
-          <Text style={styles.emptyTitle}>No friend rounds yet</Text>
-          <Text style={styles.emptyBody}>
-            You're connected with friends, but no one has scored a round you can see yet. Your own
-            rounds live in the <Text style={styles.emptyBodyEm}>Rounds</Text> tab.
-          </Text>
-          <Pressable
-            style={styles.outlineCta}
-            onPress={() => router.push('/(tabs)/(rounds)')}>
-            <Text style={styles.outlineCtaText}>View Rounds</Text>
-          </Pressable>
-        </View>
-      </ScrollView>
-    );
+    // Even with no completed friend rounds, surface a live strip if a
+    // friend happens to be scoring right now — otherwise fall through
+    // to the regular empty state.
+    if (liveRounds.length === 0) {
+      return (
+        <ScrollView style={styles.container} contentContainerStyle={styles.contentEmpty}>
+          <View style={styles.empty}>
+            <Text style={styles.emptyIcon}>⛳</Text>
+            <Text style={styles.emptyTitle}>No friend rounds yet</Text>
+            <Text style={styles.emptyBody}>
+              You're connected with friends, but no one has scored a round you can see yet. Your own
+              rounds live in the <Text style={styles.emptyBodyEm}>Rounds</Text> tab.
+            </Text>
+            <Pressable
+              style={styles.outlineCta}
+              onPress={() => router.push('/(tabs)/(rounds)')}>
+              <Text style={styles.outlineCtaText}>View Rounds</Text>
+            </Pressable>
+          </View>
+        </ScrollView>
+      );
+    }
   }
 
   // -------- Populated feed --------
@@ -142,6 +148,7 @@ export default function FeedScreen() {
         />
       }>
       <IncomingRequestsBanner />
+      <LiveRoundStrip rounds={liveRounds} profileCache={profileCache} />
       {friendRounds.map((round) => (
         <FeedCardLarge
           key={round.id}

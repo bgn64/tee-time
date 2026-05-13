@@ -79,6 +79,11 @@ export default function FormatScreen() {
   // Active tee-picker target: which player are we picking a tee for?
   const [pickerFor, setPickerFor] = useState<string | null>(null);
 
+  // Live-strip opt-out. Default ON; users can flip OFF to keep the
+  // round out of friends' live strips while still syncing to their own
+  // cloud history. State survives stroke/scramble swaps.
+  const [shareLive, setShareLive] = useState(true);
+
   // "Move X" bottom sheet state. `moveSource` carries the playerId we
   // tapped + the index of the group they currently belong to.
   const [moveSource, setMoveSource] = useState<{ playerId: string; fromGroup: number } | null>(
@@ -110,10 +115,16 @@ export default function FormatScreen() {
   function handleStart() {
     if (!courseId || playerIds.length === 0) return;
     if (scoringRule === 'stroke') {
-      startRound(courseId, playerIds, 'stroke', undefined, { teeIds });
+      startRound(courseId, playerIds, 'stroke', undefined, {
+        teeIds,
+        isLiveShareable: shareLive,
+      });
     } else {
       const teams = buildTeamsFromGroups(groups, getPlayer, defaultPlayerId, groupIds);
-      startRound(courseId, groups.flat(), 'scramble', teams, { teeIds });
+      startRound(courseId, groups.flat(), 'scramble', teams, {
+        teeIds,
+        isLiveShareable: shareLive,
+      });
     }
     router.replace('/(tabs)/(score)/scoring');
   }
@@ -185,6 +196,33 @@ export default function FormatScreen() {
           />
         )}
       </ScrollView>
+
+      <Pressable
+        accessibilityRole="switch"
+        accessibilityState={{ checked: shareLive }}
+        style={styles.shareRow}
+        onPress={() => setShareLive((v) => !v)}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.shareTitle}>Share live to friends</Text>
+          <Text style={styles.shareSub}>
+            {shareLive
+              ? 'Friends see this round in their Feed while you score.'
+              : 'Round stays private until you finish it.'}
+          </Text>
+        </View>
+        <View
+          style={[
+            styles.toggleTrack,
+            shareLive ? styles.toggleTrackOn : styles.toggleTrackOff,
+          ]}>
+          <View
+            style={[
+              styles.toggleKnob,
+              shareLive ? styles.toggleKnobOn : styles.toggleKnobOff,
+            ]}
+          />
+        </View>
+      </Pressable>
 
       <View style={styles.footer}>
         <Pressable style={styles.nextBtn} onPress={handleStart}>
@@ -703,6 +741,52 @@ function makeStyles(colors: ThemeColors) {
       paddingVertical: 14,
     },
     nextBtnText: { color: '#ffffff', fontSize: 15, fontWeight: '800' },
+
+    shareRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingVertical: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+      backgroundColor: colors.background,
+      gap: 12,
+    },
+    shareTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    shareSub: {
+      fontSize: 11.5,
+      color: colors.textMuted,
+      marginTop: 2,
+    },
+    toggleTrack: {
+      width: 40,
+      height: 24,
+      borderRadius: 12,
+      justifyContent: 'center',
+      padding: 2,
+    },
+    toggleTrackOn: {
+      backgroundColor: colors.primary,
+    },
+    toggleTrackOff: {
+      backgroundColor: colors.border,
+    },
+    toggleKnob: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: '#ffffff',
+    },
+    toggleKnobOn: {
+      alignSelf: 'flex-end',
+    },
+    toggleKnobOff: {
+      alignSelf: 'flex-start',
+    },
 
     sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'flex-end' },
     sheetBackdrop: { ...StyleSheet.absoluteFillObject },

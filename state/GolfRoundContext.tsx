@@ -145,8 +145,32 @@ function buildHoles(raw: any[], tees: Tee[]): Hole[] {
     .sort((a, b) => a.number - b.number);
 }
 
+/**
+ * Threshold below which a friend's in-progress round is treated as
+ * "active" for the live-strip filter. Beyond this we assume the scorer
+ * abandoned the tab and stop surfacing the row. Aligned with the
+ * `scorecards_live_idx` partial index; if you change the value here,
+ * consider whether `pruneStaleLiveOwnRounds` (12h) should move with it.
+ */
+const LIVE_FRESH_WINDOW_MS = 6 * 60 * 60 * 1000;
+
+/** Older than this and we'll garbage-collect our own abandoned live rows on startRound. */
+const STALE_OWN_LIVE_WINDOW_MS = 12 * 60 * 60 * 1000;
+
 type GolfRoundContextValue = {
   completedRounds: Round[];
+  /**
+   * Friend-owned, in-progress scorecards visible to the viewer with
+   * activity in the last 6 hours and `isLiveShareable !== false`. Sorted
+   * most-recent-activity first. The Feed renders these in a compact
+   * live strip above the standard `completedRounds` cards.
+   *
+   * Excludes the viewer's own in-progress round (that lives in
+   * `currentRound`) and excludes any round that hasn't received a
+   * score-bearing upsert (no `lastScoreAt`) which is treated as an
+   * empty just-started shell.
+   */
+  liveRounds: Round[];
   courses: Course[];
   currentRound: Round | null;
   pendingSelectedCourseId: string | null;
@@ -163,6 +187,11 @@ type GolfRoundContextValue = {
       holeRange?: HoleRange;
       /** Map of participantKey → teeId. Optional per player. */
       teeIds?: Record<string, string | undefined>;
+      /**
+       * If false, the round is marked non-shareable on the cloud row
+       * and is hidden from friends' live strips. Defaults to true.
+       */
+      isLiveShareable?: boolean;
     }
   ) => void;
   setHoleScore: (scorerId: string, holeNumber: number, relativeScore: number) => void;
@@ -247,7 +276,18 @@ const GolfRoundContext = createContext<GolfRoundContextValue | undefined>(undefi
 export function GolfRoundProvider({ children }: PropsWithChildren) {
   const [courses, setCourses] = useState<Course[]>(seededRecentCourses);
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
-  const [completedRounds, setCompletedRounds] = useState<Round[]>([]);
+  /**
+   * The cloud-synced rounds list. Holds BOTH completed rounds (legacy
+   * use-case) and in-progress rows belonging to friends (the live-strip
+   * source). The public `completedRounds` and `liveRounds` selectors
+   * derive from this single source of truth.
+   *
+   * Our own in-progress row, if any, may be present here as a benign
+   * mirror of `currentRound`. It's filtered out of `liveRounds` so we
+   * don't show our own live card on our own feed; `currentRound`
+   * remains the source of truth for our scoring state.
+   */
+  const [cloudRounds, setCloudRounds] = useState<Round[]>([]);
   const [pendingSelectedCourseId, setPendingSelectedCourseId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
@@ -271,8 +311,38 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const playerRosterRef = useRef(playerRoster);
   playerRosterRef.current = playerRoster;
 
-  const completedRoundsRef = useRef(completedRounds);
-  completedRoundsRef.current = completedRounds;
+  const cloudRoundsRef = useRef<Round[]>([]);
+  cloudRoundsRef.current = cloudRounds;
+
+  // Derived views. `completedRounds` is the historical "list of finished
+  // rounds visible to me" the rest of the app already consumes.
+  // `liveRounds` is the new live-strip data source.
+  const completedRounds = useMemo<Round[]>(
+    () => cloudRounds.filter((r) => !!r.completedAt),
+    [cloudRounds]
+  );
+
+  const liveRounds = useMemo<Round[]>(() => {
+    const myId = accountUserId;
+    const cutoff = Date.now() - LIVE_FRESH_WINDOW_MS;
+    return cloudRounds
+      .filter((r) => {
+        if (r.completedAt) return false;
+        if (r.isLiveShareable === false) return false;
+        if (!r.ownerUserId) return false;
+        if (r.ownerUserId === myId) return false;
+        // Treat "no score yet" as not-yet-active. The startRound upsert
+        // creates the row before any hole is scored; we wait for the
+        // first score to flip it visible.
+        if (!r.lastScoreAt) return false;
+        return new Date(r.lastScoreAt).getTime() > cutoff;
+      })
+      .sort((a, b) => {
+        const at = new Date(a.lastScoreAt ?? a.startedAt).getTime();
+        const bt = new Date(b.lastScoreAt ?? b.startedAt).getTime();
+        return bt - at;
+      });
+  }, [cloudRounds, accountUserId]);
 
   // Hydrate from storage on mount.
   useEffect(() => {
@@ -285,7 +355,9 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       if (cancelled) return;
       setCourses(loadedCourses);
       setCurrentRound(loadedCurrent);
-      setCompletedRounds(loadedCompleted);
+      // Storage only ever held completed rounds; seed cloudRounds with
+      // that subset and let the cloud sync layer add live rows on top.
+      setCloudRounds(loadedCompleted);
       setHydrated(true);
     });
     return () => {
@@ -305,6 +377,11 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
   useEffect(() => {
     if (!hydrated) return;
+    // Only persist the *completed* slice; live cloud rows belong to the
+    // server and re-hydrate via the cloud sync layer on next launch.
+    // Keeping them out of AsyncStorage prevents stale "ghost" live cards
+    // from appearing offline after the source friend completed/abandoned
+    // their round.
     saveJSON(STORAGE_KEYS.COMPLETED_ROUNDS, completedRounds);
   }, [completedRounds, hydrated]);
 
@@ -317,7 +394,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       // Clear all locally-cached courses; both customs (account-specific)
       // and any catalog rows the previous user had interacted with.
       setCourses([]);
-      setCompletedRounds([]);
+      setCloudRounds([]);
       setCurrentRound(null);
       cloudCoursesSyncedAccountRef.current = null;
       cloudRoundsSyncedAccountRef.current = null;
@@ -668,6 +745,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     started_at: string;
     completed_at: string | null;
     caption: string | null;
+    is_live_shareable: boolean | null;
+    last_score_at: string | null;
   };
 
   const cloudToLocalRound = useCallback((row: CloudScorecardRow): Round => {
@@ -690,6 +769,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       mentionedUserIds: row.mentioned_user_ids ?? [],
       roundId: row.round_id ?? undefined,
       caption: row.caption ?? undefined,
+      isLiveShareable: row.is_live_shareable ?? true,
+      lastScoreAt: row.last_score_at ?? undefined,
     };
   }, []);
 
@@ -753,10 +834,31 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     []
   );
 
+  /**
+   * Push a scorecard row to the cloud. Used at three points in a round's
+   * lifecycle:
+   *   - `startRound` creates the initial row (empty scores, completed_at
+   *     null, last_score_at null — invisible to friends' live strips
+   *     until the first score lands).
+   *   - Each hole-boundary navigation (`goToNextHole`,
+   *     `goToPreviousHole`, `setCurrentHole`, `setHoleRange`) and every
+   *     completed-round score edit upserts the current state.
+   *   - `completeCurrentRound` upserts the final state with completed_at
+   *     populated.
+   *
+   * `opts.bumpLastScoreAt` controls whether `last_score_at` is moved to
+   * `now()`. Default true. Pass `false` for upserts that aren't score-
+   * bearing (e.g., flipping `isLiveShareable` after the fact) so
+   * cosmetic edits don't make a stale tab look freshly active.
+   */
   const cloudUpsertRound = useCallback(
-    async (round: Round) => {
+    async (round: Round, opts: { bumpLastScoreAt?: boolean } = {}) => {
       if (!account) return;
       const ownerUserId = account.userId;
+      const bump = opts.bumpLastScoreAt ?? true;
+      const nextLastScoreAt = bump
+        ? new Date().toISOString()
+        : round.lastScoreAt ?? null;
 
       const { error } = await supabase
         .from('scorecards')
@@ -777,10 +879,21 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             started_at: round.startedAt,
             completed_at: round.completedAt ?? null,
             caption: round.caption ?? null,
+            is_live_shareable: round.isLiveShareable ?? true,
+            last_score_at: nextLastScoreAt,
           },
           { onConflict: 'id' }
         );
       if (error) console.warn('[scorecards] upsert failed:', error);
+    },
+    [account]
+  );
+
+  const cloudDeleteRound = useCallback(
+    async (roundId: string) => {
+      if (!account) return;
+      const { error } = await supabase.from('scorecards').delete().eq('id', roundId);
+      if (error) console.warn('[scorecards] delete failed:', error);
     },
     [account]
   );
@@ -808,7 +921,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
       const rows = (data ?? []) as CloudScorecardRow[];
       const cloudById = new Map(rows.map((r) => [r.id, r]));
-      const localSnapshot = completedRoundsRef.current;
+      const localSnapshot = cloudRoundsRef.current;
 
       const merged: Round[] = [];
       const seen = new Set<string>();
@@ -837,14 +950,17 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       }
 
       if (cancelled) return;
-      setCompletedRounds(merged);
+      setCloudRounds(merged);
 
-      // Push local-only rounds owned by this account up to cloud.
+      // Push local-only rounds owned by this account up to cloud. These
+      // are completed-round rows the user accumulated while offline (or
+      // before the live-round migration); don't bump last_score_at, the
+      // round wasn't actually scored just now.
       const localOnly = localSnapshot.filter(
         (r) => !cloudById.has(r.id) && r.ownerUserId === ownerUserId
       );
       for (const r of localOnly) {
-        await cloudUpsertRound(r);
+        await cloudUpsertRound(r, { bumpLastScoreAt: false });
       }
 
       cloudRoundsSyncedAccountRef.current = ownerUserId;
@@ -872,12 +988,12 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           if (payload.eventType === 'DELETE') {
             const oldId = (payload.old as { id?: string })?.id;
             if (!oldId) return;
-            setCompletedRounds((prev) => prev.filter((r) => r.id !== oldId));
+            setCloudRounds((prev) => prev.filter((r) => r.id !== oldId));
             return;
           }
           const row = payload.new as CloudScorecardRow;
           const merged = cloudToLocalRound(row);
-          setCompletedRounds((prev) => {
+          setCloudRounds((prev) => {
             const i = prev.findIndex((r) => r.id === merged.id);
             if (i === -1) return [merged, ...prev];
             const next = prev.slice();
@@ -896,6 +1012,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const value = useMemo<GolfRoundContextValue>(
     () => ({
       completedRounds,
+      liveRounds,
       courses,
       currentRound,
       pendingSelectedCourseId,
@@ -952,7 +1069,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           };
         });
 
-        setCurrentRound({
+        const isLiveShareable = opts?.isLiveShareable ?? true;
+        const newRound: Round = {
           id: `round-${Date.now()}`,
           course,
           scoringRule,
@@ -965,7 +1083,37 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           ownerUserId: account?.userId,
           participants,
           mentionedUserIds: [],
-        });
+          isLiveShareable,
+        };
+        setCurrentRound(newRound);
+
+        // Garbage-collect any of our own abandoned in-progress rows from
+        // a previous session before pushing the new one. This keeps the
+        // friends' live strip clean and avoids accidentally resurrecting
+        // a card we'd forgotten about.
+        if (account?.userId) {
+          const myId = account.userId;
+          const staleCutoff = Date.now() - STALE_OWN_LIVE_WINDOW_MS;
+          const stale = cloudRoundsRef.current.filter((r) => {
+            if (r.completedAt) return false;
+            if (r.ownerUserId !== myId) return false;
+            const t = new Date(r.lastScoreAt ?? r.startedAt).getTime();
+            return t < staleCutoff;
+          });
+          if (stale.length > 0) {
+            const staleIds = new Set(stale.map((r) => r.id));
+            setCloudRounds((rounds) => rounds.filter((r) => !staleIds.has(r.id)));
+            for (const r of stale) void cloudDeleteRound(r.id);
+          }
+        }
+
+        // Push the initial row immediately so subsequent score-bearing
+        // upserts hit the existing row. Don't bump last_score_at — the
+        // live-strip filter requires a non-null timestamp, which means
+        // a just-started round (no scores yet) won't appear in friends'
+        // feeds until the first hole is committed. Empty placeholder
+        // rounds therefore don't clutter the live strip.
+        void cloudUpsertRound(newRound, { bumpLastScoreAt: false });
       },
       setHoleScore: (scorerId, holeNumber, relativeScore) => {
         setCurrentRound((round) => {
@@ -1003,31 +1151,45 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         });
       },
       goToPreviousHole: () => {
+        let snapshot: Round | null = null;
         setCurrentRound((round) => {
           if (!round) throw new Error('Cannot go to previous hole without a current round.');
-          return {
+          const next: Round = {
             ...round,
             currentHoleNumber: Math.max(1, round.currentHoleNumber - 1),
           };
+          snapshot = next;
+          return next;
         });
+        if (snapshot) void cloudUpsertRound(snapshot);
       },
       goToNextHole: () => {
+        let snapshot: Round | null = null;
         setCurrentRound((round) => {
           if (!round) throw new Error('Cannot go to next hole without a current round.');
-          return {
+          const next: Round = {
             ...round,
             currentHoleNumber: Math.min(round.course.holes.length, round.currentHoleNumber + 1),
           };
+          snapshot = next;
+          return next;
         });
+        if (snapshot) void cloudUpsertRound(snapshot);
       },
       setCurrentHole: (holeNumber) => {
+        let snapshot: Round | null = null;
         setCurrentRound((round) => {
           if (!round) throw new Error('Cannot set current hole without a current round.');
           const clamped = Math.max(1, Math.min(round.course.holes.length, holeNumber));
-          return { ...round, currentHoleNumber: clamped };
+          const next: Round = { ...round, currentHoleNumber: clamped };
+          snapshot = next;
+          return next;
         });
+        if (snapshot) void cloudUpsertRound(snapshot);
       },
       setHoleRange: (range) => {
+        let snapshot: Round | null = null;
+        let changed = false;
         setCurrentRound((round) => {
           if (!round) throw new Error('Cannot set hole range without a current round.');
           // 9-hole courses can't meaningfully restrict to front/back.
@@ -1035,6 +1197,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           const next: HoleRange =
             totalHoles < 18 && range !== 'all' ? 'all' : range;
           if (next === round.holeRange) return round;
+          changed = true;
           // Clamp currentHoleNumber into the new range so the next
           // render of the scoring screen lands on a hole the user can
           // actually score. Existing out-of-range scores stay in the
@@ -1042,8 +1205,16 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           let nextHole = round.currentHoleNumber;
           if (next === 'front9' && nextHole > 9) nextHole = 9;
           if (next === 'back9' && nextHole < 10) nextHole = 10;
-          return { ...round, holeRange: next, currentHoleNumber: nextHole };
+          const updated: Round = { ...round, holeRange: next, currentHoleNumber: nextHole };
+          snapshot = updated;
+          return updated;
         });
+        // A range change isn't itself a "score event" — don't bump
+        // last_score_at so a sleepy friend toggling front-9 doesn't
+        // re-promote their card to the top of the live strip.
+        if (changed && snapshot) {
+          void cloudUpsertRound(snapshot, { bumpLastScoreAt: false });
+        }
       },
       completeCurrentRound: () => {
         setCurrentRound((round) => {
@@ -1059,17 +1230,31 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             participants,
             mentionedUserIds,
           };
-          setCompletedRounds((rounds) => [completedRound, ...rounds]);
+          setCloudRounds((rounds) => {
+            const i = rounds.findIndex((r) => r.id === completedRound.id);
+            if (i === -1) return [completedRound, ...rounds];
+            // Replace the live mirror that startRound created.
+            const next = rounds.slice();
+            next[i] = completedRound;
+            return next;
+          });
           void cloudUpsertRound(completedRound);
           return null;
         });
       },
       abandonCurrentRound: () => {
+        // Drop any cloud mirror so the row doesn't linger in friends'
+        // live strips after the scorer bails out.
+        const snapshotId = currentRound?.id;
+        if (snapshotId) {
+          setCloudRounds((rounds) => rounds.filter((r) => r.id !== snapshotId));
+          void cloudDeleteRound(snapshotId);
+        }
         setCurrentRound(null);
       },
       editHoleScore: async (roundId, scorerId, holeNumber, strokes) => {
         const safeStrokes = Math.max(1, strokes);
-        const previous = completedRoundsRef.current.find((r) => r.id === roundId);
+        const previous = cloudRoundsRef.current.find((r) => r.id === roundId);
         if (!previous) {
           return { ok: false, error: 'Round not found in local history.' };
         }
@@ -1079,7 +1264,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           strokes: safeStrokes,
         });
         // Optimistic update.
-        setCompletedRounds((rounds) =>
+        setCloudRounds((rounds) =>
           rounds.map((r) => (r.id === roundId ? { ...r, scores: nextScores } : r))
         );
         if (!account) return { ok: true };
@@ -1090,7 +1275,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         if (error) {
           console.warn('[scorecards] update_score failed:', error);
           // Roll back.
-          setCompletedRounds((rounds) =>
+          setCloudRounds((rounds) =>
             rounds.map((r) => (r.id === roundId ? previous : r))
           );
           return { ok: false, error: error.message };
@@ -1099,7 +1284,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       },
       commitScoreEdits: async (roundId, edits) => {
         if (edits.length === 0) return { ok: true };
-        const previous = completedRoundsRef.current.find((r) => r.id === roundId);
+        const previous = cloudRoundsRef.current.find((r) => r.id === roundId);
         if (!previous) {
           return { ok: false, error: 'Round not found in local history.' };
         }
@@ -1113,7 +1298,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             strokes: Math.max(1, e.strokes),
           });
         }
-        setCompletedRounds((rounds) =>
+        setCloudRounds((rounds) =>
           rounds.map((r) => (r.id === roundId ? { ...r, scores: nextScores } : r))
         );
         if (!account) return { ok: true };
@@ -1124,14 +1309,14 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
           .select();
         if (error) {
           console.warn('[scorecards] commit_score_edits failed:', error);
-          setCompletedRounds((rounds) =>
+          setCloudRounds((rounds) =>
             rounds.map((r) => (r.id === roundId ? previous : r))
           );
           return { ok: false, error: error.message };
         }
         if (!data || data.length === 0) {
           // Owner-only RLS denied (or row missing). Roll back.
-          setCompletedRounds((rounds) =>
+          setCloudRounds((rounds) =>
             rounds.map((r) => (r.id === roundId ? previous : r))
           );
           return { ok: false, error: 'Update returned no rows.' };
@@ -1139,15 +1324,15 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         return { ok: true };
       },
       deleteRound: async (roundId) => {
-        const previous = completedRoundsRef.current.find((r) => r.id === roundId);
+        const previous = cloudRoundsRef.current.find((r) => r.id === roundId);
         // Optimistic local removal.
-        setCompletedRounds((rounds) => rounds.filter((r) => r.id !== roundId));
+        setCloudRounds((rounds) => rounds.filter((r) => r.id !== roundId));
         if (!account) return { ok: true };
         const { error } = await supabase.from('scorecards').delete().eq('id', roundId);
         if (error) {
           console.warn('[scorecards] delete failed:', error);
           if (previous) {
-            setCompletedRounds((rounds) => [previous, ...rounds]);
+            setCloudRounds((rounds) => [previous, ...rounds]);
           }
           return { ok: false, error: error.message };
         }
@@ -1159,6 +1344,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     }),
     [
       completedRounds,
+      liveRounds,
       courses,
       currentRound,
       pendingSelectedCourseId,
@@ -1170,6 +1356,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       cloudUpsertCourse,
       cloudDeleteCourse,
       cloudUpsertRound,
+      cloudDeleteRound,
       searchCatalogCourses,
       rememberCatalogCourse,
       ensureCourseScorecard,
