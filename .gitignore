@@ -50,3 +50,4 @@ docs/
 .cache/
 # Build output
 dist/
+.vercel

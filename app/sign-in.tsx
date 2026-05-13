@@ -21,6 +21,7 @@ import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -38,7 +39,7 @@ type Step = 'email' | 'code' | 'handle' | 'done';
 
 export default function SignInScreen() {
   const { colors } = useTheme();
-  const { account, needsProfile, sendMagicCode, verifyMagicCode, completeProfile } = useAccount();
+  const { account, needsProfile, sendMagicCode, verifyMagicCode, completeProfile, signInWithGoogle } = useAccount();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [step, setStep] = useState<Step>('email');
@@ -78,6 +79,17 @@ export default function SignInScreen() {
       return;
     }
     setStep('code');
+  };
+
+  const onGoogle = async () => {
+    setSubmitting(true);
+    const result = await signInWithGoogle();
+    // signInWithOAuth navigates the browser away — only get here on
+    // an error before the redirect.
+    if (!result.ok) {
+      setSubmitting(false);
+      showAlert('Could not sign in with Google', result.error);
+    }
   };
 
   const onVerifyCode = async () => {
@@ -120,9 +132,26 @@ export default function SignInScreen() {
         <View style={styles.body}>
           <Text style={styles.title}>Sign in to Tee Time</Text>
           <Text style={styles.subtitle}>
-            Back up your rounds and connect with friends. We'll email you a 6-digit code — no
-            password to remember.
+            Back up your rounds and connect with friends.
           </Text>
+
+          {Platform.OS === 'web' ? (
+            <>
+              <Pressable
+                style={[styles.googleButton, submitting && styles.primaryButtonDisabled]}
+                onPress={onGoogle}
+                disabled={submitting}>
+                <Text style={styles.googleG}>G</Text>
+                <Text style={styles.googleButtonText}>Continue with Google</Text>
+              </Pressable>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or with email</Text>
+                <View style={styles.dividerLine} />
+              </View>
+            </>
+          ) : null}
 
           <View style={[styles.field, valid && styles.fieldValid]}>
             <TextInput
@@ -416,6 +445,52 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.primaryDark,
       fontSize: 13,
       fontWeight: '700',
+    },
+    googleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      backgroundColor: '#ffffff',
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingVertical: 12,
+      marginTop: 12,
+    },
+    googleG: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: '#4285f4',
+      color: '#ffffff',
+      textAlign: 'center',
+      lineHeight: 22,
+      fontWeight: '800',
+      fontSize: 14,
+    },
+    googleButtonText: {
+      color: colors.textTitle,
+      fontSize: 14.5,
+      fontWeight: '700',
+    },
+    divider: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginVertical: 18,
+    },
+    dividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: colors.border,
+    },
+    dividerText: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
     },
   });
 }

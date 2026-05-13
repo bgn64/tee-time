@@ -26,6 +26,8 @@ import {
   useState,
 } from 'react';
 
+import { Platform } from 'react-native';
+
 import { pickAvatarColor } from '@/constants/avatarColors';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { supabase } from '@/state/supabaseClient';
@@ -47,6 +49,11 @@ type AccountContextValue = {
   verifyMagicCode: (code: string) => Promise<AuthResult>;
   completeProfile: (handle: string) => Promise<AuthResult>;
   signOut: () => Promise<void>;
+  /**
+   * Trigger Supabase's Google OAuth flow (web only). Resolves to
+   * { ok: false } on native — the UI can hide the button there.
+   */
+  signInWithGoogle: () => Promise<AuthResult>;
   /**
    * Update the signed-in user's `profiles.avatar_color`. Writes to
    * Supabase and refreshes the local Account state so participant
@@ -217,6 +224,35 @@ export function AccountProvider({ children }: PropsWithChildren) {
     await supabase.auth.signOut();
   }, []);
 
+  /**
+   * Trigger Supabase's Google OAuth flow. Web-only for now — opens
+   * Google's auth screen, bounces through Supabase's callback, and
+   * lands back on the app with a session in the URL fragment that
+   * detectSessionInUrl picks up automatically.
+   *
+   * For native (iOS/Android) builds this would need a different flow
+   * via expo-auth-session. We return a clear error in that case so
+   * the UI can hide the button.
+   */
+  const signInWithGoogle = useCallback(async (): Promise<AuthResult> => {
+    if (Platform.OS !== 'web') {
+      return {
+        ok: false,
+        error: 'Google sign-in is only available on the web build for now.',
+      };
+    }
+    const redirectTo =
+      typeof window !== 'undefined' ? window.location.origin : undefined;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: redirectTo ? { redirectTo } : undefined,
+    });
+    if (error) return { ok: false, error: error.message };
+    // signInWithOAuth navigates the browser away; this resolve is
+    // mostly bookkeeping in case the navigation hasn't started yet.
+    return { ok: true, value: undefined };
+  }, []);
+
   const updateAvatarColor = useCallback(
     async (color: string): Promise<AuthResult> => {
       if (!account) return { ok: false, error: 'Not signed in' };
@@ -250,6 +286,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       verifyMagicCode,
       completeProfile,
       signOut,
+      signInWithGoogle,
       updateAvatarColor,
       postRoundPromptDismissCount,
       postRoundPromptSuppressed:
@@ -265,6 +302,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       verifyMagicCode,
       completeProfile,
       signOut,
+      signInWithGoogle,
       updateAvatarColor,
       postRoundPromptDismissCount,
       markPostRoundPromptDismissed,
