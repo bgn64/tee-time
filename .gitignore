@@ -42,7 +42,8 @@ yarn-error.*
 /android
 
 .claude/
-docs/
+docs/*
+!docs/README.md
 
 .env.test
 
