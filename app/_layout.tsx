@@ -106,6 +106,7 @@ function RootLayoutNav() {
   useEffect(() => {
     if (!allHydrated) return;
     if (!nextPrimer) return;
+    if (pathname.startsWith('/auth')) return;
     const path: '/onboarding/account' | '/onboarding/location' =
       nextPrimer === 'account' ? '/onboarding/account' : '/onboarding/location';
     if (pathname === path) return;
@@ -140,6 +141,7 @@ function RootLayoutNav() {
       <View style={styles.content}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="auth" />
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="onboarding" />
         </Stack>
