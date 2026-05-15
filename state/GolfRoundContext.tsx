@@ -563,6 +563,16 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         if (error) throw error;
         void writeQueue.flush();
       } catch (err: any) {
+        console.warn('[courses] cloudUpsertCourse failed:', {
+          courseId: course.id,
+          error: {
+            message: err?.message,
+            code: err?.code,
+            status: err?.status,
+            details: err?.details,
+            hint: err?.hint,
+          },
+        });
         writeQueue.enqueue({
           table: 'courses',
           op: 'upsert',
@@ -598,6 +608,16 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         if (error) throw error;
         void writeQueue.flush();
       } catch (err: any) {
+        console.warn('[courses] cloudDeleteCourse failed:', {
+          courseId,
+          error: {
+            message: err?.message,
+            code: err?.code,
+            status: err?.status,
+            details: err?.details,
+            hint: err?.hint,
+          },
+        });
         writeQueue.enqueue({
           table: 'courses',
           op: 'delete',
@@ -1016,6 +1036,18 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         if (error) throw error;
         void writeQueue.flush();
       } catch (err: any) {
+        console.warn('[scorecards] cloudUpsertRound failed:', {
+          roundId: round.id,
+          ownerUserId: account.userId,
+          completedAt: round.completedAt,
+          error: {
+            message: err?.message,
+            code: err?.code,
+            status: err?.status,
+            details: err?.details,
+            hint: err?.hint,
+          },
+        });
         writeQueue.enqueue({
           table: 'scorecards',
           op: 'upsert',
@@ -1048,6 +1080,16 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         if (error) throw error;
         void writeQueue.flush();
       } catch (err: any) {
+        console.warn('[scorecards] cloudDeleteRound failed:', {
+          roundId,
+          error: {
+            message: err?.message,
+            code: err?.code,
+            status: err?.status,
+            details: err?.details,
+            hint: err?.hint,
+          },
+        });
         writeQueue.enqueue({
           table: 'scorecards',
           op: 'delete',

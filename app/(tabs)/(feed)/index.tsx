@@ -13,6 +13,8 @@
 import { router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -20,6 +22,8 @@ import {
   Text,
   View,
 } from 'react-native';
+
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 import { FeedCardLarge } from '@/components/FeedCardLarge';
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
@@ -31,6 +35,12 @@ import { usePlayers } from '@/state/PlayerContext';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 import { useToast } from '@/state/ToastContext';
+
+/** True on desktop web only; mobile (including iPad Safari & touchscreen
+ * web) keeps using pull-to-refresh. Used to gate the manual refresh
+ * button — RefreshControl pull-to-refresh has no equivalent mouse
+ * gesture, so desktop users need a visible affordance. */
+const IS_WEB = Platform.OS === 'web';
 
 export default function FeedScreen() {
   const { colors } = useTheme();
@@ -161,6 +171,28 @@ export default function FeedScreen() {
         />
       }>
       <IncomingRequestsBanner />
+      {IS_WEB ? (
+        <View style={styles.webRefreshRow}>
+          <Pressable
+            onPress={onRefresh}
+            disabled={refreshing}
+            accessibilityLabel="Refresh feed"
+            style={({ pressed }) => [
+              styles.webRefreshBtn,
+              pressed && styles.webRefreshBtnPressed,
+              refreshing && styles.webRefreshBtnDisabled,
+            ]}>
+            {refreshing ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <FontAwesome name="refresh" size={12} color={colors.textMuted} />
+            )}
+            <Text style={styles.webRefreshLabel}>
+              {refreshing ? 'Refreshing…' : 'Refresh'}
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
       <LiveRoundStrip rounds={liveRounds} profileCache={profileCache} />
       {friendRounds.map((round) => (
         <FeedCardLarge
@@ -190,6 +222,34 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       padding: 20,
       paddingBottom: 40,
       flexGrow: 1,
+    },
+    webRefreshRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      marginBottom: 8,
+    },
+    webRefreshBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: colors.cardBg,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    webRefreshBtnPressed: {
+      opacity: 0.6,
+    },
+    webRefreshBtnDisabled: {
+      opacity: 0.5,
+    },
+    webRefreshLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
+      letterSpacing: 0.3,
     },
 
     empty: {

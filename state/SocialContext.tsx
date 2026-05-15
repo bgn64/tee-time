@@ -146,6 +146,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
 
   const { account } = useAccount();
   const { ensureRosterForFriend } = usePlayers();
+  const { refreshScorecards } = useGolfRound();
 
   // Stable primitive — mirrors the pattern in `PlayerContext` and
   // `GolfRoundContext`. Use in effect deps when only WHICH user is signed
@@ -166,6 +167,14 @@ export function SocialProvider({ children }: PropsWithChildren) {
   accountRef.current = account;
   const ensureRosterForFriendRef = useRef(ensureRosterForFriend);
   ensureRosterForFriendRef.current = ensureRosterForFriend;
+  // Same ref pattern for refreshScorecards: when a friendships row is
+  // INSERTed via realtime (we just became friends with someone), we want
+  // to backfill any rounds that friend completed BEFORE the friendship
+  // existed. Those rounds never reached us via realtime — RLS denied us
+  // at row-INSERT time on the cloud — so an explicit re-pull is the only
+  // way to surface them.
+  const refreshScorecardsRef = useRef(refreshScorecards);
+  refreshScorecardsRef.current = refreshScorecards;
 
   // One-way `hydrated` latch. Once `true`, stays `true` for the lifetime
   // of the provider — even across sign-out / sign-in transitions. The
@@ -426,6 +435,11 @@ export function SocialProvider({ children }: PropsWithChildren) {
             if (profile) {
               ensureRosterForFriendRef.current(profile);
             }
+            // Backfill: re-pull scorecards so any rounds the new friend
+            // completed BEFORE the friendship existed (which never reached
+            // us via realtime — RLS denied at INSERT time) appear in the
+            // feed without requiring a manual reload.
+            void refreshScorecardsRef.current();
           }
         }
       )
@@ -507,9 +521,18 @@ export function SocialProvider({ children }: PropsWithChildren) {
         ensureRosterForFriend(newFriendProfile);
       }
 
+      // Backfill any rounds the new friend completed BEFORE this accept.
+      // The realtime `friendships` INSERT handler also fires this on the
+      // sender side; the receiver-side call here covers the case where
+      // we're the accepter (RPC succeeded, but we haven't seen the
+      // friendship row arrive via realtime yet). Idempotent: a redundant
+      // refresh during the realtime path's call is harmless thanks to
+      // the per-refresh generation counter.
+      void refreshScorecards();
+
       return { newFriendUserId: req.fromUserId };
     },
-    [account, incomingRequests, ensureProfilesCached, ensureRosterForFriend]
+    [account, incomingRequests, ensureProfilesCached, ensureRosterForFriend, refreshScorecards]
   );
 
   const declineIncomingRequest = useCallback(

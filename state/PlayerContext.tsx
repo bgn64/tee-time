@@ -268,6 +268,19 @@ export function PlayerProvider({ children }: PropsWithChildren) {
         // failed during prior offline windows.
         void writeQueue.flush();
       } catch (err: any) {
+        console.warn('[roster] cloudUpsertPlayer failed:', {
+          playerId: player.id,
+          linkedUserId,
+          conflictTarget,
+          error: {
+            message: err?.message,
+            code: err?.code,
+            status: err?.status,
+            details: err?.details,
+            hint: err?.hint,
+          },
+          payload,
+        });
         writeQueue.enqueue({
           table: 'roster_players',
           op: 'upsert',

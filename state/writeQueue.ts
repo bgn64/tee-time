@@ -564,6 +564,9 @@ export class WriteQueue {
       entityId: entry.entityId,
       attempts: entry.attempts,
       lastError: entry.lastError,
+      classification: entry.lastError ? classifyError(entry.lastError) : 'unknown',
+      payload: entry.payload,
+      upsertOpts: entry.upsertOpts,
     });
     const handler = this.rollbackHandlers.get(entry.table);
     if (handler) {
