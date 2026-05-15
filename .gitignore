@@ -52,3 +52,4 @@ docs/*
 # Build output
 dist/
 .vercel
+logs.txt
