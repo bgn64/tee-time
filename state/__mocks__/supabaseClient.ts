@@ -23,10 +23,19 @@ type Row = Record<string, any>;
 
 type SeededError = { message: string; code?: string };
 
+type ChannelFilter = {
+  schema?: string;
+  table?: string;
+  event?: string;
+  filter?: string;
+};
+
+type ChannelPayload = { new?: Row; old?: Row };
+
 type ChannelHandler = {
   event: string;
-  filter: { schema?: string; table?: string; event?: string };
-  callback: (payload: { eventType: string; new?: Row; old?: Row }) => void;
+  filter: ChannelFilter;
+  callback: (payload: { eventType: string } & ChannelPayload) => void;
 };
 
 type Channel = {
@@ -36,6 +45,67 @@ type Channel = {
 };
 
 type AuthListener = (event: string, session: any) => void;
+
+type QueryResult = {
+  data: any;
+  error: SeededError | null;
+  count?: number;
+};
+
+/**
+ * Narrow shape of the chainable query builder returned by `from(table)`.
+ * Captures only the methods our context code actually invokes — does not
+ * attempt to satisfy the full `PostgrestFilterBuilder` generic from
+ * `@supabase/supabase-js`.
+ */
+interface MockQueryBuilder extends PromiseLike<QueryResult> {
+  select(cols?: string): MockQueryBuilder;
+  insert(rowOrRows: Row | Row[]): MockQueryBuilder;
+  update(patch: Row): MockQueryBuilder;
+  upsert(rowOrRows: Row | Row[], opts?: { onConflict?: string }): MockQueryBuilder;
+  delete(): MockQueryBuilder;
+  eq(col: string, val: unknown): MockQueryBuilder;
+  neq(col: string, val: unknown): MockQueryBuilder;
+  in(col: string, vals: unknown[]): MockQueryBuilder;
+  ilike(col: string, pattern: string): MockQueryBuilder;
+  order(col: string, opts?: { ascending?: boolean }): MockQueryBuilder;
+  limit(n: number): MockQueryBuilder;
+  single(): Promise<QueryResult>;
+  maybeSingle(): Promise<QueryResult>;
+}
+
+interface MockChannelHandle {
+  name: string;
+  on(
+    event: string,
+    filter: ChannelFilter,
+    callback: ChannelHandler['callback']
+  ): MockChannelHandle;
+  subscribe(): MockChannelHandle;
+}
+
+interface MockSupabaseAuth {
+  getSession(): Promise<{ data: { session: any }; error: null }>;
+  onAuthStateChange(listener: AuthListener): {
+    data: { subscription: { unsubscribe: () => void } };
+  };
+  signInWithOtp(): Promise<{ data: Record<string, unknown>; error: null }>;
+  verifyOtp(): Promise<{ data: { session: any }; error: null }>;
+  signInWithPassword(args: { email: string }): Promise<{
+    data: { session: any };
+    error: null;
+  }>;
+  signInWithOAuth(): Promise<{ data: { url: string }; error: null }>;
+  signOut(): Promise<{ error: null }>;
+}
+
+interface MockSupabaseClient {
+  from(table: string): MockQueryBuilder;
+  channel(name: string): MockChannelHandle;
+  removeChannel(channel: { name?: string } | null | undefined): void;
+  rpc(name: string, args?: unknown): Promise<QueryResult>;
+  auth: MockSupabaseAuth;
+}
 
 // =============================================================================
 // In-memory state. Reset via mockSupabaseReset() between tests.
@@ -55,7 +125,7 @@ const state = {
    * closely enough.
    */
   tableSelectDelays: new Map<string, number>(),
-  rpcResponses: new Map<string, { data?: any; error?: SeededError }>(),
+  rpcResponses: new Map<string, { data?: any; error?: SeededError | null }>(),
   session: null as any,
   authListeners: new Set<AuthListener>(),
   channels: new Map<string, Channel>(),
@@ -63,7 +133,7 @@ const state = {
   callLog: [] as Array<{ kind: string; args: any[] }>,
 };
 
-function log(kind: string, ...args: any[]) {
+function log(kind: string, ...args: any[]): void {
   state.callLog.push({ kind, args });
 }
 
@@ -107,7 +177,7 @@ function rowMatches(row: Row, filters: Filter[]): boolean {
 // Builder returned by supabase.from(table).
 // =============================================================================
 
-function makeBuilder(table: string) {
+function makeBuilder(table: string): MockQueryBuilder {
   const filters: Filter[] = [];
   let action: 'select' | 'insert' | 'update' | 'upsert' | 'delete' = 'select';
   let payload: Row | Row[] | undefined;
@@ -115,7 +185,7 @@ function makeBuilder(table: string) {
   let returnSingle: 'none' | 'single' | 'maybeSingle' = 'none';
   let limit: number | undefined;
 
-  const execute = async (): Promise<{ data: any; error: any }> => {
+  const execute = async (): Promise<QueryResult> => {
     log('from.' + action, { table, filters, payload, limit, upsertOpts });
 
     const seededErr = state.tableErrors.get(table);
@@ -206,13 +276,13 @@ function makeBuilder(table: string) {
       const before = rows.length;
       const next = rows.filter((r) => !rowMatches(r, filters));
       state.tables.set(table, next);
-      return { data: null, error: null, count: before - next.length } as any;
+      return { data: null, error: null, count: before - next.length };
     }
 
     return { data: null, error: { message: 'unknown action' } };
   };
 
-  const builder: any = {
+  const builder: MockQueryBuilder = {
     select(_cols?: string) {
       action = 'select';
       return builder;
@@ -237,15 +307,15 @@ function makeBuilder(table: string) {
       action = 'delete';
       return builder;
     },
-    eq(col: string, val: any) {
+    eq(col: string, val: unknown) {
       filters.push({ kind: 'eq', col, val });
       return builder;
     },
-    neq(col: string, val: any) {
+    neq(col: string, val: unknown) {
       filters.push({ kind: 'neq', col, val });
       return builder;
     },
-    in(col: string, vals: any[]) {
+    in(col: string, vals: unknown[]) {
       filters.push({ kind: 'in', col, vals });
       return builder;
     },
@@ -253,7 +323,7 @@ function makeBuilder(table: string) {
       filters.push({ kind: 'ilike', col, pattern });
       return builder;
     },
-    order(_col: string, _opts?: any) {
+    order(_col: string, _opts?: { ascending?: boolean }) {
       return builder;
     },
     limit(n: number) {
@@ -268,8 +338,15 @@ function makeBuilder(table: string) {
       returnSingle = 'maybeSingle';
       return execute();
     },
-    then(resolve: any, reject: any) {
-      return execute().then(resolve, reject);
+    then<TResult1 = QueryResult, TResult2 = never>(
+      onfulfilled?:
+        | ((value: QueryResult) => TResult1 | PromiseLike<TResult1>)
+        | null,
+      onrejected?:
+        | ((reason: unknown) => TResult2 | PromiseLike<TResult2>)
+        | null
+    ): Promise<TResult1 | TResult2> {
+      return execute().then(onfulfilled, onrejected);
     },
   };
 
@@ -280,15 +357,15 @@ function makeBuilder(table: string) {
 // Channel surface
 // =============================================================================
 
-function makeChannel(name: string): any {
+function makeChannel(name: string): MockChannelHandle {
   let channel = state.channels.get(name);
   if (!channel) {
     channel = { name, handlers: [], subscribed: false };
     state.channels.set(name, channel);
   }
-  const handle: any = {
+  const handle: MockChannelHandle = {
     name,
-    on(event: string, filter: any, callback: any) {
+    on(event, filter, callback) {
       channel!.handlers.push({ event, filter, callback });
       return handle;
     },
@@ -309,34 +386,38 @@ function makeChannel(name: string): any {
 // The fake supabase client itself.
 // =============================================================================
 
-export const supabase: any = {
-  from(table: string) {
+export const supabase: MockSupabaseClient = {
+  from(table) {
     log('from', { table });
     return makeBuilder(table);
   },
-  channel(name: string) {
+  channel(name) {
     log('channel', { name });
     return makeChannel(name);
   },
-  removeChannel(channel: any) {
+  removeChannel(channel) {
     log('removeChannel', { name: channel?.name });
     if (channel?.name) state.channels.delete(channel.name);
   },
-  rpc(name: string, args?: any) {
+  async rpc(name, args) {
     log('rpc', { name, args });
     const seeded = state.rpcResponses.get(name);
-    return Promise.resolve(seeded ?? { data: null, error: null });
+    return seeded
+      ? { data: seeded.data ?? null, error: seeded.error ?? null }
+      : { data: null, error: null };
   },
   auth: {
     async getSession() {
       return { data: { session: state.session }, error: null };
     },
-    onAuthStateChange(listener: AuthListener) {
+    onAuthStateChange(listener) {
       state.authListeners.add(listener);
       return {
         data: {
           subscription: {
-            unsubscribe: () => state.authListeners.delete(listener),
+            unsubscribe: () => {
+              state.authListeners.delete(listener);
+            },
           },
         },
       };
@@ -347,7 +428,7 @@ export const supabase: any = {
     async verifyOtp() {
       return { data: { session: state.session }, error: null };
     },
-    async signInWithPassword({ email }: { email: string }) {
+    async signInWithPassword({ email }) {
       if (!state.session) {
         state.session = {
           user: { id: 'mock-user-' + email, email, user_metadata: {} },
@@ -393,7 +474,7 @@ export function mockSupabaseGetTable(table: string): Row[] {
 
 export function mockSupabaseSeedRpc(
   name: string,
-  response: { data?: any; error?: SeededError }
+  response: { data?: any; error?: SeededError | null }
 ): void {
   state.rpcResponses.set(name, response);
 }
@@ -431,7 +512,7 @@ export function mockSupabaseEmitChannel(
   channelName: string,
   table: string,
   eventType: 'INSERT' | 'UPDATE' | 'DELETE',
-  payload: { new?: Row; old?: Row }
+  payload: ChannelPayload
 ): void {
   const channel = state.channels.get(channelName);
   if (!channel) return;
@@ -451,4 +532,49 @@ export function mockSupabaseCallLog(): Array<{ kind: string; args: any[] }> {
 
 export function mockSupabaseCallCount(kind: string): number {
   return state.callLog.filter((e) => e.kind === kind).length;
+}
+
+// =============================================================================
+// Module augmentation
+//
+// The mock helpers below are only present on the manual mock (this file), not
+// on the real `state/supabaseClient.ts`. Tests, however, import them from
+// `@/state/supabaseClient` (jest swaps in the mock at runtime via the
+// `__mocks__` convention). Without this augmentation, TypeScript would emit
+// TS2305 ("has no exported member") for every such import even though the
+// imports succeed at test runtime. Declaring them here teaches `tsc` that
+// these names exist on the module path, while keeping the production
+// `supabase` export intact via declaration merging.
+// =============================================================================
+
+declare module '@/state/supabaseClient' {
+  export function mockSupabaseReset(): void;
+  export function mockSupabaseSeedTable(
+    table: string,
+    rows: Array<Record<string, any>>
+  ): void;
+  export function mockSupabaseGetTable(table: string): Array<Record<string, any>>;
+  export function mockSupabaseSeedRpc(
+    name: string,
+    response: {
+      data?: any;
+      error?: { message: string; code?: string } | null;
+    }
+  ): void;
+  export function mockSupabaseSeedSession(session: any): void;
+  export function mockSupabaseSetTableError(
+    table: string,
+    error: { message: string; code?: string }
+  ): void;
+  export function mockSupabaseSetTableDelay(table: string, ms: number): void;
+  export function mockSupabaseEmitAuthEvent(event: string, session?: any): void;
+  export function mockSupabaseEmitChannel(
+    channelName: string,
+    table: string,
+    eventType: 'INSERT' | 'UPDATE' | 'DELETE',
+    payload: { new?: Record<string, any>; old?: Record<string, any> }
+  ): void;
+  export function mockSupabaseChannelSubscribeCount(name: string): number;
+  export function mockSupabaseCallLog(): Array<{ kind: string; args: any[] }>;
+  export function mockSupabaseCallCount(kind: string): number;
 }

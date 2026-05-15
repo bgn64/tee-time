@@ -26,6 +26,7 @@ import { OnboardingProvider } from '@/state/OnboardingContext';
 import { PlayerProvider } from '@/state/PlayerContext';
 import { SocialProvider } from '@/state/SocialContext';
 import { AppThemeProvider } from '@/state/ThemeContext';
+import { ToastProvider } from '@/state/ToastContext';
 
 import {
   mockSupabaseSeedSession,
@@ -88,19 +89,21 @@ export function AllProviders({ children }: { children: ReactNode }) {
         insets: { top: 0, left: 0, right: 0, bottom: 0 },
       }}>
       <AppThemeProvider>
-        <HeaderProvider>
-          <AccountProvider>
-            <PlayerProvider>
-              <GolfRoundProvider>
-                <SocialProvider>
-                  <LocationProvider>
-                    <OnboardingProvider>{children}</OnboardingProvider>
-                  </LocationProvider>
-                </SocialProvider>
-              </GolfRoundProvider>
-            </PlayerProvider>
-          </AccountProvider>
-        </HeaderProvider>
+        <ToastProvider>
+          <HeaderProvider>
+            <AccountProvider>
+              <PlayerProvider>
+                <GolfRoundProvider>
+                  <SocialProvider>
+                    <LocationProvider>
+                      <OnboardingProvider>{children}</OnboardingProvider>
+                    </LocationProvider>
+                  </SocialProvider>
+                </GolfRoundProvider>
+              </PlayerProvider>
+            </AccountProvider>
+          </HeaderProvider>
+        </ToastProvider>
       </AppThemeProvider>
     </SafeAreaProvider>
   );

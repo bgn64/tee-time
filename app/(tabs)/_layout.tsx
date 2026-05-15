@@ -29,7 +29,7 @@ function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
   color: string;
 }) {
-  return <FontAwesome size={22} style={{ marginBottom: -3 }} {...props} />;
+  return <FontAwesome size={22} style={{ marginBottom: 0 }} {...props} />;
 }
 
 /**
@@ -83,7 +83,7 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const segments = useSegments() as readonly string[];
 
-  const baseHeight = 60;
+  const baseHeight = 64;
   const baseBottomPad = 8;
 
   const hasPendingRequests = incomingRequests.length > 0;
@@ -99,7 +99,7 @@ export default function TabLayout() {
           backgroundColor: colors.tabBar,
           borderTopColor: colors.border,
           height: baseHeight + insets.bottom,
-          paddingTop: 6,
+          paddingTop: 8,
           paddingBottom: baseBottomPad + insets.bottom,
         },
         tabBarLabelStyle: {

@@ -13,11 +13,12 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useFonts } from 'expo-font';
 import { router, Stack, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { View, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
 import { AppHeader } from '@/components/AppHeader';
+import { Toast } from '@/components/Toast';
 import { AccountProvider, useAccount } from '@/state/AccountContext';
 import { GolfRoundProvider, useGolfRound } from '@/state/GolfRoundContext';
 import { HeaderProvider } from '@/state/HeaderContext';
@@ -26,7 +27,9 @@ import { OnboardingProvider, useOnboarding } from '@/state/OnboardingContext';
 import { PlayerProvider, usePlayers } from '@/state/PlayerContext';
 import { SocialProvider, useSocial } from '@/state/SocialContext';
 import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
+import { ToastProvider, useToast } from '@/state/ToastContext';
 import { useSplashGate } from '@/state/useSplashGate';
+import { writeQueue } from '@/state/writeQueue';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -56,21 +59,23 @@ export default function RootLayout() {
 
   return (
     <AppThemeProvider>
-      <HeaderProvider>
-        <AccountProvider>
-          <PlayerProvider>
-            <GolfRoundProvider>
-              <SocialProvider>
-                <LocationProvider>
-                  <OnboardingProvider>
-                    <RootLayoutNav />
-                  </OnboardingProvider>
-                </LocationProvider>
-              </SocialProvider>
-            </GolfRoundProvider>
-          </PlayerProvider>
-        </AccountProvider>
-      </HeaderProvider>
+      <ToastProvider>
+        <HeaderProvider>
+          <AccountProvider>
+            <PlayerProvider>
+              <GolfRoundProvider>
+                <SocialProvider>
+                  <LocationProvider>
+                    <OnboardingProvider>
+                      <RootLayoutNav />
+                    </OnboardingProvider>
+                  </LocationProvider>
+                </SocialProvider>
+              </GolfRoundProvider>
+            </PlayerProvider>
+          </AccountProvider>
+        </HeaderProvider>
+      </ToastProvider>
     </AppThemeProvider>
   );
 }
@@ -83,6 +88,36 @@ function RootLayoutNav() {
   const { hydrated: accountHydrated } = useAccount();
   const { hydrated: socialHydrated } = useSocial();
   const { hydrated: onboardingHydrated, nextPrimer } = useOnboarding();
+
+  // Register the global dead-letter handler ONCE, at the layout level, so
+  // any permanent write-queue failure surfaces as a toast with a Retry
+  // action. The handler is global on the queue (one slot), so it must
+  // live at a shared point above the individual contexts. We read
+  // `toast.show` via a ref so the registered handler always sees the
+  // latest closure without needing to re-register.
+  const { show: toastShow } = useToast();
+  const toastShowRef = useRef(toastShow);
+  toastShowRef.current = toastShow;
+
+  useEffect(() => {
+    writeQueue.setDeadLetterHandler(() => {
+      toastShowRef.current(
+        "Couldn't sync your last change. Tap to retry.",
+        {
+          action: {
+            label: 'Retry',
+            onPress: () => {
+              void writeQueue.flush();
+            },
+          },
+          autoHideMs: 8000,
+        }
+      );
+    });
+    return () => {
+      writeQueue.setDeadLetterHandler(null);
+    };
+  }, []);
 
   const allHydrated = useSplashGate({
     theme: themeHydrated,
@@ -149,6 +184,7 @@ function RootLayoutNav() {
           <Stack.Screen name="settings" />
         </Stack>
       </View>
+      <Toast />
     </View>
   );
 }

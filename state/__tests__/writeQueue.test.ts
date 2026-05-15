@@ -450,3 +450,117 @@ describe('WriteQueue persistence across remount', () => {
     q2.dispose();
   });
 });
+
+describe('WriteQueue.setDeadLetterHandler', () => {
+  test('registered dead-letter handler fires after a permanent rejection', async () => {
+    const q = new WriteQueue({ storageKey: freshKey('dl-handler'), attachAppState: false });
+    q.setSupabaseClient(mockedSupabase);
+    await q.hydrate();
+
+    const dlSpy = jest.fn();
+    q.setDeadLetterHandler(dlSpy);
+
+    q.enqueue(makeUpsertEntry({
+      entityId: 'p-dl-1',
+      lastError: { message: 'forbidden', code: 403 } as any,
+    }));
+
+    expect(q.deadLetterCount()).toBe(1);
+    expect(dlSpy).toHaveBeenCalledTimes(1);
+    expect(dlSpy.mock.calls[0][0].entityId).toBe('p-dl-1');
+    expect(dlSpy.mock.calls[0][0].table).toBe('roster_players');
+    q.dispose();
+  });
+
+  test('handler runs in addition to (after) the per-table rollback handler', async () => {
+    const q = new WriteQueue({ storageKey: freshKey('dl-with-rollback'), attachAppState: false });
+    q.setSupabaseClient(mockedSupabase);
+    await q.hydrate();
+
+    const order: string[] = [];
+    q.setRollbackHandler('roster_players', () => {
+      order.push('rollback');
+    });
+    q.setDeadLetterHandler(() => {
+      order.push('deadLetter');
+    });
+
+    q.enqueue(makeUpsertEntry({
+      entityId: 'p-dl-2',
+      lastError: { message: 'forbidden', code: 403 } as any,
+    }));
+
+    expect(order).toEqual(['rollback', 'deadLetter']);
+    q.dispose();
+  });
+
+  test('handler fires once per dead-lettered entry (multiple entries -> multiple calls)', async () => {
+    const q = new WriteQueue({ storageKey: freshKey('dl-multi'), attachAppState: false });
+    q.setSupabaseClient(mockedSupabase);
+    await q.hydrate();
+
+    const dlSpy = jest.fn();
+    q.setDeadLetterHandler(dlSpy);
+
+    q.enqueue(makeUpsertEntry({
+      entityId: 'p-a',
+      lastError: { message: 'forbidden', code: 403 } as any,
+    }));
+    q.enqueue(makeUpsertEntry({
+      entityId: 'p-b',
+      lastError: { message: 'forbidden', code: 403 } as any,
+    }));
+    q.enqueue(makeUpsertEntry({
+      entityId: 'p-c',
+      lastError: { message: 'forbidden', code: 403 } as any,
+    }));
+
+    expect(q.deadLetterCount()).toBe(3);
+    expect(dlSpy).toHaveBeenCalledTimes(3);
+    const ids = dlSpy.mock.calls.map((c) => c[0].entityId).sort();
+    expect(ids).toEqual(['p-a', 'p-b', 'p-c']);
+    q.dispose();
+  });
+
+  test('handler fires on dead-letter during flush (5 transient failures path)', async () => {
+    const q = new WriteQueue({ storageKey: freshKey('dl-flush-path'), attachAppState: false });
+    q.setSupabaseClient(mockedSupabase);
+    await q.hydrate();
+
+    const dlSpy = jest.fn();
+    q.setDeadLetterHandler(dlSpy);
+
+    q.enqueue(makeUpsertEntry({ entityId: 'p-flush' }));
+    expect(q.size()).toBe(1);
+
+    for (let i = 0; i < 5; i++) {
+      mockSupabaseSetTableError('roster_players', { message: 'Network error' });
+      await q.flush();
+    }
+
+    expect(q.deadLetterCount()).toBe(1);
+    expect(dlSpy).toHaveBeenCalledTimes(1);
+    expect(dlSpy.mock.calls[0][0].entityId).toBe('p-flush');
+    q.dispose();
+  });
+
+  test('setDeadLetterHandler(null) clears the registration', async () => {
+    const q = new WriteQueue({ storageKey: freshKey('dl-clear'), attachAppState: false });
+    q.setSupabaseClient(mockedSupabase);
+    await q.hydrate();
+
+    const dlSpy = jest.fn();
+    q.setDeadLetterHandler(dlSpy);
+    q.setDeadLetterHandler(null);
+
+    q.enqueue(makeUpsertEntry({
+      entityId: 'p-cleared',
+      lastError: { message: 'forbidden', code: 403 } as any,
+    }));
+
+    expect(q.deadLetterCount()).toBe(1);
+    expect(dlSpy).not.toHaveBeenCalled();
+    q.dispose();
+  });
+});
+

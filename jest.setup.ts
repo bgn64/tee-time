@@ -48,7 +48,8 @@ jest.mock('react-native-reanimated', () =>
 // reference outer-scope variables, so internal state is captured inline with
 // `mock*` names (which jest's static analyzer allows).
 jest.mock('expo-router', () => {
-  const React = require('react');
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const React = require('react') as typeof import('react');
   let mockPathname = '/';
   const mockRouter = {
     push: jest.fn(),
@@ -56,27 +57,35 @@ jest.mock('expo-router', () => {
     back: jest.fn(),
     canGoBack: jest.fn(() => true),
     setParams: jest.fn(),
-    __setPathname: (p) => {
+    __setPathname: (p: string) => {
       mockPathname = p;
     },
   };
   return {
     router: mockRouter,
-    Link: ({ children }) => children,
-    Stack: Object.assign(({ children }) => children, {
-      Screen: ({ children }) => children ?? null,
-    }),
-    Tabs: Object.assign(({ children }) => children, {
-      Screen: ({ children }) => children ?? null,
-    }),
-    Slot: ({ children }) => children,
+    Link: ({ children }: { children?: React.ReactNode }) => children,
+    Stack: Object.assign(
+      ({ children }: { children?: React.ReactNode }) => children,
+      {
+        Screen: ({ children }: { children?: React.ReactNode }) =>
+          children ?? null,
+      }
+    ),
+    Tabs: Object.assign(
+      ({ children }: { children?: React.ReactNode }) => children,
+      {
+        Screen: ({ children }: { children?: React.ReactNode }) =>
+          children ?? null,
+      }
+    ),
+    Slot: ({ children }: { children?: React.ReactNode }) => children,
     Redirect: () => null,
     useRouter: () => mockRouter,
     usePathname: () => mockPathname,
     useLocalSearchParams: () => ({}),
     useGlobalSearchParams: () => ({}),
     useSegments: () => [],
-    useFocusEffect: (cb) => {
+    useFocusEffect: (cb: () => void | (() => void)) => {
       React.useEffect(() => {
         const cleanup = cb();
         return typeof cleanup === 'function' ? cleanup : undefined;
@@ -88,7 +97,7 @@ jest.mock('expo-router', () => {
 
 // expo-linking — only useUrl is used in app code; safe to no-op.
 jest.mock('expo-linking', () => ({
-  createURL: (path) => path,
+  createURL: (path: string) => path,
   parse: () => ({ path: '/', queryParams: {} }),
   useURL: () => null,
 }));
@@ -108,21 +117,30 @@ jest.mock('expo-location', () => ({
 
 // AppState — controllable emitter. Used by write-queue tests in Phase 3.
 // The factory cannot reference outer-scope variables (jest static-analysis
-// guard), so listeners + current state live on a module-prefixed name.
+// guard), so listeners + current state live on a module-prefixed name. Type
+// aliases inside the factory must also be `mock*`-prefixed because jest's
+// static analyzer treats type identifiers as variable references and only
+// allows globals plus `mock*` names.
 jest.mock('react-native/Libraries/AppState/AppState', () => {
-  const mockListeners = new Set();
-  let mockCurrent = 'active';
+  type MockAppStateValue = 'active' | 'background' | 'inactive';
+  type MockListener = (mockNextState: MockAppStateValue) => void;
+  const mockListeners = new Set<MockListener>();
+  let mockCurrent: MockAppStateValue = 'active';
   return {
     __esModule: true,
     default: {
-      get currentState() {
+      get currentState(): MockAppStateValue {
         return mockCurrent;
       },
-      addEventListener: (event, cb) => {
+      addEventListener: (event: string, cb: MockListener) => {
         if (event === 'change') mockListeners.add(cb);
-        return { remove: () => mockListeners.delete(cb) };
+        return {
+          remove: () => {
+            mockListeners.delete(cb);
+          },
+        };
       },
-      __emit: (next) => {
+      __emit: (next: MockAppStateValue) => {
         mockCurrent = next;
         for (const l of mockListeners) l(next);
       },

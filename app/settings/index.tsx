@@ -13,9 +13,10 @@
  *
  *   Support:
  *     · About              → /(you)/about            (existing screen)
- *     · Show onboarding    → /onboarding/welcome     (re-runs the primer
- *                                                    chain so users can
- *                                                    revisit the tour)
+ *     · Show onboarding    resets both primer statuses to 'not_seen' and
+ *                          pushes /onboarding/account so the root layout's
+ *                          primer-redirect effect chains the user through
+ *                          the tour again
  *
  *   Account (signed-in only):
  *     · Account details    → /(you)/account          (existing screen)
@@ -60,6 +61,17 @@ export default function SettingsScreen() {
       : locationStatus === 'denied'
       ? 'Denied — tap to open settings'
       : 'Off — tap to enable';
+
+  const onShowOnboarding = () => {
+    // Reset primer state so the primer-redirect effect in app/_layout.tsx
+    // chains the user through onboarding again. Account primer first, then
+    // location.
+    setPrimerStatus('account', 'not_seen');
+    setPrimerStatus('location', 'not_seen');
+    // Push to the first primer directly to make the navigation immediate
+    // (the layout effect would also catch this, but explicit is friendlier).
+    router.push('/onboarding/account');
+  };
 
   const onLocation = async () => {
     if (locationStatus === 'granted') return;
@@ -128,7 +140,7 @@ export default function SettingsScreen() {
           icon="✦"
           label="Show onboarding tour"
           subtitle="Re-run the welcome screens"
-          onPress={() => router.push('/onboarding/welcome')}
+          onPress={onShowOnboarding}
           last
         />
       </View>

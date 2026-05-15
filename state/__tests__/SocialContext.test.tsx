@@ -35,6 +35,7 @@ import {
   mockSupabaseSeedRpc,
   mockSupabaseSeedSession,
   mockSupabaseSeedTable,
+  mockSupabaseSetTableError,
   renderHookWithProviders,
 } from './test-utils';
 
@@ -579,5 +580,110 @@ describe('SocialContext.refreshFriendsAndRequests', () => {
     // missing row into a DELETE, which can't be done safely without
     // a server-snapshot timestamp).
     expect(result.current.social.friends).toEqual([]);
+  });
+
+  test('returns {ok:true} on success (refresh-shape contract)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob', created_at: '2025-01-02T00:00:00Z' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice', created_at: '2025-01-02T00:00:00Z' },
+    ]);
+    mockSupabaseSeedTable('friend_requests', []);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.friends).toEqual(['user-bob']);
+    });
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshFriendsAndRequests();
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    // State unchanged from the successful pull.
+    expect(result.current.social.friends).toEqual(['user-bob']);
+  });
+
+  test('returns {ok:false, error} when the friendships pull errors and leaves local state unchanged', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob', created_at: '2025-01-02T00:00:00Z' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice', created_at: '2025-01-02T00:00:00Z' },
+    ]);
+    mockSupabaseSeedTable('friend_requests', []);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.friends).toEqual(['user-bob']);
+    });
+
+    // Mid-refresh transient: token race, 5xx, network drop. Single-shot
+    // error against `friendships` — subsequent selects succeed.
+    mockSupabaseSetTableError('friendships', {
+      message: 'token expired',
+      code: '401',
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshFriendsAndRequests();
+    });
+
+    expect(outcome?.ok).toBe(false);
+    expect(outcome?.error).toBe('token expired');
+    // Local state survives unchanged — bob is still in the friends list
+    // (no blink-to-empty on transient failure).
+    expect(result.current.social.friends).toEqual(['user-bob']);
+    // Sync spinner is back down so the UI doesn't get stuck.
+    expect(result.current.social.syncing).toBe(false);
+
+    warnSpy.mockRestore();
+  });
+
+  test('returns {ok:false, error} when the friend_requests pull errors and leaves local state unchanged', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob', created_at: '2025-01-02T00:00:00Z' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice', created_at: '2025-01-02T00:00:00Z' },
+    ]);
+    mockSupabaseSeedTable('friend_requests', []);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.friends).toEqual(['user-bob']);
+    });
+
+    // Single-shot error on the OTHER half of the refresh's parallel
+    // selects. The friendships half succeeds; the friend_requests
+    // half errors. The refresh must still report ok:false and not
+    // half-apply state.
+    mockSupabaseSetTableError('friend_requests', {
+      message: 'service unavailable',
+      code: '503',
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshFriendsAndRequests();
+    });
+
+    expect(outcome?.ok).toBe(false);
+    expect(outcome?.error).toBe('service unavailable');
+    expect(result.current.social.friends).toEqual(['user-bob']);
+    expect(result.current.social.syncing).toBe(false);
+
+    warnSpy.mockRestore();
   });
 });

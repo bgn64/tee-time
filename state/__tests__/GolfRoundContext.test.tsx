@@ -35,6 +35,7 @@ import {
   mockSupabaseSeedSession,
   mockSupabaseSeedTable,
   mockSupabaseSetTableDelay,
+  mockSupabaseSetTableError,
   renderHookWithProviders,
 } from './test-utils';
 
@@ -162,7 +163,7 @@ describe('GolfRoundContext.refreshScorecards', () => {
     // the two refreshes to give them distinct payloads.
     mockSupabaseSetTableDelay('scorecards', 80);
 
-    let firstPromise: Promise<void>;
+    let firstPromise: Promise<{ ok: boolean; error?: string }>;
     await act(async () => {
       firstPromise = result.current.golf.refreshScorecards();
       // Microtask yield so the first refresh's await suspends after
@@ -220,7 +221,7 @@ describe('GolfRoundContext.refreshScorecards', () => {
     // a new row in `cloudRounds` during the await.
     mockSupabaseSetTableDelay('scorecards', 60);
 
-    let refreshPromise: Promise<void>;
+    let refreshPromise: Promise<{ ok: boolean; error?: string }>;
     await act(async () => {
       refreshPromise = result.current.golf.refreshScorecards();
       await Promise.resolve();
@@ -252,6 +253,71 @@ describe('GolfRoundContext.refreshScorecards', () => {
 
     const ids = result.current.golf.completedRounds.map((r) => r.id).sort();
     expect(ids).toEqual(['sc-initial', 'sc-realtime']);
+  });
+
+  test('returns {ok:true} on success (refresh-shape contract)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', [
+      makeScorecardRow({ id: 'sc-A', owner_user_id: bobUserId }),
+    ]);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.golf.hydrated).toBe(true);
+      expect(result.current.golf.completedRounds.map((r) => r.id)).toEqual(['sc-A']);
+    });
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.golf.refreshScorecards();
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    // State unchanged from the successful pull.
+    expect(result.current.golf.completedRounds.map((r) => r.id)).toEqual(['sc-A']);
+  });
+
+  test('returns {ok:false, error} on transient supabase error and leaves local state unchanged', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', [
+      makeScorecardRow({ id: 'sc-existing', owner_user_id: bobUserId }),
+    ]);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.golf.hydrated).toBe(true);
+      expect(result.current.golf.completedRounds.map((r) => r.id)).toEqual([
+        'sc-existing',
+      ]);
+    });
+
+    // Mid-refresh transient: token race, 5xx, network drop. Single-shot
+    // error injection — subsequent selects against `scorecards` succeed.
+    mockSupabaseSetTableError('scorecards', {
+      message: 'token expired',
+      code: '401',
+    });
+    // Silence the expected warn so the test log stays clean.
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.golf.refreshScorecards();
+    });
+
+    expect(outcome?.ok).toBe(false);
+    expect(outcome?.error).toBe('token expired');
+    // Local state survives unchanged — no blink-to-empty on transient
+    // failure. The pre-refresh `sc-existing` row is still there.
+    expect(result.current.golf.completedRounds.map((r) => r.id)).toEqual([
+      'sc-existing',
+    ]);
+
+    warnSpy.mockRestore();
   });
 });
 

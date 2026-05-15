@@ -100,6 +100,15 @@ export type EnqueueInput = Omit<QueueEntry, 'id' | 'attempts' | 'firstFailedAt'>
 
 export type RollbackHandler = (entry: QueueEntry) => void | Promise<void>;
 
+/**
+ * Notified after rollback when an entry is permanently rejected. Unlike
+ * the rollback handler — which is registered per-table and reverts local
+ * optimistic state — the dead-letter handler is GLOBAL (a single handler
+ * per queue). It exists so a UI layer can surface the failure to the
+ * user, e.g. via a toast offering a Retry action.
+ */
+export type DeadLetterHandler = (entry: QueueEntry) => void | Promise<void>;
+
 type FlushResult = { drained: number; deadLettered: number };
 
 type PersistedState = {
@@ -193,6 +202,7 @@ export class WriteQueue {
   private queue: QueueEntry[] = [];
   private deadLetterList: QueueEntry[] = [];
   private rollbackHandlers = new Map<string, RollbackHandler>();
+  private deadLetterHandler: DeadLetterHandler | null = null;
   private client: any = null;
 
   private hydrated = false;
@@ -257,6 +267,16 @@ export class WriteQueue {
 
   setRollbackHandler(table: string, handler: RollbackHandler): void {
     this.rollbackHandlers.set(table, handler);
+  }
+
+  /**
+   * Register a single global dead-letter handler. Called once per entry
+   * AFTER the per-table rollback handler. Passing `null` clears the
+   * registration. A subsequent `setDeadLetterHandler` call replaces the
+   * previous handler — there is only one slot.
+   */
+  setDeadLetterHandler(handler: DeadLetterHandler | null): void {
+    this.deadLetterHandler = handler;
   }
 
   setSupabaseClient(client: any): void {
@@ -537,6 +557,16 @@ export class WriteQueue {
         );
       } catch (e) {
         console.warn('[writeQueue] rollback handler threw synchronously:', e);
+      }
+    }
+    const dlHandler = this.deadLetterHandler;
+    if (dlHandler) {
+      try {
+        void Promise.resolve(dlHandler(entry)).catch((e) =>
+          console.warn('[writeQueue] dead-letter handler threw:', e)
+        );
+      } catch (e) {
+        console.warn('[writeQueue] dead-letter handler threw synchronously:', e);
       }
     }
     void this.persist();

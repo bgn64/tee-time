@@ -36,6 +36,13 @@ import {
 } from '@/components/RoundsFilterSheet';
 import { SortDropdown, SortOption } from '@/components/SortDropdown';
 import {
+  buildAvatarEntries,
+  groupByTeam,
+  makeRosterResolver,
+  TeamGroup,
+  truncateEntries,
+} from '@/lib/avatars';
+import {
   formatDay,
   formatScore,
   getRoundTotalRelative,
@@ -59,6 +66,30 @@ const SORT_OPTIONS: ReadonlyArray<SortOption<SortKey>> = [
 
 function getRoundEndDate(round: Round): Date {
   return new Date(round.completedAt ?? round.startedAt);
+}
+
+/**
+ * Pick black or white text for legibility on top of an arbitrary tee
+ * color swatch. Used for the small tee chip below each avatar. Falls
+ * back to white when the color is missing or unparseable.
+ */
+function contrastTextColor(bg: string | undefined): string {
+  if (!bg) return '#ffffff';
+  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(bg.trim());
+  if (!m) return '#ffffff';
+  let hex = m[1];
+  if (hex.length === 3) {
+    hex = hex
+      .split('')
+      .map((c) => c + c)
+      .join('');
+  }
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  // Perceptual luminance — switch threshold at ~mid-gray.
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#111111' : '#ffffff';
 }
 
 function rangeLabel(r: RoundsFilters['range']): string {
@@ -325,26 +356,24 @@ export default function RoundsListScreen() {
                 const date = getRoundEndDate(round);
                 const isScramble = round.scoringRule === 'scramble';
 
-                const avatarSources: { id: string; name: string; color: string }[] =
-                  isScramble && round.teams
-                    ? round.teams.map((t) => ({ id: t.id, name: t.name, color: t.color }))
-                    : (round.participants ?? []).map((p) => {
-                        const id = p.linkedUserId ?? p.participantKey;
-                        if (p.linkedUserId) {
-                          const rosterMatch = getPlayer(p.participantKey);
-                          return {
-                            id,
-                            name:
-                              rosterMatch?.displayName ?? rosterMatch?.nickname ?? 'Friend',
-                            color: rosterMatch?.color ?? colors.primary,
-                          };
-                        }
-                        return {
-                          id,
-                          name: p.localDisplayName ?? 'Player',
-                          color: p.localDisplayColor ?? colors.primary,
-                        };
-                      });
+                // Build per-individual entries (tee + team membership resolved
+                // upstream in `lib/avatars.ts`), then truncate to a flat cap
+                // across the whole card and re-group by team for scramble.
+                const allEntries = buildAvatarEntries(
+                  round,
+                  makeRosterResolver(getPlayer, colors.primary)
+                );
+                const { visible, hiddenCount } = truncateEntries(allEntries);
+                const teamGroups: TeamGroup[] = isScramble
+                  ? groupByTeam(visible, round.teams ?? [])
+                  : [
+                      {
+                        teamId: null,
+                        teamName: null,
+                        teamColor: null,
+                        members: visible,
+                      },
+                    ];
 
                 let myScorerId: string | undefined;
                 if (!isScramble && account?.userId) {
@@ -378,23 +407,71 @@ export default function RoundsListScreen() {
                     </View>
                     <View style={styles.cardBottom}>
                       <View style={styles.avatars}>
-                        {avatarSources.slice(0, 4).map((src, i) => (
+                        {teamGroups.map((tg, gi) => (
                           <View
-                            key={src.id}
+                            key={tg.teamId ?? `solo-${gi}`}
                             style={[
-                              styles.avatar,
-                              {
-                                backgroundColor: src.color,
-                                marginLeft: i === 0 ? 0 : -7,
-                                zIndex: 10 - i,
-                                borderColor: colors.cardBg,
-                              },
+                              styles.teamGroup,
+                              isScramble && tg.teamColor
+                                ? {
+                                    borderBottomColor: tg.teamColor,
+                                    borderBottomWidth: 2,
+                                  }
+                                : null,
+                              gi > 0 ? styles.teamGroupGap : null,
                             ]}>
-                            <Text style={styles.avatarText}>
-                              {src.name[0]?.toUpperCase()}
-                            </Text>
+                            {tg.members.map((entry, i) => (
+                              <View
+                                key={entry.participantKey}
+                                style={[
+                                  styles.avatarWrap,
+                                  i === 0 ? { marginLeft: 0 } : null,
+                                  { zIndex: 10 - i },
+                                ]}>
+                                <View
+                                  style={[
+                                    styles.avatar,
+                                    {
+                                      backgroundColor: entry.color,
+                                      borderColor: colors.cardBg,
+                                    },
+                                  ]}>
+                                  <Text style={styles.avatarText}>
+                                    {entry.name[0]?.toUpperCase()}
+                                  </Text>
+                                </View>
+                                {entry.teeColor || entry.teeName ? (
+                                  <View
+                                    style={[
+                                      styles.teeChip,
+                                      {
+                                        backgroundColor:
+                                          entry.teeColor ?? colors.chipBg,
+                                      },
+                                    ]}>
+                                    <Text
+                                      style={[
+                                        styles.teeChipText,
+                                        {
+                                          color: contrastTextColor(
+                                            entry.teeColor
+                                          ),
+                                        },
+                                      ]}
+                                      numberOfLines={1}>
+                                      {(entry.teeName ?? '').slice(0, 3).toUpperCase()}
+                                    </Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                            ))}
                           </View>
                         ))}
+                        {hiddenCount > 0 ? (
+                          <View style={styles.overflowChip}>
+                            <Text style={styles.overflowChipText}>{`+${hiddenCount}`}</Text>
+                          </View>
+                        ) : null}
                       </View>
                       <View style={styles.metaRight}>
                         <View
@@ -602,6 +679,21 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     avatars: {
       flexDirection: 'row',
+      alignItems: 'flex-start',
+      flexShrink: 1,
+    },
+    teamGroup: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      paddingBottom: 3,
+    },
+    teamGroupGap: {
+      marginLeft: 10,
+    },
+    avatarWrap: {
+      alignItems: 'center',
+      width: 28,
+      marginLeft: -6,
     },
     avatar: {
       width: 24,
@@ -615,6 +707,38 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: '#ffffff',
       fontSize: 10,
       fontWeight: '800',
+    },
+    teeChip: {
+      marginTop: 2,
+      height: 10,
+      minWidth: 22,
+      borderRadius: 5,
+      paddingHorizontal: 3,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+    },
+    teeChipText: {
+      fontSize: 8,
+      fontWeight: '800',
+      letterSpacing: 0.3,
+    },
+    overflowChip: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 2,
+      borderColor: colors.cardBg,
+      backgroundColor: colors.chipBg,
+      marginLeft: -6,
+    },
+    overflowChipText: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: colors.textMuted,
     },
     metaRight: {
       flexDirection: 'row',

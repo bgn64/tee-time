@@ -30,6 +30,7 @@ import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
+import { useToast } from '@/state/ToastContext';
 
 export default function FeedScreen() {
   const { colors } = useTheme();
@@ -37,6 +38,7 @@ export default function FeedScreen() {
   const { friends, profileCache, refreshFriendsAndRequests } = useSocial();
   const { completedRounds, liveRounds, refreshScorecards } = useGolfRound();
   const { allPlayers, getPlayer } = usePlayers();
+  const { show: toastShow } = useToast();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [refreshing, setRefreshing] = useState(false);
@@ -62,11 +64,19 @@ export default function FeedScreen() {
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await Promise.all([refreshScorecards(), refreshFriendsAndRequests()]);
+      const [scoresResult, socialResult] = await Promise.all([
+        refreshScorecards(),
+        refreshFriendsAndRequests(),
+      ]);
+      if (!scoresResult.ok || !socialResult.ok) {
+        toastShow("Couldn't refresh. Check your connection and try again.", {
+          autoHideMs: 4000,
+        });
+      }
     } finally {
       setRefreshing(false);
     }
-  }, [refreshScorecards, refreshFriendsAndRequests]);
+  }, [refreshScorecards, refreshFriendsAndRequests, toastShow]);
 
   // -------- Empty states --------
   if (!account) {

@@ -36,7 +36,7 @@ describe('supabase mock surface', () => {
     const { data, error } = await supabase.from('profiles').select('*');
     expect(error).toBeNull();
     expect(data).toHaveLength(1);
-    expect(data[0].handle).toBe('alice');
+    expect(data?.[0].handle).toBe('alice');
   });
 
   test('from(table).eq() filters rows', async () => {
@@ -46,7 +46,7 @@ describe('supabase mock surface', () => {
     ]);
     const { data } = await supabase.from('profiles').select('*').eq('handle', 'bob');
     expect(data).toHaveLength(1);
-    expect(data[0].user_id).toBe('u2');
+    expect(data?.[0].user_id).toBe('u2');
   });
 
   test('upsert with onConflict updates in place', async () => {
@@ -61,7 +61,7 @@ describe('supabase mock surface', () => {
       );
     const { data } = await supabase.from('roster_players').select('*').eq('id', 'player-1');
     expect(data).toHaveLength(1);
-    expect(data[0].nickname).toBe('new');
+    expect(data?.[0].nickname).toBe('new');
   });
 
   test('auth.onAuthStateChange receives emitted events', () => {
@@ -72,13 +72,19 @@ describe('supabase mock surface', () => {
   });
 
   test('channel(name).subscribe() is tracked', () => {
-    supabase.channel('demo').on('postgres_changes', { table: 't' }, () => {}).subscribe();
+    supabase
+      .channel('demo')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 't' }, () => {})
+      .subscribe();
     expect(mockSupabaseChannelSubscribeCount('demo')).toBe(1);
   });
 
   test('mockSupabaseEmitChannel delivers to handlers', () => {
     const cb = jest.fn();
-    supabase.channel('demo').on('postgres_changes', { table: 't' }, cb).subscribe();
+    supabase
+      .channel('demo')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 't' }, cb)
+      .subscribe();
     mockSupabaseEmitChannel('demo', 't', 'INSERT', { new: { id: 1 } });
     expect(cb).toHaveBeenCalledWith({ eventType: 'INSERT', new: { id: 1 } });
   });

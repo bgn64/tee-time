@@ -29,6 +29,7 @@ import {
 } from 'react-native';
 
 import { DevAccountPicker } from '@/components/DevAccountPicker';
+import { OtpInput } from '@/components/OtpInput';
 import { showAlert } from '@/lib/dialog';
 
 import { isValidHandle, useAccount } from '@/state/AccountContext';
@@ -183,21 +184,14 @@ export default function SignInScreen() {
             an hour.
           </Text>
 
-          <View style={[styles.field, styles.codeField, valid && styles.fieldValid]}>
-            <TextInput
-              style={[styles.fieldInput, styles.codeInput]}
-              value={code}
-              onChangeText={(t) => setCode(t.replace(/[^0-9]/g, '').slice(0, 6))}
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoComplete="one-time-code"
-              keyboardType="number-pad"
-              autoFocus
-              maxLength={6}
-              placeholder="000000"
-              placeholderTextColor={colors.textMuted}
-            />
-          </View>
+          <OtpInput
+            value={code}
+            onChange={setCode}
+            onSubmit={onVerifyCode}
+            autoFocus
+            disabled={submitting}
+          />
+          <View style={styles.codeSpacer} />
 
           <Pressable
             style={[styles.primaryButton, (!valid || submitting) && styles.primaryButtonDisabled]}
@@ -355,10 +349,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     fieldValid: {
       borderColor: colors.primary,
     },
-    codeField: {
-      alignSelf: 'center',
-      width: '100%',
-      maxWidth: 220,
+    codeSpacer: {
+      height: 8,
     },
     fieldPrefix: {
       fontSize: 18,
@@ -372,11 +364,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
       color: colors.textTitle,
       padding: 0,
-    },
-    codeInput: {
-      letterSpacing: 8,
-      fontSize: 22,
-      textAlign: 'center',
     },
     fieldHint: {
       fontSize: 12,

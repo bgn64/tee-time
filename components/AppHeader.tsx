@@ -10,6 +10,7 @@
  * avatar, color picker, stats, friends) lives on the You tab itself.
  */
 
+import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -34,7 +35,7 @@ export function AppHeader() {
         <View pointerEvents="none" style={styles.centerSlot}>
           <Logo size={36} color={colors.primaryDark} ballFill={colors.cardBg} />
         </View>
-        <View style={styles.rightSlot}>{renderRight(slots.right, styles)}</View>
+        <View style={styles.rightSlot}>{renderRight(slots.right, styles, colors)}</View>
       </View>
     </View>
   );
@@ -55,7 +56,11 @@ function renderLeft(left: ReturnType<typeof useHeaderSlots>['left'], styles: Hea
   );
 }
 
-function renderRight(right: ReturnType<typeof useHeaderSlots>['right'], styles: HeaderStyles) {
+function renderRight(
+  right: ReturnType<typeof useHeaderSlots>['right'],
+  styles: HeaderStyles,
+  colors: ReturnType<typeof useTheme>['colors'],
+) {
   if (right.kind === 'none') {
     return null;
   }
@@ -98,7 +103,7 @@ function renderRight(right: ReturnType<typeof useHeaderSlots>['right'], styles: 
       style={({ pressed }) => [styles.settingsBtn, pressed && styles.pressed]}
       hitSlop={8}
       accessibilityLabel="Settings">
-      <Text style={styles.settingsGlyph}>⚙</Text>
+      <FontAwesome name="cog" size={20} color={colors.textMuted} />
     </Pressable>
   );
 }
@@ -165,11 +170,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       height: 32,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    settingsGlyph: {
-      fontSize: 20,
-      color: colors.textMuted,
-      lineHeight: 22,
     },
     menuBtn: {
       width: 32,

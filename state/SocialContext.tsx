@@ -88,8 +88,14 @@ type SocialContextValue = {
    * recovery path. Latest-response-wins via a generation counter; the
    * response overwrites the friends list authoritatively (see
    * implementation comment in SocialProvider for the rationale).
+   *
+   * Resolves to `{ ok: true }` on success (including the no-op signed-
+   * out case and stale-generation discards) and `{ ok: false, error }`
+   * when either underlying select returns a transient error. On
+   * failure local state is left untouched so the user-visible roster
+   * doesn't blink to empty.
    */
-  refreshFriendsAndRequests: () => Promise<void>;
+  refreshFriendsAndRequests: () => Promise<{ ok: boolean; error?: string }>;
 
   /**
    * One-way latch: flips `true` after the first sync attempt (success or
@@ -225,8 +231,11 @@ export function SocialProvider({ children }: PropsWithChildren) {
    * client-only fields that would be lost, and a realtime DELETE that
    * arrived between query-send and query-receive must be honored.
    */
-  const refreshFriendsAndRequests = useCallback(async () => {
-    if (!accountUserId) return;
+  const refreshFriendsAndRequests = useCallback(async (): Promise<{
+    ok: boolean;
+    error?: string;
+  }> => {
+    if (!accountUserId) return { ok: true };
     const meId = accountUserId;
     const myGen = ++refreshGenRef.current;
 
@@ -238,9 +247,15 @@ export function SocialProvider({ children }: PropsWithChildren) {
           .from('friend_requests')
           .select('id, from_user_id, to_user_id, status, source_player_id, created_at'),
       ]);
-      if (refreshGenRef.current !== myGen) return;
-      if (friendshipsRes.error) console.warn('[social] friendships pull:', friendshipsRes.error);
-      if (requestsRes.error) console.warn('[social] requests pull:', requestsRes.error);
+      if (refreshGenRef.current !== myGen) return { ok: true };
+      if (friendshipsRes.error) {
+        console.warn('[social] friendships pull:', friendshipsRes.error);
+        return { ok: false, error: friendshipsRes.error.message };
+      }
+      if (requestsRes.error) {
+        console.warn('[social] requests pull:', requestsRes.error);
+        return { ok: false, error: requestsRes.error.message };
+      }
 
       const friendships = (friendshipsRes.data ?? []) as CloudFriendshipRow[];
       const requests = (requestsRes.data ?? []) as CloudFriendRequestRow[];
@@ -255,7 +270,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
         ...requests.map((r) => r.to_user_id),
       ]);
       const profiles = await ensureProfilesCachedRef.current([...profileIds]);
-      if (refreshGenRef.current !== myGen) return;
+      if (refreshGenRef.current !== myGen) return { ok: true };
 
       const meAccount = accountRef.current;
       const incoming: FriendRequest[] = [];
@@ -279,6 +294,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
       setFriends(friendUserIds);
       setOutgoingRequests(outgoing);
       setIncomingRequests(incoming);
+      return { ok: true };
     } finally {
       // Only the latest refresh should flip syncing off; older
       // overlapping refreshes that lost the generation race shouldn't

@@ -280,10 +280,17 @@ type GolfRoundContextValue = {
    * `cloudRounds` (not a closure snapshot) so a realtime INSERT
    * delivered during the await is preserved rather than clobbered.
    *
+   * Resolves to `{ ok: true }` on success (including the no-op signed-
+   * out case and stale-generation discards) and `{ ok: false, error }`
+   * when the underlying select returns a transient error (401 token
+   * race, 5xx, network drop). Callers — chiefly the Feed's pull-to-
+   * refresh — surface failures via the toast surface; local state is
+   * left untouched on failure.
+   *
    * Used by the Feed's pull-to-refresh as the missed-realtime-event
    * recovery path.
    */
-  refreshScorecards: () => Promise<void>;
+  refreshScorecards: () => Promise<{ ok: boolean; error?: string }>;
   hydrated: boolean;
 };
 
@@ -1078,8 +1085,11 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
    *     kept unconditionally — they couldn't have been included in the
    *     server snapshot that produced the response.
    */
-  const refreshScorecards = useCallback(async () => {
-    if (!accountUserId) return;
+  const refreshScorecards = useCallback(async (): Promise<{
+    ok: boolean;
+    error?: string;
+  }> => {
+    if (!accountUserId) return { ok: true };
     const ownerUserId = accountUserId;
     const myGen = ++refreshGenRef.current;
     const snapshotIds = new Set(cloudRoundsRef.current.map((r) => r.id));
@@ -1087,9 +1097,9 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     const { data, error } = await supabase.from('scorecards').select('*');
     if (error) {
       console.warn('[scorecards] refresh pull failed:', error);
-      return;
+      return { ok: false, error: error.message };
     }
-    if (refreshGenRef.current !== myGen) return;
+    if (refreshGenRef.current !== myGen) return { ok: true };
 
     const rows = (data ?? []) as CloudScorecardRow[];
     const cloudById = new Map(rows.map((r) => [r.id, r]));
@@ -1143,6 +1153,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     }
 
     cloudRoundsSyncedAccountRef.current = ownerUserId;
+    return { ok: true };
   }, [accountUserId, cloudToLocalRound, cloudUpsertRound]);
 
   // Initial pull. Keyed by accountUserId so cosmetic profile updates
