@@ -684,7 +684,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       position: 'relative',
     },
     tintedRow: {
-      backgroundColor: '#faf6ec',
+      backgroundColor: colors.chipBg,
     },
     headRow: {
       borderBottomColor: colors.border,
@@ -748,7 +748,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
     },
     parRow: {
-      backgroundColor: '#faf6ec',
+      backgroundColor: colors.chipBg,
       borderTopWidth: 1,
       borderTopColor: colors.border,
       borderBottomWidth: 0,
