@@ -27,6 +27,7 @@ import {
   View,
 } from 'react-native';
 
+import { newPlayerId } from '@/lib/ids';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
@@ -131,7 +132,7 @@ export default function PlayersScreen() {
     if (atCap) return;
     const typedName = rawNickname.trim();
     if (typedName.length === 0) return;
-    const newId = `custom-player:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const newId = newPlayerId();
     const color = pickColor(newId);
     const newPlayer: Player = { id: newId, nickname: typedName, color };
     addPlayer(newPlayer);

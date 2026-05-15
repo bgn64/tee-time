@@ -35,7 +35,7 @@ export default function PersonDetailScreen() {
   const { colors } = useTheme();
   const { getPlayer, defaultPlayerId } = usePlayers();
   const { completedRounds } = useGolfRound();
-  const { friends } = useSocial();
+  const { friends, profileCache } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -44,6 +44,10 @@ export default function PersonDetailScreen() {
   });
 
   const player = id ? getPlayer(id) : undefined;
+  // Fallback: deep links coming from the friends list now use `userId` as
+  // `id` when no local Player row exists yet. Resolve via the profileCache
+  // populated by SocialContext during initial pull / handle search.
+  const profileFromCache = id && !player ? profileCache[id] : undefined;
 
   const rounds = useMemo(() => {
     if (!player) return [];
@@ -52,7 +56,7 @@ export default function PersonDetailScreen() {
       .sort((a, b) => getRoundDate(b).getTime() - getRoundDate(a).getTime());
   }, [completedRounds, player]);
 
-  if (!player) {
+  if (!player && !profileFromCache) {
     return (
       <View style={styles.notFound}>
         <Text style={styles.notFoundIcon}>👤</Text>
@@ -62,17 +66,46 @@ export default function PersonDetailScreen() {
     );
   }
 
-  const isYou = player.id === defaultPlayerId;
-  const linked = Boolean(player.userId && friends.includes(player.userId));
+  if (!player && profileFromCache) {
+    const isFriend = friends.includes(profileFromCache.userId);
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <View style={styles.profileCard}>
+          <View
+            style={[
+              styles.bigAvatar,
+              { backgroundColor: profileFromCache.avatarColor || colors.primary },
+            ]}>
+            <Text style={styles.bigAvatarText}>
+              {profileFromCache.displayName[0]?.toUpperCase()}
+            </Text>
+          </View>
+          <Text style={styles.name}>{profileFromCache.displayName}</Text>
+          <Text style={styles.handleLine}>@{profileFromCache.handle}</Text>
+          <View style={styles.badgeRow}>
+            {isFriend && <Text style={[styles.badge, styles.badgeFriend]}>FRIEND</Text>}
+          </View>
+        </View>
+
+        <View style={styles.statsCard}>
+          <Text style={styles.statNum}>0</Text>
+          <Text style={styles.statLabel}>rounds together yet</Text>
+        </View>
+      </ScrollView>
+    );
+  }
+
+  const isYou = player!.id === defaultPlayerId;
+  const linked = Boolean(player!.userId && friends.includes(player!.userId));
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.profileCard}>
-        <View style={[styles.bigAvatar, { backgroundColor: player.color || colors.primary }]}>
-          <Text style={styles.bigAvatarText}>{player.nickname[0]?.toUpperCase()}</Text>
+        <View style={[styles.bigAvatar, { backgroundColor: player!.color || colors.primary }]}>
+          <Text style={styles.bigAvatarText}>{player!.nickname[0]?.toUpperCase()}</Text>
         </View>
-        <Text style={styles.name}>{player.nickname}</Text>
-        {linked && player.handle ? <Text style={styles.handleLine}>@{player.handle}</Text> : null}
+        <Text style={styles.name}>{player!.nickname}</Text>
+        {linked && player!.handle ? <Text style={styles.handleLine}>@{player!.handle}</Text> : null}
         <View style={styles.badgeRow}>
           {isYou && <Text style={[styles.badge, styles.badgeYou]}>YOU · DEFAULT PLAYER</Text>}
           {!isYou && linked && <Text style={[styles.badge, styles.badgeFriend]}>FRIEND</Text>}

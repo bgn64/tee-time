@@ -144,6 +144,16 @@ Staging smoke test from the Vercel `staging` preview URL:
 6. Course search shows staging catalog rows.
 7. Test scorecard/profile data appears only in staging.
 
+### Navigation & sync regression checks
+
+Added after the May 2026 navigation/sync refactor — verifies the two reported tester bugs and their cousins stay fixed:
+
+8. **No bounce-to-Score on friend-request accept.** With an in-progress round, go to You tab → Friends → tap Confirm on an incoming friend request. The Friends screen must remain visible; `currentRound` must be preserved. Covers Bug 1 and its token-refresh / avatar-color cousins.
+9. **Mutual friend visibility without restart.** From device A, send a friend request to user B. From device B, accept it. Without restarting either app, both A and B should see each other in their Friends list (not just the feed). Covers Bug 2 and the sender-side realtime miss.
+10. **You tab re-tap pops to root.** Drill into You → Friends; tap the You tab icon; should land on the You profile screen. (Repeat for the Rounds tab → round detail → Rounds tab icon.) Score tab is intentionally unchanged.
+11. **Pull-to-refresh actually re-pulls.** From the Feed, pull down to refresh. While the spinner is up, delete a row from the staging Supabase admin dashboard; the row should disappear from the feed (proves the refresh is now a real cloud re-pull, not a 600ms cosmetic spinner).
+12. **Offline write recovery.** Open dev tools → Network → Offline. Tap a color swatch on the You tab (cosmetic profile change). The local UI updates. Re-enable the network. The change should sync to cloud on the next foreground transition or subsequent successful write (verify via staging Supabase admin).
+
 Production release from `main`:
 
 1. Confirm checks pass.

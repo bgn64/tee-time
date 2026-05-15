@@ -26,6 +26,7 @@ import { OnboardingProvider, useOnboarding } from '@/state/OnboardingContext';
 import { PlayerProvider, usePlayers } from '@/state/PlayerContext';
 import { SocialProvider, useSocial } from '@/state/SocialContext';
 import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
+import { useSplashGate } from '@/state/useSplashGate';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -83,13 +84,14 @@ function RootLayoutNav() {
   const { hydrated: socialHydrated } = useSocial();
   const { hydrated: onboardingHydrated, nextPrimer } = useOnboarding();
 
-  const allHydrated =
-    themeHydrated &&
-    playerHydrated &&
-    roundHydrated &&
-    accountHydrated &&
-    socialHydrated &&
-    onboardingHydrated;
+  const allHydrated = useSplashGate({
+    theme: themeHydrated,
+    player: playerHydrated,
+    round: roundHydrated,
+    account: accountHydrated,
+    social: socialHydrated,
+    onboarding: onboardingHydrated,
+  });
 
   useEffect(() => {
     if (allHydrated) {

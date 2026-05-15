@@ -25,11 +25,13 @@
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { recentCourses as seededRecentCourses } from '@/data/courses';
+import { newRoundId } from '@/lib/ids';
 import { replaceScore } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { usePlayers } from '@/state/PlayerContext';
 import { supabase } from '@/state/supabaseClient';
+import { writeQueue } from '@/state/writeQueue';
 import {
   Course,
   Hole,
@@ -268,6 +270,20 @@ type GolfRoundContextValue = {
   ensureCourseScorecard: (
     course: Course
   ) => Promise<{ ok: true; course: Course } | { ok: false; error: string }>;
+  /**
+   * Re-run the cloud scorecards pull on demand. Bypasses the
+   * "already synced for this user" sentinel that gates the auto-pull
+   * effect — explicit refreshes always go to the wire.
+   *
+   * Race-safe: a per-refresh generation counter ensures only the
+   * latest response writes state, and the merge runs against the live
+   * `cloudRounds` (not a closure snapshot) so a realtime INSERT
+   * delivered during the await is preserved rather than clobbered.
+   *
+   * Used by the Feed's pull-to-refresh as the missed-realtime-event
+   * recovery path.
+   */
+  refreshScorecards: () => Promise<void>;
   hydrated: boolean;
 };
 
@@ -305,6 +321,13 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
   const cloudCoursesSyncedAccountRef = useRef<string | null>(null);
   const cloudRoundsSyncedAccountRef = useRef<string | null>(null);
+
+  // Per-refresh generation counter. `refreshScorecards` increments this,
+  // captures the local value, and after the awaited select compares it
+  // against `refreshGenRef.current` — if a newer refresh has started in
+  // the meantime, the older response is discarded. Guarantees latest-
+  // response-wins for overlapping pull-to-refresh invocations.
+  const refreshGenRef = useRef(0);
 
   const prevAccountUserIdRef = useRef<string | null>(null);
 
@@ -402,6 +425,63 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     prevAccountUserIdRef.current = curr;
   }, [accountUserId, accountHydrated, hydrated]);
 
+  // Register write-queue rollback handlers exactly once. These run when
+  // an enqueued mutation is dead-lettered (5 transient failures or any
+  // permanent error). They restore the optimistic local state to its
+  // pre-mutation snapshot: `prevRow === null` means "the row didn't
+  // exist locally before this write" — rollback removes it.
+  useEffect(() => {
+    writeQueue.setRollbackHandler('courses', (entry) => {
+      const snap = entry.rollbackSnapshot as
+        | { entityId: string; prevRow: Course | null }
+        | undefined;
+      if (!snap) return;
+      const { entityId, prevRow } = snap;
+      setCourses((prev) => {
+        const exists = prev.some((c) => c.id === entityId);
+        if (entry.op === 'delete') {
+          // We optimistically removed the row. Re-insert it if we have
+          // a snapshot AND it's not somehow already back.
+          if (!prevRow || exists) return prev;
+          return [...prev, prevRow];
+        }
+        // upsert: revert to prevRow (or remove if it was a new row).
+        if (prevRow == null) {
+          return exists ? prev.filter((c) => c.id !== entityId) : prev;
+        }
+        if (!exists) return [...prev, prevRow];
+        return prev.map((c) => (c.id === entityId ? prevRow : c));
+      });
+    });
+
+    writeQueue.setRollbackHandler('scorecards', (entry) => {
+      const snap = entry.rollbackSnapshot as
+        | { entityId: string; prevRow: Round | null }
+        | undefined;
+      if (!snap) return;
+      const { entityId, prevRow } = snap;
+      setCloudRounds((prev) => {
+        const exists = prev.some((r) => r.id === entityId);
+        if (entry.op === 'delete') {
+          if (!prevRow || exists) return prev;
+          return [prevRow, ...prev];
+        }
+        if (prevRow == null) {
+          return exists ? prev.filter((r) => r.id !== entityId) : prev;
+        }
+        if (!exists) return [prevRow, ...prev];
+        return prev.map((r) => (r.id === entityId ? prevRow : r));
+      });
+    });
+  }, []);
+
+  // Signal write-queue replay readiness based on whether an account is
+  // hydrated and signed in. Replay only fires when both the queue
+  // hydrated and an account is available.
+  useEffect(() => {
+    writeQueue.setAccountReady(!!accountUserId);
+  }, [accountUserId]);
+
   // ===========================================================================
   // Courses cloud sync (customs only; catalog comes via on-demand search)
   // ===========================================================================
@@ -442,38 +522,54 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     async (course: Course) => {
       if (!account) return;
       if (course.source !== 'custom') return;
-      const { error } = await supabase
-        .from('courses')
-        .upsert(
-          {
-            id: course.id,
-            owner_user_id: account.userId,
-            source: 'custom',
-            name: course.name,
-            // Custom courses store the user-typed location verbatim into
-            // `city` so it round-trips on read. We don't try to parse
-            // "Seattle, WA" into city+state — keep it simple.
-            city: course.location || null,
-            state: null,
-            country: course.country ?? null,
-            address: course.address ?? null,
-            postal_code: course.postalCode ?? null,
-            latitude: course.latitude ?? null,
-            longitude: course.longitude ?? null,
-            course_type: course.courseType ?? null,
-            hole_count: course.holes.length,
-            total_par: course.totalPar ?? course.holes.reduce((t, h) => t + h.par, 0),
-            total_yardage: course.totalYardage ?? null,
-            year_built: course.yearBuilt ?? null,
-            architect: course.architect ?? null,
-            phone: course.phone ?? null,
-            website: course.website ?? null,
-            holes: course.holes,
-            tees: course.tees ?? [],
+      const payload = {
+        id: course.id,
+        owner_user_id: account.userId,
+        source: 'custom' as const,
+        name: course.name,
+        // Custom courses store the user-typed location verbatim into
+        // `city` so it round-trips on read. We don't try to parse
+        // "Seattle, WA" into city+state — keep it simple.
+        city: course.location || null,
+        state: null,
+        country: course.country ?? null,
+        address: course.address ?? null,
+        postal_code: course.postalCode ?? null,
+        latitude: course.latitude ?? null,
+        longitude: course.longitude ?? null,
+        course_type: course.courseType ?? null,
+        hole_count: course.holes.length,
+        total_par: course.totalPar ?? course.holes.reduce((t, h) => t + h.par, 0),
+        total_yardage: course.totalYardage ?? null,
+        year_built: course.yearBuilt ?? null,
+        architect: course.architect ?? null,
+        phone: course.phone ?? null,
+        website: course.website ?? null,
+        holes: course.holes,
+        tees: course.tees ?? [],
+      };
+      const prevRow = coursesRef.current.find((c) => c.id === course.id) ?? null;
+      try {
+        const { error } = await supabase
+          .from('courses')
+          .upsert(payload, { onConflict: 'id' });
+        if (error) throw error;
+        void writeQueue.flush();
+      } catch (err: any) {
+        writeQueue.enqueue({
+          table: 'courses',
+          op: 'upsert',
+          entityId: course.id,
+          payload,
+          upsertOpts: { onConflict: 'id' },
+          lastError: { message: err?.message, code: err?.code ?? err?.status },
+          rollbackSnapshot: {
+            table: 'courses',
+            entityId: course.id,
+            prevRow,
           },
-          { onConflict: 'id' }
-        );
-      if (error) console.warn('[courses] upsert failed:', error);
+        });
+      }
     },
     [account]
   );
@@ -481,12 +577,33 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const cloudDeleteCourse = useCallback(
     async (courseId: string) => {
       if (!account) return;
-      const { error } = await supabase
-        .from('courses')
-        .delete()
-        .eq('id', courseId)
-        .eq('owner_user_id', account.userId);
-      if (error) console.warn('[courses] delete failed:', error);
+      const eqs = [
+        { col: 'id', val: courseId },
+        { col: 'owner_user_id', val: account.userId },
+      ];
+      const prevRow = coursesRef.current.find((c) => c.id === courseId) ?? null;
+      try {
+        const { error } = await supabase
+          .from('courses')
+          .delete()
+          .eq('id', courseId)
+          .eq('owner_user_id', account.userId);
+        if (error) throw error;
+        void writeQueue.flush();
+      } catch (err: any) {
+        writeQueue.enqueue({
+          table: 'courses',
+          op: 'delete',
+          entityId: courseId,
+          payload: { eqs },
+          lastError: { message: err?.message, code: err?.code ?? err?.status },
+          rollbackSnapshot: {
+            table: 'courses',
+            entityId: courseId,
+            prevRow,
+          },
+        });
+      }
     },
     [account]
   );
@@ -860,31 +977,52 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         ? new Date().toISOString()
         : round.lastScoreAt ?? null;
 
-      const { error } = await supabase
-        .from('scorecards')
-        .upsert(
-          {
-            id: round.id,
-            owner_user_id: ownerUserId,
-            course_snapshot: round.course,
-            scoring_rule: round.scoringRule,
-            player_ids: round.playerIds,
-            teams: round.teams ?? null,
-            scores: round.scores,
-            participants: round.participants,
-            mentioned_user_ids: round.mentionedUserIds,
-            round_id: round.roundId ?? null,
-            hole_range: round.holeRange,
-            current_hole_number: round.currentHoleNumber,
-            started_at: round.startedAt,
-            completed_at: round.completedAt ?? null,
-            caption: round.caption ?? null,
-            is_live_shareable: round.isLiveShareable ?? true,
-            last_score_at: nextLastScoreAt,
+      const payload = {
+        id: round.id,
+        owner_user_id: ownerUserId,
+        course_snapshot: round.course,
+        scoring_rule: round.scoringRule,
+        player_ids: round.playerIds,
+        teams: round.teams ?? null,
+        scores: round.scores,
+        participants: round.participants,
+        mentioned_user_ids: round.mentionedUserIds,
+        round_id: round.roundId ?? null,
+        hole_range: round.holeRange,
+        current_hole_number: round.currentHoleNumber,
+        started_at: round.startedAt,
+        completed_at: round.completedAt ?? null,
+        caption: round.caption ?? null,
+        is_live_shareable: round.isLiveShareable ?? true,
+        last_score_at: nextLastScoreAt,
+      };
+      // Snapshot for rollback. cloudRoundsRef is updated synchronously
+      // each render via the `cloudRoundsRef.current = cloudRounds` line,
+      // so at wrapper-entry it reflects the pre-mutation state for any
+      // setCloudRounds scheduled in the same tick.
+      const prevRow = cloudRoundsRef.current.find((r) => r.id === round.id) ?? null;
+
+      try {
+        const { error } = await supabase
+          .from('scorecards')
+          .upsert(payload, { onConflict: 'id' });
+        if (error) throw error;
+        void writeQueue.flush();
+      } catch (err: any) {
+        writeQueue.enqueue({
+          table: 'scorecards',
+          op: 'upsert',
+          entityId: round.id,
+          payload,
+          upsertOpts: { onConflict: 'id' },
+          lastError: { message: err?.message, code: err?.code ?? err?.status },
+          rollbackSnapshot: {
+            table: 'scorecards',
+            entityId: round.id,
+            prevRow,
           },
-          { onConflict: 'id' }
-        );
-      if (error) console.warn('[scorecards] upsert failed:', error);
+        });
+      }
     },
     [account]
   );
@@ -892,55 +1030,104 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const cloudDeleteRound = useCallback(
     async (roundId: string) => {
       if (!account) return;
-      const { error } = await supabase.from('scorecards').delete().eq('id', roundId);
-      if (error) console.warn('[scorecards] delete failed:', error);
+      const eqs = [{ col: 'id', val: roundId }];
+      const prevRow =
+        cloudRoundsRef.current.find((r) => r.id === roundId) ?? null;
+      try {
+        const { error } = await supabase
+          .from('scorecards')
+          .delete()
+          .eq('id', roundId);
+        if (error) throw error;
+        void writeQueue.flush();
+      } catch (err: any) {
+        writeQueue.enqueue({
+          table: 'scorecards',
+          op: 'delete',
+          entityId: roundId,
+          payload: { eqs },
+          lastError: { message: err?.message, code: err?.code ?? err?.status },
+          rollbackSnapshot: {
+            table: 'scorecards',
+            entityId: roundId,
+            prevRow,
+          },
+        });
+      }
     },
     [account]
   );
 
-  // Initial pull. Keyed by accountUserId so cosmetic profile updates
-  // don't re-trigger.
-  useEffect(() => {
-    if (!hydrated || !accountHydrated) return;
-    if (!accountUserId) {
-      cloudRoundsSyncedAccountRef.current = null;
+  /**
+   * Pull every visible scorecard from the cloud and reconcile with the
+   * in-memory `cloudRounds` list. Used by both the initial-pull effect
+   * (gated by `cloudRoundsSyncedAccountRef`) and explicit pull-to-
+   * refresh (which bypasses that gate and always goes to the wire).
+   *
+   * Race-safety:
+   *   · `refreshGenRef` is bumped at entry and re-checked after the
+   *     async select; an older response whose generation no longer
+   *     matches is discarded. Two overlapping refreshes therefore
+   *     resolve as "latest wins".
+   *   · The merge uses the functional `setCloudRounds(prev => ...)`
+   *     form so a realtime INSERT delivered during the await lands in
+   *     `prev` and is preserved. Pre-existing friend-owned rows missing
+   *     from the cloud response are still dropped as stale (friend
+   *     deleted their round); but rows added to `prev` AFTER the
+   *     refresh started (the `snapshotIds` set captured up-front) are
+   *     kept unconditionally — they couldn't have been included in the
+   *     server snapshot that produced the response.
+   */
+  const refreshScorecards = useCallback(async () => {
+    if (!accountUserId) return;
+    const ownerUserId = accountUserId;
+    const myGen = ++refreshGenRef.current;
+    const snapshotIds = new Set(cloudRoundsRef.current.map((r) => r.id));
+
+    const { data, error } = await supabase.from('scorecards').select('*');
+    if (error) {
+      console.warn('[scorecards] refresh pull failed:', error);
       return;
     }
-    if (cloudRoundsSyncedAccountRef.current === accountUserId) return;
+    if (refreshGenRef.current !== myGen) return;
 
-    let cancelled = false;
-    const ownerUserId = accountUserId;
+    const rows = (data ?? []) as CloudScorecardRow[];
+    const cloudById = new Map(rows.map((r) => [r.id, r]));
 
-    const sync = async () => {
-      const { data, error } = await supabase.from('scorecards').select('*');
-      if (error) {
-        console.warn('[scorecards] initial sync pull failed:', error);
-        return;
-      }
-      if (cancelled) return;
+    // Capture local-only-mine for the optional push-up before mutating
+    // state. These are rounds the user accumulated offline that the
+    // cloud doesn't have yet — first-sync semantics, harmless on
+    // subsequent refreshes (will be empty by then).
+    const localOnly = cloudRoundsRef.current.filter(
+      (r) => !cloudById.has(r.id) && r.ownerUserId === ownerUserId
+    );
 
-      const rows = (data ?? []) as CloudScorecardRow[];
-      const cloudById = new Map(rows.map((r) => [r.id, r]));
-      const localSnapshot = cloudRoundsRef.current;
-
+    setCloudRounds((prev) => {
       const merged: Round[] = [];
       const seen = new Set<string>();
-      for (const local of localSnapshot) {
+      for (const local of prev) {
         const cloud = cloudById.get(local.id);
         if (cloud) {
           merged.push(cloudToLocalRound(cloud));
           seen.add(cloud.id);
           continue;
         }
-        // Local round not in cloud. Two valid cases keep it:
-        //   · Round we own and haven't pushed yet → kept for the upsert
-        //     below.
-        //   · Anonymous-mode round (no ownerUserId) → kept as local-only
-        //     history that this account will eventually adopt.
-        // Anything else (a friend-owned round we cached previously) is
-        // stale — the friend deleted it or RLS no longer grants access.
-        // Drop it so the local cache reconverges with the server.
-        if (!local.ownerUserId || local.ownerUserId === ownerUserId) {
+        // Local row not in cloud. Two reasons to keep it:
+        //   · It's ours (owner or anonymous) — local-only history that
+        //     belongs to us and will be pushed up below.
+        //   · It appeared in `prev` AFTER the refresh started (a
+        //     concurrent realtime INSERT). Couldn't have been in the
+        //     server snapshot that produced this response; don't
+        //     clobber it.
+        // Anything else (a pre-existing friend-owned local row missing
+        // from the cloud response) is stale — friend deleted it or RLS
+        // no longer grants access. Drop.
+        const isNewSinceRefreshStart = !snapshotIds.has(local.id);
+        if (
+          isNewSinceRefreshStart ||
+          !local.ownerUserId ||
+          local.ownerUserId === ownerUserId
+        ) {
           merged.push(local);
         }
       }
@@ -948,29 +1135,29 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         if (seen.has(cloud.id)) continue;
         merged.push(cloudToLocalRound(cloud));
       }
+      return merged;
+    });
 
-      if (cancelled) return;
-      setCloudRounds(merged);
+    for (const r of localOnly) {
+      await cloudUpsertRound(r, { bumpLastScoreAt: false });
+    }
 
-      // Push local-only rounds owned by this account up to cloud. These
-      // are completed-round rows the user accumulated while offline (or
-      // before the live-round migration); don't bump last_score_at, the
-      // round wasn't actually scored just now.
-      const localOnly = localSnapshot.filter(
-        (r) => !cloudById.has(r.id) && r.ownerUserId === ownerUserId
-      );
-      for (const r of localOnly) {
-        await cloudUpsertRound(r, { bumpLastScoreAt: false });
-      }
+    cloudRoundsSyncedAccountRef.current = ownerUserId;
+  }, [accountUserId, cloudToLocalRound, cloudUpsertRound]);
 
-      cloudRoundsSyncedAccountRef.current = ownerUserId;
-    };
-
-    sync();
-    return () => {
-      cancelled = true;
-    };
-  }, [accountUserId, hydrated, accountHydrated, cloudToLocalRound, cloudUpsertRound]);
+  // Initial pull. Keyed by accountUserId so cosmetic profile updates
+  // don't re-trigger. The `cloudRoundsSyncedAccountRef` sentinel keeps
+  // this effect a one-shot per signed-in user — explicit refreshes via
+  // `refreshScorecards()` bypass the sentinel and always go to the wire.
+  useEffect(() => {
+    if (!hydrated || !accountHydrated) return;
+    if (!accountUserId) {
+      cloudRoundsSyncedAccountRef.current = null;
+      return;
+    }
+    if (cloudRoundsSyncedAccountRef.current === accountUserId) return;
+    void refreshScorecards();
+  }, [accountUserId, hydrated, accountHydrated, refreshScorecards]);
 
   // Realtime: scorecards table only. Inline participants ride along.
   // Depend on accountUserId (not the whole account object) so cosmetic
@@ -1071,7 +1258,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
         const isLiveShareable = opts?.isLiveShareable ?? true;
         const newRound: Round = {
-          id: `round-${Date.now()}`,
+          id: newRoundId(),
           course,
           scoringRule,
           playerIds,
@@ -1341,6 +1528,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       searchCatalogCourses,
       rememberCatalogCourse,
       ensureCourseScorecard,
+      refreshScorecards,
     }),
     [
       completedRounds,
@@ -1360,6 +1548,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       searchCatalogCourses,
       rememberCatalogCourse,
       ensureCourseScorecard,
+      refreshScorecards,
     ]
   );
 

@@ -83,6 +83,29 @@ type AccountContextValue = {
 
 const AccountContext = createContext<AccountContextValue | undefined>(undefined);
 
+/**
+ * Shallow-equality check on the fields `refreshFromSession` reads when it
+ * constructs an `Account` object. Lets the functional setter bail out
+ * instead of producing a new object reference when nothing has actually
+ * changed — important because `onAuthStateChange` fires `TOKEN_REFRESHED`
+ * roughly hourly, and every consumer that keys off the `account`
+ * reference (SocialContext, PlayerContext, route effects) would otherwise
+ * see a fresh object and re-run its effects.
+ */
+function shallowEqualAccount(a: Account | null, b: Account | null): boolean {
+  if (a === b) return true;
+  if (a === null || b === null) return false;
+  return (
+    a.userId === b.userId &&
+    a.provider === b.provider &&
+    a.email === b.email &&
+    a.handle === b.handle &&
+    a.displayName === b.displayName &&
+    a.avatarColor === b.avatarColor &&
+    a.createdAt === b.createdAt
+  );
+}
+
 export function AccountProvider({ children }: PropsWithChildren) {
   const [account, setAccount] = useState<Account | null>(null);
   const [needsProfile, setNeedsProfile] = useState(false);
@@ -138,7 +161,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       return;
     }
 
-    setAccount({
+    const nextAccount: Account = {
       userId: profile.user_id,
       provider: 'email',
       email,
@@ -146,7 +169,8 @@ export function AccountProvider({ children }: PropsWithChildren) {
       displayName: profile.display_name,
       avatarColor: profile.avatar_color,
       createdAt: profile.created_at,
-    });
+    };
+    setAccount((prev) => (shallowEqualAccount(prev, nextAccount) ? prev : nextAccount));
     setNeedsProfile(false);
     setPendingEmail(null);
     setPendingDisplayName(null);

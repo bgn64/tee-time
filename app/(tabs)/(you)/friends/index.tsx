@@ -24,17 +24,23 @@ import { usePlayers } from '@/state/PlayerContext';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Player, Round } from '@/types/golf';
+import { ProfileSummary } from '@/types/social';
 
 function roundsTogether(playerId: string, rounds: Round[]): number {
   return rounds.filter((r) => r.playerIds.includes(playerId)).length;
 }
+
+type FriendRow =
+  | { kind: 'roster'; userId: string; player: Player; roundsTogether: number }
+  | { kind: 'cached'; userId: string; profile: ProfileSummary }
+  | { kind: 'placeholder'; userId: string };
 
 export default function FriendsScreen() {
   const { colors } = useTheme();
   const { allPlayers } = usePlayers();
   const { completedRounds } = useGolfRound();
   const { account } = useAccount();
-  const { friends } = useSocial();
+  const { friends, profileCache } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -42,20 +48,46 @@ export default function FriendsScreen() {
     right: { kind: 'profile' },
   });
 
-  // Friend rows: dedupe by userId, prefer the most-played-with roster entry.
-  const friendRows = useMemo(() => {
-    return friends
-      .map((userId) => {
-        const candidates = allPlayers.filter((p) => p.userId === userId);
-        if (candidates.length === 0) return null;
+  // One row per friend userId. Never silently drop a friend — fall back
+  // through roster → profileCache → placeholder so the list always reflects
+  // `friends` 1:1. The roster path is preferred (it carries rounds-together
+  // counts and the user-customized nickname).
+  const friendRows: FriendRow[] = useMemo(() => {
+    const rows: FriendRow[] = friends.map((userId) => {
+      const candidates = allPlayers.filter((p) => p.userId === userId);
+      if (candidates.length > 0) {
         const ranked = candidates
           .map((p) => ({ player: p, n: roundsTogether(p.id, completedRounds) }))
           .sort((a, b) => b.n - a.n);
-        return ranked[0];
-      })
-      .filter((r): r is { player: Player; n: number } => r !== null)
-      .sort((a, b) => a.player.nickname.localeCompare(b.player.nickname));
-  }, [friends, allPlayers, completedRounds]);
+        return {
+          kind: 'roster' as const,
+          userId,
+          player: ranked[0].player,
+          roundsTogether: ranked[0].n,
+        };
+      }
+      const cached = profileCache[userId];
+      if (cached) {
+        return { kind: 'cached' as const, userId, profile: cached };
+      }
+      return { kind: 'placeholder' as const, userId };
+    });
+    return rows.sort((a, b) => {
+      const nameA =
+        a.kind === 'roster'
+          ? a.player.nickname
+          : a.kind === 'cached'
+          ? a.profile.displayName
+          : a.userId;
+      const nameB =
+        b.kind === 'roster'
+          ? b.player.nickname
+          : b.kind === 'cached'
+          ? b.profile.displayName
+          : b.userId;
+      return nameA.localeCompare(nameB);
+    });
+  }, [friends, allPlayers, completedRounds, profileCache]);
 
   return (
     <View style={styles.container}>
@@ -76,7 +108,7 @@ export default function FriendsScreen() {
               <Text style={styles.emptyCtaText}>Sign in</Text>
             </Pressable>
           </View>
-        ) : friendRows.length === 0 ? (
+        ) : friends.length === 0 ? (
           <View style={styles.emptyWrap}>
             <Text style={styles.emptyIcon}>👥</Text>
             <Text style={styles.emptyTitle}>No friends yet</Text>
@@ -92,34 +124,87 @@ export default function FriendsScreen() {
           </View>
         ) : (
           <>
-            {friendRows.map(({ player, n }) => (
-              <Pressable
-                key={player.userId ?? player.id}
-                onPress={() =>
-                  router.push({
-                    pathname: '/(tabs)/(you)/friends/[id]',
-                    params: { id: player.id },
-                  })
-                }
-                style={styles.rosterCard}>
-                <View
-                  style={[styles.avatar, { backgroundColor: player.color || colors.primary }]}>
-                  <Text style={styles.avatarText}>{player.nickname[0]?.toUpperCase()}</Text>
+            {friendRows.map((row) => {
+              if (row.kind === 'roster') {
+                const { player, roundsTogether: n } = row;
+                return (
+                  <Pressable
+                    key={row.userId}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(tabs)/(you)/friends/[id]',
+                        params: { id: player.id },
+                      })
+                    }
+                    style={styles.rosterCard}>
+                    <View
+                      style={[
+                        styles.avatar,
+                        { backgroundColor: player.color || colors.primary },
+                      ]}>
+                      <Text style={styles.avatarText}>{player.nickname[0]?.toUpperCase()}</Text>
+                    </View>
+                    <View style={styles.rosterBody}>
+                      <Text style={styles.rosterName} numberOfLines={1}>
+                        {player.nickname}
+                      </Text>
+                      <Text style={[styles.rosterMeta, styles.rosterMetaFriend]}>
+                        @{player.handle}
+                        {n > 0
+                          ? ` · ${n} ${n === 1 ? 'round' : 'rounds'} together`
+                          : ' · 0 rounds together yet'}
+                      </Text>
+                    </View>
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
+                );
+              }
+              if (row.kind === 'cached') {
+                const { profile } = row;
+                return (
+                  <Pressable
+                    key={row.userId}
+                    onPress={() =>
+                      router.push({
+                        pathname: '/(tabs)/(you)/friends/[id]',
+                        params: { id: row.userId },
+                      })
+                    }
+                    style={styles.rosterCard}>
+                    <View
+                      style={[
+                        styles.avatar,
+                        { backgroundColor: profile.avatarColor || colors.primary },
+                      ]}>
+                      <Text style={styles.avatarText}>
+                        {profile.displayName[0]?.toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.rosterBody}>
+                      <Text style={styles.rosterName} numberOfLines={1}>
+                        {profile.displayName}
+                      </Text>
+                      <Text style={[styles.rosterMeta, styles.rosterMetaFriend]}>
+                        @{profile.handle} · 0 rounds together yet
+                      </Text>
+                    </View>
+                    <Text style={styles.chev}>›</Text>
+                  </Pressable>
+                );
+              }
+              return (
+                <View key={row.userId} style={styles.rosterCard}>
+                  <View style={[styles.avatar, { backgroundColor: colors.textMuted }]}>
+                    <Text style={styles.avatarText}>·</Text>
+                  </View>
+                  <View style={styles.rosterBody}>
+                    <Text style={[styles.rosterName, { color: colors.textMuted }]} numberOfLines={1}>
+                      Loading…
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.rosterBody}>
-                  <Text style={styles.rosterName} numberOfLines={1}>
-                    {player.nickname}
-                  </Text>
-                  <Text style={[styles.rosterMeta, styles.rosterMetaFriend]}>
-                    @{player.handle}
-                    {n > 0
-                      ? ` · ${n} ${n === 1 ? 'round' : 'rounds'} together`
-                      : ' · 0 rounds together yet'}
-                  </Text>
-                </View>
-                <Text style={styles.chev}>›</Text>
-              </Pressable>
-            ))}
+              );
+            })}
             <Pressable
               style={styles.findFriendsRow}
               onPress={() => router.push('/(tabs)/(you)/friends/search')}>

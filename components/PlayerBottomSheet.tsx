@@ -5,6 +5,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View, ScrollView } from 'react-native';
 
+import { newPlayerId } from '@/lib/ids';
 import { usePlayers } from '@/state/PlayerContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Player } from '@/types/golf';
@@ -39,7 +40,7 @@ export function PlayerBottomSheet({ visible, onClose, onSelectPlayer, excludeIds
   function handleCreate() {
     if (!newName.trim()) return;
     const player: Player = {
-      id: `player-${Date.now()}`,
+      id: newPlayerId(),
       nickname: newName.trim(),
       color: selectedColor,
     };

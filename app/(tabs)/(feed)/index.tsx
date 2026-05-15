@@ -34,8 +34,8 @@ import { useTheme } from '@/state/ThemeContext';
 export default function FeedScreen() {
   const { colors } = useTheme();
   const { account } = useAccount();
-  const { friends, profileCache } = useSocial();
-  const { completedRounds, liveRounds } = useGolfRound();
+  const { friends, profileCache, refreshFriendsAndRequests } = useSocial();
+  const { completedRounds, liveRounds, refreshScorecards } = useGolfRound();
   const { allPlayers, getPlayer } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -61,9 +61,12 @@ export default function FeedScreen() {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await new Promise((r) => setTimeout(r, 600));
-    setRefreshing(false);
-  }, []);
+    try {
+      await Promise.all([refreshScorecards(), refreshFriendsAndRequests()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshScorecards, refreshFriendsAndRequests]);
 
   // -------- Empty states --------
   if (!account) {

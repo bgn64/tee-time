@@ -17,7 +17,10 @@
  * row where `user_id = me`). When that table changes, friends change.
  *
  * Sign-out clear: the realtime channel is torn down and local state
- * resets when `account` flips to null. Sign-back-in re-pulls on mount.
+ * resets when `accountUserId` flips to null. Sign-back-in re-pulls.
+ * Effects key off `accountUserId` (not the whole account object) so
+ * cosmetic profile edits / TOKEN_REFRESHED don't re-pull. `hydrated`
+ * is a one-way latch; `syncing` is the transient in-flight flag.
  */
 
 import {
@@ -79,7 +82,27 @@ type SocialContextValue = {
    */
   ensureProfilesCached: (userIds: string[]) => Promise<Record<string, ProfileSummary>>;
 
+  /**
+   * Re-run the friendships + friend_requests cloud pull on demand.
+   * Used by the Feed's pull-to-refresh as the missed-realtime-event
+   * recovery path. Latest-response-wins via a generation counter; the
+   * response overwrites the friends list authoritatively (see
+   * implementation comment in SocialProvider for the rationale).
+   */
+  refreshFriendsAndRequests: () => Promise<void>;
+
+  /**
+   * One-way latch: flips `true` after the first sync attempt (success or
+   * empty-because-signed-out) and never flips back. Consumers that gate
+   * navigation rendering on "are we ready?" should read this flag.
+   */
   hydrated: boolean;
+  /**
+   * Transient flag: `true` while an account-scoped initial pull is in
+   * flight, `false` otherwise. Use this for spinners / pull-to-refresh
+   * indicators — never for unmounting the navigator.
+   */
+  syncing: boolean;
 };
 
 const SocialContext = createContext<SocialContextValue | undefined>(undefined);
@@ -113,12 +136,42 @@ export function SocialProvider({ children }: PropsWithChildren) {
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
   const [profileCache, setProfileCache] = useState<Record<string, ProfileSummary>>({});
   const [hydrated, setHydrated] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   const { account } = useAccount();
-  const { allPlayers, addPlayer } = usePlayers();
+  const { ensureRosterForFriend } = usePlayers();
+
+  // Stable primitive — mirrors the pattern in `PlayerContext` and
+  // `GolfRoundContext`. Use in effect deps when only WHICH user is signed
+  // in matters, not cosmetic profile updates (avatar color, display name,
+  // TOKEN_REFRESHED). Keying the initial-pull and realtime-channel effects
+  // off this primitive prevents the navigator-unmount cascade described
+  // in the refactor plan (Bug 1).
+  const accountUserId = account?.userId ?? null;
 
   const profileCacheRef = useRef(profileCache);
   profileCacheRef.current = profileCache;
+
+  // Live mirrors of values the realtime handler must read but that must
+  // NOT appear in the effect's dep array — re-subscribing on every roster
+  // mutation opens a window where a friendship INSERT can be missed (the
+  // sender-side disappearing-friend bug, Bug 2 in the refactor plan).
+  const accountRef = useRef(account);
+  accountRef.current = account;
+  const ensureRosterForFriendRef = useRef(ensureRosterForFriend);
+  ensureRosterForFriendRef.current = ensureRosterForFriend;
+
+  // One-way `hydrated` latch. Once `true`, stays `true` for the lifetime
+  // of the provider — even across sign-out / sign-in transitions. The
+  // splash gate in `app/_layout.tsx` depends on this so a token refresh
+  // or cosmetic profile edit doesn't blank the navigator. Use `syncing`
+  // for the transient "currently pulling" signal.
+  const hydratedLatchedRef = useRef(false);
+  const latchHydrated = useCallback(() => {
+    if (hydratedLatchedRef.current) return;
+    hydratedLatchedRef.current = true;
+    setHydrated(true);
+  }, []);
 
   const ensureProfilesCached = useCallback(
     async (userIds: string[]): Promise<Record<string, ProfileSummary>> => {
@@ -142,53 +195,69 @@ export function SocialProvider({ children }: PropsWithChildren) {
     []
   );
 
-  // Initial pull when account becomes non-null. Sign-out clears.
-  useEffect(() => {
-    if (!account) {
-      setFriends([]);
-      setOutgoingRequests([]);
-      setIncomingRequests([]);
-      setProfileCache({});
-      // Signed-out users have nothing to load — flip hydrated immediately so
-      // the splash gate doesn't get stuck waiting for a signed-in user that
-      // may never arrive.
-      setHydrated(true);
-      return;
-    }
+  // Mirror `ensureProfilesCached` into a ref so the realtime handler can
+  // call it without listing it as an effect dep. (`useCallback` here has
+  // `[]` deps so the identity is stable, but keeping the realtime effect
+  // dep-list to `[accountUserId]` is defense-in-depth against any future
+  // signature change that would otherwise resubscribe the channel.)
+  const ensureProfilesCachedRef = useRef(ensureProfilesCached);
+  ensureProfilesCachedRef.current = ensureProfilesCached;
 
-    setHydrated(false);
-    let cancelled = false;
-    (async () => {
+  // Per-refresh generation counter. `refreshFriendsAndRequests` bumps
+  // this at entry; after the await it compares its captured value
+  // against `refreshGenRef.current` and discards stale responses.
+  // Guarantees latest-response-wins for overlapping refreshes (e.g.,
+  // pull-to-refresh fired twice in quick succession).
+  const refreshGenRef = useRef(0);
+
+  /**
+   * Pull friendships + pending friend_requests from the cloud and write
+   * them to local state. Used by both the initial-pull effect (which
+   * also flips the `hydrated` latch) and the Feed's pull-to-refresh.
+   *
+   * Merge strategy: the response is treated as authoritative — the
+   * fresh server snapshot wins and overwrites `friends` / `outgoing` /
+   * `incoming`. A realtime event that lands during the await window
+   * could in principle be clobbered, but those events are idempotent:
+   * the next realtime event for that row (or the next refresh) will
+   * re-apply the missing INSERT or re-issue the DELETE. We prefer this
+   * simple write over a per-list merge because `friends` carries no
+   * client-only fields that would be lost, and a realtime DELETE that
+   * arrived between query-send and query-receive must be honored.
+   */
+  const refreshFriendsAndRequests = useCallback(async () => {
+    if (!accountUserId) return;
+    const meId = accountUserId;
+    const myGen = ++refreshGenRef.current;
+
+    setSyncing(true);
+    try {
       const [friendshipsRes, requestsRes] = await Promise.all([
         supabase.from('friendships').select('user_id, friend_user_id, created_at'),
         supabase
           .from('friend_requests')
           .select('id, from_user_id, to_user_id, status, source_player_id, created_at'),
       ]);
-      if (cancelled) return;
+      if (refreshGenRef.current !== myGen) return;
       if (friendshipsRes.error) console.warn('[social] friendships pull:', friendshipsRes.error);
       if (requestsRes.error) console.warn('[social] requests pull:', requestsRes.error);
 
       const friendships = (friendshipsRes.data ?? []) as CloudFriendshipRow[];
       const requests = (requestsRes.data ?? []) as CloudFriendRequestRow[];
 
-      // Friendships are stored symmetrically (two rows per pair); pick the
-      // ones where user_id is me so the resulting list is "people I'm
-      // friends with" without including myself.
       const friendUserIds = friendships
-        .filter((f) => f.user_id === account.userId)
+        .filter((f) => f.user_id === meId)
         .map((f) => f.friend_user_id);
-      setFriends(friendUserIds);
 
       const profileIds = new Set<string>([
         ...friendUserIds,
         ...requests.map((r) => r.from_user_id),
         ...requests.map((r) => r.to_user_id),
       ]);
-      const profiles = await ensureProfilesCached([...profileIds]);
-      if (cancelled) return;
+      const profiles = await ensureProfilesCachedRef.current([...profileIds]);
+      if (refreshGenRef.current !== myGen) return;
 
-      const meId = account.userId;
+      const meAccount = accountRef.current;
       const incoming: FriendRequest[] = [];
       const outgoing: FriendRequest[] = [];
       for (const r of requests) {
@@ -198,28 +267,60 @@ export function SocialProvider({ children }: PropsWithChildren) {
           outgoing.push({
             ...rowToFriendRequest(r, targetProfile),
             toHandle: targetProfile?.handle ?? '',
-            fromHandle: account.handle,
-            fromDisplayName: account.displayName,
-            fromAvatarColor: account.avatarColor,
+            fromHandle: meAccount?.handle ?? '',
+            fromDisplayName: meAccount?.displayName ?? '',
+            fromAvatarColor: meAccount?.avatarColor ?? '#888888',
           });
         } else if (r.to_user_id === meId) {
           incoming.push(rowToFriendRequest(r, profiles[r.from_user_id]));
         }
       }
+
+      setFriends(friendUserIds);
       setOutgoingRequests(outgoing);
       setIncomingRequests(incoming);
-      setHydrated(true);
-    })();
+    } finally {
+      // Only the latest refresh should flip syncing off; older
+      // overlapping refreshes that lost the generation race shouldn't
+      // un-flip the newer one's spinner.
+      if (refreshGenRef.current === myGen) {
+        setSyncing(false);
+      }
+    }
+  }, [accountUserId]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [account, ensureProfilesCached]);
-
-  // Realtime subscription: friend_requests + friendships.
+  // Initial pull when `accountUserId` becomes non-null. Sign-out clears
+  // local state but does NOT lower `hydrated`. Keying off the stable
+  // userId (not the whole account object) prevents re-pulls on cosmetic
+  // profile edits / TOKEN_REFRESHED. Self-profile fields used when
+  // constructing outgoing-request rows are read off `accountRef.current`
+  // so cosmetic edits made between mount and this effect still land.
   useEffect(() => {
-    if (!account) return;
-    const meId = account.userId;
+    if (!accountUserId) {
+      setFriends([]);
+      setOutgoingRequests([]);
+      setIncomingRequests([]);
+      setProfileCache({});
+      setSyncing(false);
+      // Signed-out users have nothing to load — latch hydrated so the
+      // splash gate doesn't get stuck. Idempotent if already latched.
+      latchHydrated();
+      return;
+    }
+
+    void refreshFriendsAndRequests().then(() => {
+      latchHydrated();
+    });
+  }, [accountUserId, refreshFriendsAndRequests, latchHydrated]);
+
+  // Realtime subscription: friend_requests + friendships. Keyed off
+  // `accountUserId` only — keeps the channel stable across roster /
+  // account mutations so a friendship INSERT delivered concurrently with
+  // an unrelated state change still hits this handler. The handler reads
+  // live account / roster / callbacks via refs.
+  useEffect(() => {
+    if (!accountUserId) return;
+    const meId = accountUserId;
 
     const channel = supabase
       .channel('friends-and-requests')
@@ -232,8 +333,17 @@ export function SocialProvider({ children }: PropsWithChildren) {
           const row = newRow ?? oldRow;
           if (!row) return;
 
-          await ensureProfilesCached([row.from_user_id, row.to_user_id]);
-          const profiles = profileCacheRef.current;
+          // Capture the merged profiles via the function's return value
+          // rather than re-reading `profileCacheRef.current`. The ref only
+          // refreshes on the next render, so reading it immediately after
+          // the `setProfileCache` scheduled by `ensureProfilesCached`
+          // would miss the just-fetched rows on the very first event for
+          // a freshly-discovered participant.
+          const fetched = await ensureProfilesCachedRef.current([
+            row.from_user_id,
+            row.to_user_id,
+          ]);
+          const profiles = { ...profileCacheRef.current, ...fetched };
 
           if (payload.eventType === 'DELETE') {
             setIncomingRequests((prev) => prev.filter((r) => r.id !== row.id));
@@ -250,13 +360,14 @@ export function SocialProvider({ children }: PropsWithChildren) {
             return;
           }
 
+          const meAccount = accountRef.current;
           const fr: FriendRequest = isOutgoing
             ? {
                 ...rowToFriendRequest(next, profiles[next.to_user_id]),
                 toHandle: profiles[next.to_user_id]?.handle ?? '',
-                fromHandle: account.handle,
-                fromDisplayName: account.displayName,
-                fromAvatarColor: account.avatarColor,
+                fromHandle: meAccount?.handle ?? '',
+                fromDisplayName: meAccount?.displayName ?? '',
+                fromAvatarColor: meAccount?.avatarColor ?? '#888888',
               }
             : rowToFriendRequest(next, profiles[next.from_user_id]);
 
@@ -282,27 +393,22 @@ export function SocialProvider({ children }: PropsWithChildren) {
             return;
           }
           if (newRow && newRow.user_id === meId) {
-            const profiles = await ensureProfilesCached([newRow.friend_user_id]);
+            const profiles = await ensureProfilesCachedRef.current([newRow.friend_user_id]);
             setFriends((prev) =>
               prev.includes(newRow.friend_user_id) ? prev : [...prev, newRow.friend_user_id]
             );
-            // Auto-create a roster entry for the new friend if one doesn't
-            // exist. Mirrors the auto-create in acceptIncomingRequest, but
-            // covers the *sender* side (where the recipient's accept arrives
-            // via realtime rather than a direct RPC return value).
+            // Auto-create a roster entry for the new friend if one
+            // doesn't exist. Mirrors the auto-create in
+            // `acceptIncomingRequest`, but covers the *sender* side
+            // (where the recipient's accept arrives via realtime rather
+            // than a direct RPC return value). `ensureRosterForFriend`
+            // is idempotent: a race between this handler and the
+            // accepter's inline call yields one row, not two — the
+            // deterministic `player-${userId}` id collapses the two
+            // proposed inserts into a single deduplicated state update.
             const profile = profiles[newRow.friend_user_id];
             if (profile) {
-              const existing = allPlayers.find((p) => p.userId === profile.userId);
-              if (!existing) {
-                addPlayer({
-                  id: `player-${profile.userId}-${Date.now()}`,
-                  nickname: profile.displayName,
-                  displayName: profile.displayName,
-                  handle: profile.handle,
-                  color: profile.avatarColor,
-                  userId: profile.userId,
-                });
-              }
+              ensureRosterForFriendRef.current(profile);
             }
           }
         }
@@ -312,7 +418,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [account, ensureProfilesCached, allPlayers, addPlayer]);
+  }, [accountUserId]);
 
   const searchHandle = useCallback(
     async (q: string): Promise<ProfileSummary[]> => {
@@ -368,31 +474,26 @@ export function SocialProvider({ children }: PropsWithChildren) {
       }
 
       // Auto-create a roster entry for the new friend so they show up in
-      // the Friends list immediately. We do NOT auto-merge any existing
-      // local roster entries — under Path 3a local players are an
-      // implementation detail with no merge-to-friend flow.
+      // the Friends list immediately. Idempotent: if the realtime
+      // `friendships` INSERT handler runs concurrently with this path,
+      // both call `ensureRosterForFriend` with the same profile and the
+      // deterministic `player-${userId}` id collapses the two calls into
+      // a single roster row (DB partial-unique index on
+      // `(owner_user_id, linked_user_id)` enforces the same invariant
+      // server-side). We do NOT auto-merge any existing local roster
+      // entries — under Path 3a local players are an implementation
+      // detail with no merge-to-friend flow.
       const newFriendProfile =
         profileCacheRef.current[req.fromUserId] ??
         (await ensureProfilesCached([req.fromUserId]))[req.fromUserId];
 
       if (newFriendProfile) {
-        const existing = allPlayers.find((p) => p.userId === newFriendProfile.userId);
-        if (!existing) {
-          const newId = `player-${newFriendProfile.userId}-${Date.now()}`;
-          addPlayer({
-            id: newId,
-            nickname: newFriendProfile.displayName,
-            displayName: newFriendProfile.displayName,
-            handle: newFriendProfile.handle,
-            color: newFriendProfile.avatarColor,
-            userId: newFriendProfile.userId,
-          });
-        }
+        ensureRosterForFriend(newFriendProfile);
       }
 
       return { newFriendUserId: req.fromUserId };
     },
-    [account, incomingRequests, allPlayers, addPlayer, ensureProfilesCached]
+    [account, incomingRequests, ensureProfilesCached, ensureRosterForFriend]
   );
 
   const declineIncomingRequest = useCallback(
@@ -434,7 +535,9 @@ export function SocialProvider({ children }: PropsWithChildren) {
       acceptIncomingRequest,
       declineIncomingRequest,
       ensureProfilesCached,
+      refreshFriendsAndRequests,
       hydrated,
+      syncing,
     }),
     [
       friends,
@@ -446,7 +549,9 @@ export function SocialProvider({ children }: PropsWithChildren) {
       acceptIncomingRequest,
       declineIncomingRequest,
       ensureProfilesCached,
+      refreshFriendsAndRequests,
       hydrated,
+      syncing,
     ]
   );
 

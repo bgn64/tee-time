@@ -70,3 +70,74 @@ describe('touch_updated_at', () => {
     expect(new Date(after).getTime()).toBeGreaterThan(new Date(before).getTime());
   });
 });
+
+// =============================================================================
+// Phase 1.4 — migration 018 partial-unique on roster_players.
+//
+// The dedupe + scorecard-rewrite half of the migration is best-tested by
+// re-running the migration against handcrafted duplicates, which would
+// require custom infrastructure to splice the SQL into the test setup
+// path. We instead pin the post-migration invariant directly: a second
+// insert into `(owner_user_id, linked_user_id)` is rejected with the
+// Postgres unique-violation code.
+// =============================================================================
+
+describe('roster_players partial-unique on (owner_user_id, linked_user_id)', () => {
+  test('a second linked roster row for the same friend is rejected with 23505', async () => {
+    const a = await createTestUser('a-roster-uniq');
+    const b = await createTestUser('b-roster-uniq');
+
+    // First insert succeeds.
+    const first = await admin.from('roster_players').insert({
+      owner_user_id: a.userId,
+      id: `player-${b.userId}`,
+      nickname: 'Bob',
+      color: '#42a5f5',
+      linked_user_id: b.userId,
+    });
+    expect(first.error).toBeNull();
+
+    // Second insert with a different `id` but the same
+    // (owner_user_id, linked_user_id) pair must collide on the partial
+    // unique index added by migration 018.
+    const second = await admin.from('roster_players').insert({
+      owner_user_id: a.userId,
+      id: `player-${b.userId}-${Date.now()}`,
+      nickname: 'Bob (dup)',
+      color: '#ab47bc',
+      linked_user_id: b.userId,
+    });
+    expect(second.error).not.toBeNull();
+    expect(second.error?.code).toBe('23505');
+  });
+
+  test('multiple UNLINKED rows under the same owner are still allowed', async () => {
+    const a = await createTestUser('a-unlinked-ok');
+
+    // Two distinct unlinked rows (linked_user_id IS NULL) — the partial
+    // index only covers the NOT-NULL subset, so these should coexist.
+    const first = await admin.from('roster_players').insert({
+      owner_user_id: a.userId,
+      id: 'player-local-1',
+      nickname: 'Local One',
+      color: '#42a5f5',
+      linked_user_id: null,
+    });
+    expect(first.error).toBeNull();
+
+    const second = await admin.from('roster_players').insert({
+      owner_user_id: a.userId,
+      id: 'player-local-2',
+      nickname: 'Local Two',
+      color: '#ab47bc',
+      linked_user_id: null,
+    });
+    expect(second.error).toBeNull();
+
+    const { data } = await admin
+      .from('roster_players')
+      .select('id')
+      .eq('owner_user_id', a.userId);
+    expect(data).toHaveLength(2);
+  });
+});

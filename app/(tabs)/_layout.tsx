@@ -19,7 +19,7 @@
 
 import React from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { Tabs } from 'expo-router';
+import { router, Tabs, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useSocial } from '@/state/SocialContext';
@@ -32,10 +32,56 @@ function TabBarIcon(props: {
   return <FontAwesome size={22} style={{ marginBottom: -3 }} {...props} />;
 }
 
+/**
+ * Phase 2.2 re-tap helper.
+ *
+ * Expo Router preserves per-tab stack state, so re-tapping the You/Rounds
+ * tab while already inside a nested child route does nothing visible. The
+ * `tabPress` listener returned here intercepts that re-tap and replaces
+ * the URL with the tab root, popping the stack to the landing screen.
+ *
+ * Detection uses `useSegments()` rather than `usePathname()` because the
+ * pathname is normalized — for example, `app/(tabs)/(rounds)/[id].tsx`
+ * resolves to `/<roundId>`, which is indistinguishable from any other
+ * single-segment top-level route. `useSegments()` keeps the route-group
+ * prefixes (e.g. `['(tabs)', '(rounds)', '[id]']`), so a check of
+ * `segments[1] === groupName && segments.length > 2` unambiguously
+ * identifies "user is on a child of this tab".
+ *
+ * The function is exported (and pure) so it can be unit-tested without
+ * mounting the navigator — see `components/__tests__/TabLayout.test.tsx`.
+ *
+ * NOTE: this is intentionally NOT applied to the Score tab. The
+ * `(score)/index.tsx` screen's `useFocusEffect` redirects to
+ * `/(tabs)/(score)/scoring` when an in-progress round is detected, and a
+ * tab-press-pop would race that redirect.
+ */
+export function makeTabRetapListener(
+  segments: readonly string[],
+  groupName: '(you)' | '(rounds)',
+): { tabPress: (e: { preventDefault: () => void }) => void } {
+  return {
+    tabPress: (e) => {
+      const onChild =
+        segments[0] === '(tabs)' &&
+        segments[1] === groupName &&
+        segments.length > 2;
+      if (!onChild) return;
+      e.preventDefault();
+      if (groupName === '(you)') {
+        router.replace('/(tabs)/(you)');
+      } else {
+        router.replace('/(tabs)/(rounds)');
+      }
+    },
+  };
+}
+
 export default function TabLayout() {
   const { colors } = useTheme();
   const { incomingRequests } = useSocial();
   const insets = useSafeAreaInsets();
+  const segments = useSegments() as readonly string[];
 
   const baseHeight = 60;
   const baseBottomPad = 8;
@@ -81,6 +127,7 @@ export default function TabLayout() {
           title: 'Rounds',
           tabBarIcon: ({ color }) => <TabBarIcon name="history" color={color} />,
         }}
+        listeners={() => makeTabRetapListener(segments, '(rounds)')}
       />
       <Tabs.Screen
         name="(you)"
@@ -98,6 +145,7 @@ export default function TabLayout() {
             marginTop: 2,
           },
         }}
+        listeners={() => makeTabRetapListener(segments, '(you)')}
       />
     </Tabs>
   );

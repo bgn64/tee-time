@@ -30,6 +30,7 @@ import {
 } from 'react-native';
 
 import { HoleDetailSheet } from '@/components/HoleDetailSheet';
+import { newCourseId } from '@/lib/ids';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { useTheme } from '@/state/ThemeContext';
@@ -151,10 +152,7 @@ export default function CourseFormScreen() {
       });
       setPendingSelectedCourseId(editingCourse.id);
     } else {
-      // Prefixed namespace avoids collisions with catalog ids like
-      // 'opengolf:<uuid>'. Math.random() suffix added for uniqueness if
-      // the user creates two courses in the same millisecond.
-      const newId = `custom:${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const newId = newCourseId();
       addCourse({
         id: newId,
         name: name.trim(),
