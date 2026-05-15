@@ -91,7 +91,7 @@ function renderRight(right: ReturnType<typeof useHeaderSlots>['right'], styles: 
   // menu. Now a settings gear that pushes the Settings screen. Any
   // caller-supplied onPress still wins (no current caller uses it but
   // the option stays in the type for future flexibility).
-  const onPress = right.onPress ?? (() => router.push('/(tabs)/(you)/settings'));
+  const onPress = right.onPress ?? (() => router.push('/settings'));
   return (
     <Pressable
       onPress={onPress}

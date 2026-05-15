@@ -146,6 +146,7 @@ function RootLayoutNav() {
           <Stack.Screen name="auth" />
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="onboarding" />
+          <Stack.Screen name="settings" />
         </Stack>
       </View>
     </View>

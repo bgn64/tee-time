@@ -48,7 +48,7 @@ export default function AccountScreen() {
   }, [account?.displayName]);
 
   useScreenHeader({
-    left: { kind: 'back', label: 'You', onPress: () => router.back() },
+    left: { kind: 'back', label: 'Settings', onPress: () => router.back() },
     right: { kind: 'profile' },
   });
 

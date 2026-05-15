@@ -95,14 +95,14 @@ export default function SettingsScreen() {
           icon="🎨"
           label="Theme"
           subtitle={themeLabel}
-          onPress={() => router.push('/(tabs)/(you)/theme')}
+          onPress={() => router.push('/settings/theme')}
         />
         <SettingsRow
           styles={styles}
           icon="🔔"
           label="Notifications"
           subtitle="Reminders &amp; activity"
-          onPress={() => router.push('/(tabs)/(you)/notifications')}
+          onPress={() => router.push('/settings/notifications')}
         />
         <SettingsRow
           styles={styles}
@@ -121,7 +121,7 @@ export default function SettingsScreen() {
           icon="ⓘ"
           label="About"
           subtitle="Version, credits, &amp; data sources"
-          onPress={() => router.push('/(tabs)/(you)/about')}
+          onPress={() => router.push('/settings/about')}
         />
         <SettingsRow
           styles={styles}
@@ -142,7 +142,7 @@ export default function SettingsScreen() {
               icon="👤"
               label="Account details"
               subtitle={`@${account.handle}`}
-              onPress={() => router.push('/(tabs)/(you)/account')}
+              onPress={() => router.push('/settings/account')}
             />
             <SettingsRow
               styles={styles}
