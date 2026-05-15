@@ -47,7 +47,7 @@ export default function FeedScreen() {
   const { account } = useAccount();
   const { friends, profileCache, refreshFriendsAndRequests } = useSocial();
   const { completedRounds, liveRounds, refreshScorecards } = useGolfRound();
-  const { allPlayers, getPlayer } = usePlayers();
+  const { allPlayers } = usePlayers();
   const { show: toastShow } = useToast();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -198,9 +198,7 @@ export default function FeedScreen() {
         <FeedCardLarge
           key={round.id}
           round={round}
-          myUserId={account?.userId}
           allPlayers={allPlayers}
-          getPlayer={getPlayer}
           profileCache={profileCache}
         />
       ))}

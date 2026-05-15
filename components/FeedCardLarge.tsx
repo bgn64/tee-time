@@ -1,21 +1,23 @@
 /**
  * FeedCardLarge — big social-style card used on the Feed tab.
  *
- * Layout faithful to mockup B:
+ * Layout faithful to the May 2026 scorecard-uniformity pass:
  *
  *   ┌──── colored band (owner's avatar_color gradient) ─────────┐
  *   │ <Course Name>           (big)                             │
  *   │ <City, State>           (small)                           │
- *   │                                                           │
+ *   │ [STROKE/SCRAMBLE] [FRONT 9?]                              │  ← format pill
  *   │ <handle> · <relative time>          <Strokes> <±score>    │
  *   └───────────────────────────────────────────────────────────┘
- *   pill row: STROKE/SCRAMBLE  · FRONT 9/BACK 9?  · tee swatches?
- *   caption?    (only when round.caption is set)
- *   ──── WITH / PLAYED / TEAMS · names / "solo round" ────
- *   compact ReadOnlyScorecard (owner's row only, no yardage, no HCP)
+ *   ReadOnlyScorecard (with finals)
  *
- * No tap-through; the card is self-contained. Optional fields are
- * silently skipped when missing.
+ * The format pill moved up into the band header so the card matches
+ * the scoring + round-detail screens visually. The old tee swatch row,
+ * caption, and "With/Played/Teams" row were removed in the same pass
+ * to keep the card uncluttered — the scorecard + finals carry the
+ * informational load now.
+ *
+ * No tap-through; the card is self-contained.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
@@ -29,7 +31,7 @@ import {
   getRoundTotalRelative,
 } from '@/lib/scoring';
 import { useTheme } from '@/state/ThemeContext';
-import type { Player, Round, RoundParticipant } from '@/types/golf';
+import type { Player, Round } from '@/types/golf';
 
 type ProfileCacheEntry = {
   displayName: string;
@@ -40,9 +42,7 @@ type ProfileCacheEntry = {
 
 type Props = {
   round: Round;
-  myUserId?: string;
   allPlayers: Player[];
-  getPlayer: (id: string) => Player | undefined;
   profileCache: Record<string, ProfileCacheEntry>;
 };
 
@@ -73,24 +73,9 @@ function shade(hex: string, amount: number): string {
   return `#${hh(r)}${hh(g)}${hh(b)}`;
 }
 
-function teeSwatchColor(name: string | undefined, color: string | undefined): string {
-  if (color && /^#[0-9a-f]{3,8}$/i.test(color)) return color;
-  const key = (name ?? '').toLowerCase();
-  if (key.includes('black')) return '#000000';
-  if (key.includes('blue')) return '#1a73e8';
-  if (key.includes('white')) return '#ffffff';
-  if (key.includes('gold') || key.includes('yellow')) return '#fdd835';
-  if (key.includes('red')) return '#e53935';
-  if (key.includes('green')) return '#388e3c';
-  if (key.includes('burgundy') || key.includes('maroon')) return '#7b1d3a';
-  return '#9e9e9e';
-}
-
 export function FeedCardLarge({
   round,
-  myUserId,
   allPlayers,
-  getPlayer,
   profileCache,
 }: Props) {
   const { colors } = useTheme();
@@ -113,7 +98,7 @@ export function FeedCardLarge({
 
   const isScramble = round.scoringRule === 'scramble';
 
-  // ---- Owner-perspective scorer (used for score chip + scorecard row) ----
+  // ---- Owner-perspective scorer (used for the band score chip) ----
   const ownerParticipant = (round.participants ?? []).find(
     (p) => p.linkedUserId === round.ownerUserId
   );
@@ -121,7 +106,7 @@ export function FeedCardLarge({
     ? ownerParticipant?.teamId
     : ownerParticipant?.participantKey;
 
-  // Total strokes + relative to par from the viewer-perspective scorer.
+  // Total strokes + relative to par from the owner-perspective scorer.
   const totalRel = ownerScorerId
     ? getRoundTotalRelative(round, ownerScorerId)
     : getRoundTotalRelative(round);
@@ -131,7 +116,6 @@ export function FeedCardLarge({
       if (ownerScorerId && s.scorerId !== ownerScorerId) continue;
       const hole = round.course.holes.find((h) => h.number === s.holeNumber);
       if (!hole) continue;
-      // Honor hole-range filtering.
       if (round.holeRange === 'front9' && s.holeNumber > 9) continue;
       if (round.holeRange === 'back9' && s.holeNumber <= 9) continue;
       sum += s.strokes;
@@ -142,96 +126,9 @@ export function FeedCardLarge({
   const dateLabel = formatRelativeTime(round.completedAt ?? round.startedAt);
   const location = round.course.location;
 
-  // ---- Pills ----
   const showRangePill = round.holeRange !== 'all';
   const rangePillLabel =
     round.holeRange === 'front9' ? 'FRONT 9' : round.holeRange === 'back9' ? 'BACK 9' : '';
-
-  type TeeChip = { id: string; name: string; color: string };
-  const teesInPlay: TeeChip[] = useMemo(() => {
-    const teeIds = new Set<string>();
-    for (const p of round.participants ?? []) {
-      if (p.teeId) teeIds.add(p.teeId);
-    }
-    if (teeIds.size === 0) return [];
-    const out: TeeChip[] = [];
-    for (const tee of round.course.tees ?? []) {
-      if (!teeIds.has(tee.id)) continue;
-      out.push({
-        id: tee.id,
-        name: tee.name,
-        color: teeSwatchColor(tee.name, tee.color),
-      });
-    }
-    return out;
-  }, [round.participants, round.course.tees]);
-
-  // ---- With / Played / Teams line ----
-  const resolveParticipantName = (p: RoundParticipant): string => {
-    if (p.linkedUserId) {
-      if (myUserId && p.linkedUserId === myUserId) return 'you';
-      const prof = profileCache[p.linkedUserId];
-      if (prof) return prof.displayName;
-      const rosterMatch = getPlayer(p.participantKey);
-      return rosterMatch?.displayName ?? rosterMatch?.nickname ?? 'Friend';
-    }
-    return p.localDisplayName ?? 'Player';
-  };
-  const resolveParticipantColor = (p: RoundParticipant): string => {
-    if (p.linkedUserId) {
-      const prof = profileCache[p.linkedUserId];
-      if (prof) return prof.avatarColor;
-      const rosterMatch = getPlayer(p.participantKey);
-      return rosterMatch?.color ?? colors.primary;
-    }
-    return p.localDisplayColor ?? colors.primary;
-  };
-
-  const otherParticipants = (round.participants ?? []).filter(
-    (p) => p.linkedUserId !== round.ownerUserId
-  );
-
-  let companyLabel: string;
-  let companyBody: React.ReactNode;
-  if (isScramble && round.teams && round.teams.length > 1) {
-    companyLabel = 'Teams';
-    companyBody = (
-      <Text style={styles.companyText} numberOfLines={2}>
-        {round.teams.map((t) => t.name).join(' vs. ')}
-      </Text>
-    );
-  } else if (otherParticipants.length === 0) {
-    companyLabel = 'Played';
-    companyBody = <Text style={styles.companyText}>solo round</Text>;
-  } else {
-    companyLabel = 'With';
-    const names = otherParticipants.map(resolveParticipantName);
-    companyBody = (
-      <>
-        <View style={styles.companyAvatars}>
-          {otherParticipants.slice(0, 4).map((p, i) => (
-            <View
-              key={p.participantKey}
-              style={[
-                styles.companyAvatar,
-                {
-                  backgroundColor: resolveParticipantColor(p),
-                  marginLeft: i === 0 ? 0 : -6,
-                  borderColor: colors.cardBg,
-                },
-              ]}>
-              <Text style={styles.companyAvatarText}>
-                {resolveParticipantName(p)[0]?.toUpperCase()}
-              </Text>
-            </View>
-          ))}
-        </View>
-        <Text style={styles.companyText} numberOfLines={2}>
-          {names.join(', ')}
-        </Text>
-      </>
-    );
-  }
 
   // Band gradient stops from owner color.
   const gradientStart = shade(ownerColor, -0.22);
@@ -252,6 +149,18 @@ export function FeedCardLarge({
             {location}
           </Text>
         ) : null}
+        <View style={styles.bandPillRow}>
+          <View style={styles.bandPill}>
+            <Text style={styles.bandPillText}>
+              {isScramble ? 'SCRAMBLE' : 'STROKE'}
+            </Text>
+          </View>
+          {showRangePill ? (
+            <View style={styles.bandPill}>
+              <Text style={styles.bandPillText}>{rangePillLabel}</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.bandBottomRow}>
           <Text style={styles.bandByLine} numberOfLines={1}>
             {ownerHandle} · {dateLabel}
@@ -267,48 +176,11 @@ export function FeedCardLarge({
         </View>
       </LinearGradient>
 
-      <View style={styles.body}>
-        <View style={styles.pillsRow}>
-          <View style={[styles.pill, styles.pillAccent]}>
-            <Text style={styles.pillAccentText}>
-              {isScramble ? 'SCRAMBLE' : 'STROKE'}
-            </Text>
-          </View>
-          {showRangePill ? (
-            <View style={styles.pill}>
-              <Text style={styles.pillText}>{rangePillLabel}</Text>
-            </View>
-          ) : null}
-          {teesInPlay.map((tee) => (
-            <View key={tee.id} style={styles.pill}>
-              <View
-                style={[
-                  styles.teeSwatch,
-                  {
-                    backgroundColor: tee.color,
-                    borderColor:
-                      tee.color.toLowerCase() === '#ffffff' ? colors.border : 'transparent',
-                  },
-                ]}
-              />
-              <Text style={styles.pillText}>{tee.name}</Text>
-            </View>
-          ))}
+      {round.scores.length > 0 ? (
+        <View style={styles.body}>
+          <ReadOnlyScorecard round={round} />
         </View>
-
-        {round.caption ? <Text style={styles.caption}>{round.caption}</Text> : null}
-
-        <View style={styles.companyRow}>
-          <Text style={styles.companyLabel}>{companyLabel}</Text>
-          {companyBody}
-        </View>
-
-        {round.scores.length > 0 ? (
-          <View style={styles.scorecardWrap}>
-            <ReadOnlyScorecard round={round} hideFinalTotals />
-          </View>
-        ) : null}
-      </View>
+      ) : null}
     </View>
   );
 }
@@ -342,12 +214,34 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginTop: 2,
       fontWeight: '500',
     },
+    bandPillRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      marginTop: 10,
+    },
+    // Pills rendered on the gradient band — semi-transparent white so
+    // they read on any owner color. Matches the visual weight of the
+    // chipBg/primaryDark pill used on the scoring + round-detail
+    // screens (where the surface is plain white).
+    bandPill: {
+      backgroundColor: 'rgba(255,255,255,0.22)',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    bandPillText: {
+      fontSize: 9.5,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      color: '#ffffff',
+    },
     bandBottomRow: {
       flexDirection: 'row',
       alignItems: 'flex-end',
       justifyContent: 'space-between',
       gap: 12,
-      marginTop: 14,
+      marginTop: 12,
     },
     bandByLine: {
       flex: 1,
@@ -375,93 +269,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     // ---- Body ----
     body: {
       paddingHorizontal: 16,
-      paddingTop: 12,
+      paddingTop: 14,
       paddingBottom: 14,
-    },
-    pillsRow: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 6,
-    },
-    pill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      backgroundColor: colors.chipBg,
-      paddingHorizontal: 9,
-      paddingVertical: 4,
-      borderRadius: 6,
-    },
-    pillText: {
-      fontSize: 10.5,
-      fontWeight: '800',
-      letterSpacing: 0.4,
-      color: colors.textTitle,
-    },
-    pillAccent: {
-      backgroundColor: colors.primary,
-    },
-    pillAccentText: {
-      fontSize: 10.5,
-      fontWeight: '800',
-      letterSpacing: 0.4,
-      color: '#ffffff',
-    },
-    teeSwatch: {
-      width: 9,
-      height: 9,
-      borderRadius: 2,
-      borderWidth: 1,
-    },
-
-    caption: {
-      marginTop: 12,
-      fontSize: 14,
-      color: colors.textBody,
-      lineHeight: 19,
-    },
-
-    companyRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      marginTop: 14,
-    },
-    companyLabel: {
-      fontSize: 10,
-      fontWeight: '800',
-      letterSpacing: 0.6,
-      color: colors.textMuted,
-      textTransform: 'uppercase',
-    },
-    companyAvatars: {
-      flexDirection: 'row',
-    },
-    companyAvatar: {
-      width: 22,
-      height: 22,
-      borderRadius: 11,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1.5,
-    },
-    companyAvatarText: {
-      color: '#ffffff',
-      fontSize: 9,
-      fontWeight: '800',
-    },
-    companyText: {
-      flex: 1,
-      fontSize: 13,
-      color: colors.textBody,
-      fontWeight: '600',
-    },
-
-    scorecardWrap: {
-      marginTop: 14,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
     },
   });
 }
