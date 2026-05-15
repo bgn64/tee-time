@@ -53,3 +53,5 @@ docs/*
 dist/
 .vercel
 logs.txt
+
+.commit-msg.tmp

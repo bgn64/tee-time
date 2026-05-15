@@ -283,8 +283,22 @@ export class WriteQueue {
     this.client = client;
   }
 
+  /**
+   * Lazy hydration trigger. Called from the public entry points (enqueue,
+   * flush, setAccountReady) so we never touch AsyncStorage during web SSR
+   * — it's only invoked after a real action happens on a client. Safe to
+   * call repeatedly; `hydrate()` short-circuits if already hydrated or in
+   * flight.
+   */
+  private ensureHydrated(): void {
+    if (!this.hydrated && !this.hydrating) {
+      void this.hydrate();
+    }
+  }
+
   setAccountReady(ready: boolean): void {
     this.accountReady = ready;
+    this.ensureHydrated();
     if (ready) this.maybeReplay();
   }
 
@@ -301,6 +315,7 @@ export class WriteQueue {
   // -----------------------------------------------------------------------
 
   enqueue(entry: EnqueueInput): void {
+    this.ensureHydrated();
     const newEntry: QueueEntry = {
       id: nextEntryId(),
       table: entry.table,
@@ -393,6 +408,7 @@ export class WriteQueue {
   // -----------------------------------------------------------------------
 
   async flush(): Promise<FlushResult> {
+    this.ensureHydrated();
     if (this.flushing) {
       // Coalesce overlapping flush requests — the in-progress call will
       // re-loop once the current pass completes.
@@ -602,11 +618,15 @@ export class WriteQueue {
  * for the same id — not currently a real path, but a property worth
  * preserving).
  *
- * Auto-hydrates on import. Wraps the default supabase client.
+ * Auto-hydration is **deferred** until first use. We do NOT call
+ * `hydrate()` at module load because Expo Router's web SSR pass evaluates
+ * every module in a Node context where `window` (and therefore
+ * `AsyncStorage`) is unavailable. Instead, `enqueue()`, `flush()`, and
+ * `setAccountReady()` call `ensureHydrated()` lazily — those are only
+ * ever invoked after the React tree mounts on a real client.
  */
 export const writeQueue: WriteQueue = new WriteQueue();
 writeQueue.setSupabaseClient(defaultSupabase);
-void writeQueue.hydrate();
 
 /** Public helper for explicit manual recovery (UI debug buttons, tests). */
 export async function flushWriteQueue(): Promise<FlushResult> {
