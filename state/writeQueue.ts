@@ -50,8 +50,7 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const AppState = require('react-native/Libraries/AppState/AppState').default;
+import { AppState } from 'react-native';
 
 import { supabase as defaultSupabase } from '@/state/supabaseClient';
 
