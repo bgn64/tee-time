@@ -2,6 +2,7 @@ import {
   buildAvatarEntries,
   groupByTeam,
   makeRosterResolver,
+  resolveTeeSwatch,
   truncateEntries,
 } from '@/lib/avatars';
 import type { Player, Round, RoundParticipant, Team, Tee } from '@/types/golf';
@@ -93,6 +94,30 @@ describe('makeRosterResolver', () => {
   });
 });
 
+describe('resolveTeeSwatch', () => {
+  test('canonical named color resolves via TEE_COLOR_HEX', () => {
+    expect(resolveTeeSwatch({ id: 't', name: 'Blue' })).toBe('#4a90e2');
+    expect(resolveTeeSwatch({ id: 't', name: 'Red' })).toBe('#d54848');
+    expect(resolveTeeSwatch({ id: 't', name: 'White' })).toBe('#ddd6c4');
+  });
+
+  test('explicit hex color is preserved when not in the canonical map', () => {
+    expect(resolveTeeSwatch({ id: 't', name: 'Custom', color: '#abcdef' })).toBe('#abcdef');
+  });
+
+  test('explicit named color overrides the tee name', () => {
+    expect(resolveTeeSwatch({ id: 't', name: 'Forward', color: 'red' })).toBe('#d54848');
+  });
+
+  test('unknown name + no color returns undefined (caller skips chip)', () => {
+    expect(resolveTeeSwatch({ id: 't', name: 'Champions' })).toBeUndefined();
+  });
+
+  test('undefined input is safe', () => {
+    expect(resolveTeeSwatch(undefined)).toBeUndefined();
+  });
+});
+
 describe('buildAvatarEntries — stroke', () => {
   test('one AvatarEntry per participant with tee fields resolved', () => {
     const round = makeRound({
@@ -111,6 +136,8 @@ describe('buildAvatarEntries — stroke', () => {
       name: 'Mike',
       color: '#4a90e2',
       teeId: 'tee-blue',
+      // The tee.color "#1e90ff" isn't in TEE_COLOR_HEX, but it starts
+      // with '#' so resolveTeeSwatch keeps it as-is.
       teeColor: '#1e90ff',
       teeName: 'Blue',
     });

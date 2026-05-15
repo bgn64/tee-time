@@ -68,30 +68,6 @@ function getRoundEndDate(round: Round): Date {
   return new Date(round.completedAt ?? round.startedAt);
 }
 
-/**
- * Pick black or white text for legibility on top of an arbitrary tee
- * color swatch. Used for the small tee chip below each avatar. Falls
- * back to white when the color is missing or unparseable.
- */
-function contrastTextColor(bg: string | undefined): string {
-  if (!bg) return '#ffffff';
-  const m = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i.exec(bg.trim());
-  if (!m) return '#ffffff';
-  let hex = m[1];
-  if (hex.length === 3) {
-    hex = hex
-      .split('')
-      .map((c) => c + c)
-      .join('');
-  }
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  // Perceptual luminance — switch threshold at ~mid-gray.
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? '#111111' : '#ffffff';
-}
-
 function rangeLabel(r: RoundsFilters['range']): string {
   if (r === 'all') return '18 holes';
   if (r === 'front9') return 'Front 9';
@@ -407,66 +383,71 @@ export default function RoundsListScreen() {
                     </View>
                     <View style={styles.cardBottom}>
                       <View style={styles.avatars}>
-                        {teamGroups.map((tg, gi) => (
-                          <View
-                            key={tg.teamId ?? `solo-${gi}`}
-                            style={[
-                              styles.teamGroup,
-                              isScramble && tg.teamColor
-                                ? {
-                                    borderBottomColor: tg.teamColor,
-                                    borderBottomWidth: 2,
-                                  }
-                                : null,
-                              gi > 0 ? styles.teamGroupGap : null,
-                            ]}>
-                            {tg.members.map((entry, i) => (
-                              <View
-                                key={entry.participantKey}
-                                style={[
-                                  styles.avatarWrap,
-                                  i === 0 ? { marginLeft: 0 } : null,
-                                  { zIndex: 10 - i },
-                                ]}>
-                                <View
-                                  style={[
-                                    styles.avatar,
-                                    {
-                                      backgroundColor: entry.color,
-                                      borderColor: colors.cardBg,
-                                    },
-                                  ]}>
-                                  <Text style={styles.avatarText}>
-                                    {entry.name[0]?.toUpperCase()}
-                                  </Text>
-                                </View>
-                                {entry.teeColor || entry.teeName ? (
+                        {teamGroups.map((tg, gi) => {
+                          // In scramble every team member shares the same
+                          // teeId by construction (the format screen expands
+                          // a per-team selection to each member at
+                          // startRound). In stroke each "team-of-one" carries
+                          // its own tee. Either way, `members[0]` gives us
+                          // the right tee for the pill.
+                          const sampleEntry = tg.members[0];
+                          const teeColor = sampleEntry?.teeColor;
+                          const teeName = sampleEntry?.teeName;
+                          const showTee = !!(teeColor || teeName);
+                          return (
+                            <View
+                              key={tg.teamId ?? `solo-${gi}`}
+                              style={[
+                                styles.teamGroup,
+                                gi > 0 ? styles.teamGroupGap : null,
+                              ]}>
+                              <View style={styles.cluster}>
+                                {tg.members.map((entry, i) => (
+                                  <View
+                                    key={entry.participantKey}
+                                    style={[
+                                      styles.avatarWrap,
+                                      i === 0 ? styles.avatarWrapFirst : null,
+                                      // Rightmost avatar on top: later
+                                      // siblings get higher zIndex.
+                                      { zIndex: i + 1 },
+                                    ]}>
+                                    <View
+                                      style={[
+                                        styles.avatar,
+                                        {
+                                          backgroundColor: entry.color,
+                                          borderColor: colors.cardBg,
+                                        },
+                                      ]}>
+                                      <Text style={styles.avatarText}>
+                                        {entry.name[0]?.toUpperCase()}
+                                      </Text>
+                                    </View>
+                                  </View>
+                                ))}
+                              </View>
+                              {showTee ? (
+                                <View style={styles.teePill}>
                                   <View
                                     style={[
-                                      styles.teeChip,
+                                      styles.teePillDot,
                                       {
                                         backgroundColor:
-                                          entry.teeColor ?? colors.chipBg,
+                                          teeColor ?? colors.chipBg,
                                       },
-                                    ]}>
-                                    <Text
-                                      style={[
-                                        styles.teeChipText,
-                                        {
-                                          color: contrastTextColor(
-                                            entry.teeColor
-                                          ),
-                                        },
-                                      ]}
-                                      numberOfLines={1}>
-                                      {(entry.teeName ?? '').slice(0, 3).toUpperCase()}
-                                    </Text>
-                                  </View>
-                                ) : null}
-                              </View>
-                            ))}
-                          </View>
-                        ))}
+                                    ]}
+                                  />
+                                  <Text
+                                    style={styles.teePillText}
+                                    numberOfLines={1}>
+                                    {teeName ?? ''}
+                                  </Text>
+                                </View>
+                              ) : null}
+                            </View>
+                          );
+                        })}
                         {hiddenCount > 0 ? (
                           <View style={styles.overflowChip}>
                             <Text style={styles.overflowChipText}>{`+${hiddenCount}`}</Text>
@@ -683,60 +664,79 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexShrink: 1,
     },
     teamGroup: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      paddingBottom: 3,
+      // Per-team stacking: avatars on top row, tee pill (if any) below.
+      // Pill-below pattern (Option C from the May 2026 mockups).
+      flexDirection: 'column',
+      alignItems: 'center',
     },
     teamGroupGap: {
-      marginLeft: 10,
+      marginLeft: 14,
+    },
+    cluster: {
+      flexDirection: 'row',
+      alignItems: 'center',
     },
     avatarWrap: {
-      alignItems: 'center',
-      width: 28,
-      marginLeft: -6,
+      // Negative marginLeft creates the overlap; the rightmost item gets
+      // the highest zIndex (set inline at render time) so it appears on top.
+      marginLeft: -10,
+    },
+    avatarWrapFirst: {
+      marginLeft: 0,
     },
     avatar: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 2,
     },
     avatarText: {
       color: '#ffffff',
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: '800',
     },
-    teeChip: {
-      marginTop: 2,
-      height: 10,
-      minWidth: 22,
-      borderRadius: 5,
-      paddingHorizontal: 3,
+    teePill: {
+      flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
+      gap: 4,
+      paddingLeft: 4,
+      paddingRight: 7,
+      paddingVertical: 1,
+      borderRadius: 999,
+      backgroundColor: colors.chipBg,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
+      marginTop: 4,
     },
-    teeChipText: {
-      fontSize: 8,
-      fontWeight: '800',
-      letterSpacing: 0.3,
+    teePillDot: {
+      width: 9,
+      height: 9,
+      borderRadius: 4.5,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: 'rgba(0,0,0,0.18)',
+    },
+    teePillText: {
+      fontSize: 9.5,
+      fontWeight: '700',
+      color: colors.textMuted,
+      letterSpacing: 0.2,
     },
     overflowChip: {
-      width: 24,
-      height: 24,
-      borderRadius: 12,
+      width: 28,
+      height: 28,
+      borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 2,
       borderColor: colors.cardBg,
       backgroundColor: colors.chipBg,
-      marginLeft: -6,
+      marginLeft: -10,
+      alignSelf: 'flex-start',
     },
     overflowChipText: {
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: '800',
       color: colors.textMuted,
     },

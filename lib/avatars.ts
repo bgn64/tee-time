@@ -24,6 +24,37 @@ import type { Player, Round, RoundParticipant, Tee } from '@/types/golf';
 
 export const MAX_AVATAR_INDIVIDUALS = 4;
 
+/**
+ * Canonical tee-color hex map. Mirrors the same names used by the tee
+ * picker UI (`components/TeePickerSheet.tsx`). Some upstream catalog data
+ * stores tee colors as named strings (e.g. "blue", "white") instead of
+ * hex, so we resolve both. Keys are lowercased.
+ */
+const TEE_COLOR_HEX: Record<string, string> = {
+  black: '#1a1a1a',
+  blue: '#4a90e2',
+  white: '#ddd6c4',
+  gold: '#c9a64a',
+  red: '#d54848',
+  green: '#7cb342',
+  yellow: '#f5d020',
+  burgundy: '#722f37',
+};
+
+/** Resolve a `Tee` row to its rendered swatch color. Returns undefined
+ *  when neither the explicit `color` field nor the tee name maps to a
+ *  known color — callers should render no chip in that case. */
+export function resolveTeeSwatch(tee: Tee | undefined): string | undefined {
+  if (!tee) return undefined;
+  if (tee.color) {
+    const known = TEE_COLOR_HEX[tee.color.toLowerCase()];
+    if (known) return known;
+    if (tee.color.startsWith('#')) return tee.color;
+  }
+  const byName = TEE_COLOR_HEX[tee.name.toLowerCase()];
+  return byName;
+}
+
 export type AvatarEntry = {
   /** Stable key for React lists; the participant's `participantKey`. */
   participantKey: string;
@@ -128,7 +159,7 @@ export function buildAvatarEntries(
       name: identity.name,
       color: identity.color,
       teeId: p.teeId,
-      teeColor: tee?.color,
+      teeColor: resolveTeeSwatch(tee),
       teeName: tee?.name,
       teamId: isScramble ? p.teamId : undefined,
       teamColor: team?.color,
