@@ -178,7 +178,7 @@ function RootLayoutNav() {
       <View style={styles.content}>
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="auth" />
+          <Stack.Screen name="auth/confirm" />
           <Stack.Screen name="sign-in" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="settings" />
