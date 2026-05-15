@@ -31,15 +31,27 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { AvatarMember, TeamAvatarCluster } from '@/components/TeamAvatarCluster';
 import { resolveParticipantIdentity } from '@/lib/participantIdentity';
 import { formatScore } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
-import { Hole, Round, RoundScore } from '@/types/golf';
+import { Hole, Round, RoundParticipant, RoundScore } from '@/types/golf';
 
-type Scorer = { id: string; name: string; color: string; teeId?: string };
+type Scorer = {
+  id: string;
+  name: string;
+  color: string;
+  teeId?: string;
+  /**
+   * Avatar cluster members for this scorer's left-column / final-row
+   * cluster. Stroke = one entry (the scorer themself); scramble = one
+   * entry per team member, in `round.participants` order.
+   */
+  members: AvatarMember[];
+};
 
 type Props = {
   round: Round;
@@ -138,59 +150,77 @@ export function ReadOnlyScorecard({
   );
 
   const scorers: Scorer[] = useMemo(() => {
+    // Resolve one participant to {id, name, color}. Shared between the
+    // stroke scorers path (one scorer = one participant) and the
+    // scramble team-members path (each team is composed of multiple
+    // participants). Mirrors the linked-vs-local + roster-fallback
+    // logic used by the existing scorer rendering.
+    const resolveMember = (p: RoundParticipant): AvatarMember => {
+      const identity = resolveParticipantIdentity(p, {
+        account,
+        profileCache,
+        allPlayers,
+      });
+      const isMe = !!account?.userId && p.linkedUserId === account.userId;
+      let displayName: string;
+      let color: string | undefined;
+      if (isMe) {
+        displayName = 'You';
+        color = identity.color;
+      } else if (p.linkedUserId || p.localDisplayName) {
+        displayName = identity.displayName;
+        color = identity.color;
+      } else {
+        const roster = allPlayers.find((q) => q.id === p.participantKey);
+        displayName =
+          roster?.displayName ?? roster?.nickname ?? identity.displayName;
+        color = roster?.color ?? identity.color;
+      }
+      return {
+        id: p.participantKey,
+        name: displayName,
+        color: color ?? colors.primary,
+      };
+    };
+
     let raw: Scorer[];
     if (isScramble && round.teams) {
-      raw = round.teams.map((t) => ({
-        id: t.id,
-        name: t.name,
-        color: t.color,
-        teeId: teamTeeIdByTeamId.get(t.id),
-      }));
+      raw = round.teams.map((t) => {
+        const teamMembers = (round.participants ?? [])
+          .filter((p) => p.teamId === t.id)
+          .map(resolveMember);
+        return {
+          id: t.id,
+          name: t.name,
+          color: t.color,
+          teeId: teamTeeIdByTeamId.get(t.id),
+          members: teamMembers,
+        };
+      });
     } else if (round.participants && round.participants.length > 0) {
       raw = round.participants.map((p) => {
-        const identity = resolveParticipantIdentity(p, {
-          account,
-          profileCache,
-          allPlayers,
-        });
-        const isMe = !!account?.userId && p.linkedUserId === account.userId;
-        // During live scoring `participants[]` is seeded with only
-        // `{ participantKey, teeId?, teamId? }` — no linkedUserId and no
-        // localDisplayName snapshot until the round is completed. In
-        // that case resolveParticipantIdentity returns the generic
-        // "Player" string. Fall back to the local roster by
-        // participantKey so the real name renders mid-round too.
-        let displayName: string;
-        let color: string | undefined;
-        if (isMe) {
-          displayName = 'You';
-          color = identity.color;
-        } else if (p.linkedUserId || p.localDisplayName) {
-          displayName = identity.displayName;
-          color = identity.color;
-        } else {
-          const roster = allPlayers.find((q) => q.id === p.participantKey);
-          displayName =
-            roster?.displayName ?? roster?.nickname ?? identity.displayName;
-          color = roster?.color ?? identity.color;
-        }
+        const member = resolveMember(p);
         return {
           id: p.participantKey,
-          name: displayName,
-          color: color ?? colors.primary,
+          name: member.name,
+          color: member.color,
           teeId: p.teeId,
+          members: [member],
         };
       });
     } else {
       raw = (round.playerIds ?? []).map((pid) => {
         const local = allPlayers.find((p) => p.id === pid);
         const isMe = !!local?.userId && account?.userId === local.userId;
+        const name = isMe
+          ? 'You'
+          : local?.displayName ?? local?.nickname ?? 'Player';
+        const color = local?.color ?? colors.primary;
         return {
           id: pid,
-          name: isMe
-            ? 'You'
-            : local?.displayName ?? local?.nickname ?? 'Player',
-          color: local?.color ?? colors.primary,
+          name,
+          color,
+          members: [{ id: pid, name, color }],
         };
       });
     }
@@ -275,6 +305,7 @@ export function ReadOnlyScorecard({
         teesInPlay={teesInPlay}
         courseTees={round.course.tees ?? []}
         showHcp={hasHcp}
+        ringColor={colors.cardBg}
       />
       {!hideFinalTotals && (
         <View style={{ marginTop: 14 }}>
@@ -283,6 +314,7 @@ export function ReadOnlyScorecard({
             allHoles={round.course.holes}
             scorers={scorers}
             scores={round.scores}
+            ringColor={colors.cardBg}
           />
         </View>
       )}
@@ -308,6 +340,9 @@ type SectionProps = {
   courseTees: Array<{ id: string; name: string; color?: string }>;
   /** Whether to render the HCP row (suppressed when no hole carries handicap_index). */
   showHcp: boolean;
+  /** Background color for the scorer-avatar ring; pass the surface the
+   *  row sits on so the ring blends with the card. */
+  ringColor: string;
 };
 
 function NineSection({
@@ -321,6 +356,7 @@ function NineSection({
   teesInPlay,
   courseTees,
   showHcp,
+  ringColor,
 }: SectionProps) {
   const parTotal = holes.reduce((t, h) => t + h.par, 0);
 
@@ -475,11 +511,11 @@ function NineSection({
                 styles.cellName,
                 scorerTee && styles.cellNameWithBar,
               ]}>
-              <Text
-                style={{ color: scorer.color, fontSize: 11, fontWeight: '700' }}
-                numberOfLines={1}>
-                {scorer.name}
-              </Text>
+              <TeamAvatarCluster
+                members={scorer.members}
+                size="sm"
+                ringColor={ringColor}
+              />
             </View>
             {cells.map((c, i) => {
               const holeNumber = holes[i].number;
@@ -540,9 +576,12 @@ type FinalProps = {
   allHoles: Hole[];
   scorers: Scorer[];
   scores: RoundScore[];
+  /** Background color for the scorer-avatar ring; pass the surface the
+   *  row sits on so the ring blends with the card. */
+  ringColor: string;
 };
 
-function FinalTotals({ styles, allHoles, scorers, scores }: FinalProps) {
+function FinalTotals({ styles, allHoles, scorers, scores, ringColor }: FinalProps) {
   const parTotal = allHoles.reduce((t, h) => t + h.par, 0);
 
   return (
@@ -572,7 +611,11 @@ function FinalTotals({ styles, allHoles, scorers, scores }: FinalProps) {
           : `${totalStrokes}  ·  ${formatScore(totalRel)} · ${holesScored}/${allHoles.length}`;
         return (
           <View key={scorer.id} style={styles.totalRow}>
-            <View style={[styles.scorerSwatch, { backgroundColor: scorer.color }]} />
+            <TeamAvatarCluster
+              members={scorer.members}
+              size="md"
+              ringColor={ringColor}
+            />
             <Text style={styles.totalName}>{scorer.name}</Text>
             <Text
               style={[
@@ -648,7 +691,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderBottomWidth: 1,
     },
     cellName: {
-      width: 54,
+      // 60px fits a 4-member sm cluster (54px wide at 18px avatar / 6px
+      // overlap) with a touch of right-side breathing room. When the
+      // row has a tee bar, `cellNameWithBar` adds 7px of left padding;
+      // that still leaves the cluster well inside the column for
+      // typical scramble teams of 2.
+      width: 60,
       flexDirection: 'row',
       alignItems: 'center',
     },
@@ -766,11 +814,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       gap: 8,
       paddingVertical: 6,
-    },
-    scorerSwatch: {
-      width: 12,
-      height: 12,
-      borderRadius: 6,
     },
     totalName: {
       flex: 1,

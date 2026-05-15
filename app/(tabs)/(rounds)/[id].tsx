@@ -31,10 +31,12 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { HoleNavBar } from '@/components/HoleNavBar';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import { ScoreEntryRow } from '@/components/ScoreEntryRow';
+import type { AvatarMember } from '@/components/TeamAvatarCluster';
 import { OPENGOLF_ATTRIBUTION } from '@/lib/attribution';
 import { confirm, showAlert } from '@/lib/dialog';
 import { resolveParticipantIdentity } from '@/lib/participantIdentity';
 import { buildRoundTitle } from '@/lib/scoring';
+import { buildTeamMembers } from '@/lib/scorerMembers';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -83,7 +85,12 @@ export default function RoundDetailScreen() {
   // Per-scorer list used by the edit-mode entry rows. For scramble that's
   // the set of teams; for stroke it's resolved-identity participant rows
   // (live name/color from profileCache when available).
-  type EditScorer = { id: string; name: string; color: string; letter: string };
+  type EditScorer = {
+    id: string;
+    name: string;
+    color: string;
+    members: AvatarMember[];
+  };
   const editableScorerList = useMemo<EditScorer[]>(() => {
     if (!round || !isOwner) return [];
     if (isScramble && round.teams) {
@@ -91,7 +98,12 @@ export default function RoundDetailScreen() {
         id: team.id,
         name: team.name,
         color: team.color,
-        letter: team.name[0]?.toUpperCase() ?? '?',
+        members: buildTeamMembers(round, team.id, {
+          account,
+          profileCache,
+          allPlayers,
+          fallbackColor: colors.primary,
+        }),
       }));
     }
     return (round.participants ?? []).map((p) => {
@@ -100,11 +112,12 @@ export default function RoundDetailScreen() {
         profileCache,
         allPlayers,
       });
+      const color = identity.color ?? colors.primary;
       return {
         id: p.participantKey,
         name: identity.displayName,
-        color: identity.color ?? colors.primary,
-        letter: identity.displayName[0]?.toUpperCase() ?? '?',
+        color,
+        members: [{ id: p.participantKey, name: identity.displayName, color }],
       };
     });
   }, [round, isOwner, isScramble, account, profileCache, allPlayers, colors.primary]);
@@ -257,12 +270,11 @@ export default function RoundDetailScreen() {
               return (
                 <View key={s.id} style={i > 0 ? styles.entryRowSep : undefined}>
                   <ScoreEntryRow
-                    avatarLetter={s.letter}
-                    avatarColor={s.color}
-                    name={s.name}
-                      holeNumber={currentEditHole.number}
-                      par={currentEditHole.par}
-                      strokes={score ? score.strokes : null}
+                    members={s.members}
+                    name={isScramble ? undefined : s.name}
+                    holeNumber={currentEditHole.number}
+                    par={currentEditHole.par}
+                    strokes={score ? score.strokes : null}
                     onChange={(strokes) =>
                       setEntryScore(s.id, currentEditHole.number, strokes)
                     }

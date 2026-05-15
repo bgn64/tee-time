@@ -1,7 +1,13 @@
 /**
  * Score-entry row — one per scorer (player in stroke, team in scramble).
  *
- * Layout: avatar · name · optional running-score chip ·  quick-pick chip row
+ * Layout: avatar-cluster · optional name · optional running-score chip · quick-pick chip row
+ *
+ * The avatar is always a `<TeamAvatarCluster>` (one circle for stroke, N
+ * circles for scramble teams). The `name` line is optional: stroke rows
+ * pass the player's display name, scramble rows omit it entirely — the
+ * cluster IS the identification, an arbitrary team name (e.g. "Bob &
+ * Alice") plus a single-letter initial added nothing.
  *
  * The chip row is a five-tile pad showing relative-to-par values
  * (−2 / −1 / E / +1 / +2). Tapping a chip sets the score. A sixth `✕`
@@ -18,15 +24,20 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { CustomScoreSheet } from '@/components/CustomScoreSheet';
+import { TeamAvatarCluster, type AvatarMember } from '@/components/TeamAvatarCluster';
 import { formatScore } from '@/lib/scoring';
 import { useTheme } from '@/state/ThemeContext';
 
 type RunningTone = 'over' | 'under' | 'even';
 
 type Props = {
-  avatarLetter: string;
-  avatarColor: string;
-  name: string;
+  /** Avatar cluster contents. One entry for stroke, N for scramble teams. */
+  members: ReadonlyArray<AvatarMember>;
+  /**
+   * Display name shown next to the cluster. Omit in scramble — the cluster
+   * itself identifies the team and an arbitrary team name adds noise.
+   */
+  name?: string;
   /** When provided, rendered as a small chip under the name. Live scoring uses this. */
   runningText?: string;
   /** Tone of the running-score chip's value portion. */
@@ -49,8 +60,7 @@ const QUICK_PICKS: ReadonlyArray<{ rel: number; label: string }> = [
 ];
 
 export function ScoreEntryRow({
-  avatarLetter,
-  avatarColor,
+  members,
   name,
   runningText,
   runningTone,
@@ -73,34 +83,45 @@ export function ScoreEntryRow({
   };
 
   const hasSecondLine = !!(runningText || subtext);
+  const hasInfo = !!name || hasSecondLine;
+  // `CustomScoreSheet` always wants a heading; for scramble (no `name`)
+  // we synthesize one from the member names so the modal isn't anonymous.
+  const sheetHeading =
+    name ?? members.map((m) => m.name).filter(Boolean).join(' & ');
 
   return (
     <View style={styles.row}>
       <View style={styles.who}>
-        <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-          <Text style={styles.avatarText}>{avatarLetter}</Text>
-        </View>
-        <View style={styles.whoInfo}>
-          <Text
-            style={hasSecondLine ? styles.name : styles.nameLarge}
-            numberOfLines={1}>
-            {name}
-          </Text>
-          {runningText ? (
-            <Text style={styles.running} numberOfLines={1}>
-              <Text style={runningTone ? styles[`tone_${runningTone}`] : undefined}>
-                {runningText.split(' · ')[0]}
+        <TeamAvatarCluster
+          members={members}
+          size="md"
+          ringColor={colors.cardBg}
+        />
+        {hasInfo ? (
+          <View style={styles.whoInfo}>
+            {name ? (
+              <Text
+                style={hasSecondLine ? styles.name : styles.nameLarge}
+                numberOfLines={1}>
+                {name}
               </Text>
-              {runningText.includes(' · ') ? (
-                <Text style={styles.runningRest}> · {runningText.split(' · ').slice(1).join(' · ')}</Text>
-              ) : null}
-            </Text>
-          ) : subtext ? (
-            <Text style={styles.subtext} numberOfLines={1}>
-              {subtext}
-            </Text>
-          ) : null}
-        </View>
+            ) : null}
+            {runningText ? (
+              <Text style={styles.running} numberOfLines={1}>
+                <Text style={runningTone ? styles[`tone_${runningTone}`] : undefined}>
+                  {runningText.split(' · ')[0]}
+                </Text>
+                {runningText.includes(' · ') ? (
+                  <Text style={styles.runningRest}> · {runningText.split(' · ').slice(1).join(' · ')}</Text>
+                ) : null}
+              </Text>
+            ) : subtext ? (
+              <Text style={styles.subtext} numberOfLines={1}>
+                {subtext}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.controls}>
@@ -137,7 +158,7 @@ export function ScoreEntryRow({
 
       <CustomScoreSheet
         visible={sheetOpen}
-        scorerName={name}
+        scorerName={sheetHeading}
         holeNumber={holeNumber}
         par={par}
         initialStrokes={strokes}
@@ -166,15 +187,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       minWidth: 0,
       maxWidth: '32%',
     },
-    avatar: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexShrink: 0,
-    },
-    avatarText: { color: '#fff', fontSize: 12, fontWeight: '800' },
     whoInfo: { flex: 1, minWidth: 0 },
     name: {
       fontSize: 13,

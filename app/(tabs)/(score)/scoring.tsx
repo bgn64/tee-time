@@ -6,7 +6,8 @@
  *   - One ScoreEntryRow per scorer (avatar · name · running-score chip ·
  *     −  score-display  +)
  *   - ReadOnlyScorecard below (current hole highlighted, tap any cell to
- *     jump to that hole). Final totals are suppressed during scoring.
+ *     jump to that hole). The final-totals box renders live alongside
+ *     the in-progress grid so the running result is always visible.
  *   - Header right slot: "Finish" action chip.
  *   - Below the grid: an "Abandon round" danger button.
  *
@@ -28,18 +29,22 @@ import { RangeDropdown, rangeLabel } from '@/components/RangeDropdown';
 import { RangefinderSheet } from '@/components/RangefinderSheet';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import { ScoreEntryRow } from '@/components/ScoreEntryRow';
+import type { AvatarMember } from '@/components/TeamAvatarCluster';
 import { confirm } from '@/lib/dialog';
 import { formatScore, holesInRange } from '@/lib/scoring';
+import { buildTeamMembers } from '@/lib/scorerMembers';
+import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 
 type Scorer = {
   id: string;
   name: string;
   color: string;
-  letter: string;
+  members: AvatarMember[];
 };
 
 export default function ScoringScreen() {
@@ -52,7 +57,9 @@ export default function ScoringScreen() {
     completeCurrentRound,
     abandonCurrentRound,
   } = useGolfRound();
-  const { getPlayer } = usePlayers();
+  const { getPlayer, allPlayers } = usePlayers();
+  const { account } = useAccount();
+  const { profileCache } = useSocial();
 
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
@@ -146,17 +153,23 @@ export default function ScoringScreen() {
         id: t.id,
         name: t.name,
         color: t.color,
-        letter: t.name[0]?.toUpperCase() ?? '?',
+        members: buildTeamMembers(currentRound, t.id, {
+          account,
+          profileCache,
+          allPlayers,
+          fallbackColor: colors.primary,
+        }),
       }))
     : currentRound.playerIds
         .map((pid) => {
           const p = getPlayer(pid);
           if (!p) return null;
+          const color = p.color || colors.primary;
           return {
             id: p.id,
             name: p.nickname,
-            color: p.color || colors.primary,
-            letter: p.nickname[0]?.toUpperCase() ?? '?',
+            color,
+            members: [{ id: p.id, name: p.nickname, color }],
           };
         })
         .filter((s): s is Scorer => s !== null);
@@ -240,9 +253,8 @@ export default function ScoringScreen() {
             return (
               <View key={s.id} style={i > 0 ? styles.entryRowSep : undefined}>
                 <ScoreEntryRow
-                  avatarLetter={s.letter}
-                  avatarColor={s.color}
-                  name={s.name}
+                  members={s.members}
+                  name={isScramble ? undefined : s.name}
                   runningText={`${runningValue} · thru ${totals.holes}`}
                   runningTone={tone}
                   holeNumber={currentHole.number}
@@ -262,7 +274,6 @@ export default function ScoringScreen() {
           round={currentRound}
           currentHoleNumber={currentHole.number}
           onHolePress={setCurrentHole}
-          hideFinalTotals
         />
 
         <Pressable
