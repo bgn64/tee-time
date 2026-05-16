@@ -674,7 +674,6 @@ function FinalTotals({
       </View>
       {scorers.map((scorer) => {
         let totalRel = 0;
-        let totalStrokes = 0;
         let holesScored = 0;
         for (const h of allHoles) {
           const s = scores.find(
@@ -682,7 +681,6 @@ function FinalTotals({
           );
           if (s) {
             totalRel += s.strokes - h.par;
-            totalStrokes += s.strokes;
             holesScored++;
           }
         }
@@ -690,12 +688,17 @@ function FinalTotals({
         const status = !hasAnyScore
           ? 'No scores yet'
           : holesScored === allHoles.length
-          ? `${totalStrokes}  ·  ${formatScore(totalRel)}`
-          : `${totalStrokes}  ·  ${formatScore(totalRel)} · ${holesScored}/${allHoles.length}`;
+          ? formatScore(totalRel)
+          : `${formatScore(totalRel)} · ${holesScored}/${allHoles.length}`;
 
         const scorerTee = scorer.teeId ? teeById.get(scorer.teeId) : undefined;
-        const showPill = !!scorerTee;
         const pillEditable = !!onEditTee;
+        // The pill renders whenever:
+        //   · There IS a tee (read-only or editable)
+        //   · OR we're in an editing context (round-details edit / live
+        //     scoring) — so the "+ Tee" placeholder is reachable even
+        //     when no tee was selected at round-creation time.
+        const showPill = !!scorerTee || pillEditable;
 
         const nameNode = (
           <Text style={styles.totalName} numberOfLines={1}>
@@ -720,11 +723,11 @@ function FinalTotals({
         );
 
         let pillNode: React.ReactNode = null;
-        if (showPill && scorerTee) {
-          const swatch = teeSwatchColor(scorerTee);
-          const pillContent = (
+        if (showPill) {
+          const swatch = scorerTee ? teeSwatchColor(scorerTee) : null;
+          const pillContent = scorerTee ? (
             <>
-              <View style={[styles.finalTeePillDot, { backgroundColor: swatch }]} />
+              <View style={[styles.finalTeePillDot, { backgroundColor: swatch! }]} />
               <Text style={styles.finalTeePillText} numberOfLines={1}>
                 {scorerTee.name}
               </Text>
@@ -732,10 +735,20 @@ function FinalTotals({
                 <Text style={styles.finalTeePillChev}>▾</Text>
               ) : null}
             </>
+          ) : (
+            <>
+              <Text style={styles.finalTeePillPlaceholder} numberOfLines={1}>
+                + Tee
+              </Text>
+              <Text style={styles.finalTeePillChev}>▾</Text>
+            </>
           );
           pillNode = pillEditable ? (
             <Pressable
-              style={styles.finalTeePill}
+              style={[
+                styles.finalTeePill,
+                !scorerTee && styles.finalTeePillEmpty,
+              ]}
               onPress={() => onEditTee!(scorer.id)}>
               {pillContent}
             </Pressable>
@@ -972,6 +985,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 9,
       paddingVertical: 5,
     },
+    finalTeePillEmpty: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: colors.border,
+    },
     finalTeePillDot: {
       width: 8,
       height: 8,
@@ -981,6 +1000,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 11,
       fontWeight: '800',
       color: colors.textTitle,
+    },
+    finalTeePillPlaceholder: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
     },
     finalTeePillChev: {
       fontSize: 11,

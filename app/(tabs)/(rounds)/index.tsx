@@ -46,6 +46,7 @@ import {
   formatDay,
   formatScore,
   getRoundTotalRelative,
+  holeRangeLabel,
   monthKey,
 } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
@@ -466,6 +467,11 @@ export default function RoundsListScreen() {
                               isScramble && styles.tagTextScramble,
                             ]}>
                             {isScramble ? 'Scramble' : 'Stroke'}
+                          </Text>
+                        </View>
+                        <View style={styles.tag}>
+                          <Text style={styles.tagText}>
+                            {holeRangeLabel(round.course.holes, round.holeRange)}
                           </Text>
                         </View>
                         <Text

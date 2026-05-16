@@ -30,6 +30,7 @@ import {
   formatRelativeTime,
   formatScore,
   getRoundTotalRelative,
+  holeRangeLabel,
 } from '@/lib/scoring';
 import { useTheme } from '@/state/ThemeContext';
 import type { Player, Round } from '@/types/golf';
@@ -127,9 +128,7 @@ export function FeedCardLarge({
   const dateLabel = formatRelativeTime(round.completedAt ?? round.startedAt);
   const location = round.course.location;
 
-  const showRangePill = round.holeRange !== 'all';
-  const rangePillLabel =
-    round.holeRange === 'front9' ? 'FRONT 9' : round.holeRange === 'back9' ? 'BACK 9' : '';
+  const holesLabel = holeRangeLabel(round.course.holes, round.holeRange);
 
   // Band gradient stops from owner color.
   const gradientStart = shade(ownerColor, -0.22);
@@ -156,11 +155,9 @@ export function FeedCardLarge({
               {isScramble ? 'SCRAMBLE' : 'STROKE'}
             </Text>
           </View>
-          {showRangePill ? (
-            <View style={styles.bandPill}>
-              <Text style={styles.bandPillText}>{rangePillLabel}</Text>
-            </View>
-          ) : null}
+          <View style={styles.bandPill}>
+            <Text style={styles.bandPillText}>{holesLabel}</Text>
+          </View>
         </View>
         <View style={styles.bandBottomRow}>
           <Text style={styles.bandByLine} numberOfLines={1}>
@@ -170,9 +167,6 @@ export function FeedCardLarge({
             <Text style={styles.bandRel}>
               {totalStrokes > 0 ? formatScore(totalRel) : '—'}
             </Text>
-            {totalStrokes > 0 ? (
-              <Text style={styles.bandStrokes}>{totalStrokes}</Text>
-            ) : null}
           </View>
         </View>
       </LinearGradient>
@@ -262,11 +256,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 6,
-    },
-    bandStrokes: {
-      color: 'rgba(255,255,255,0.85)',
-      fontSize: 14,
-      fontWeight: '700',
     },
     bandRel: {
       color: '#ffffff',

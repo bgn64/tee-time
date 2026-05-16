@@ -121,6 +121,21 @@ export function holesInRange(holes: Hole[], range: HoleRange): Hole[] {
   return holes;
 }
 
+/**
+ * Short label for the in-play hole range, used by feed/round-detail
+ * "X holes" pills.
+ *
+ *   range='all' on a 9-hole course   → "9 HOLES"
+ *   range='all' on an 18-hole course → "18 HOLES"
+ *   range='front9'                   → "FRONT 9"
+ *   range='back9'                    → "BACK 9"
+ */
+export function holeRangeLabel(holes: Hole[], range: HoleRange): string {
+  if (range === 'front9') return 'FRONT 9';
+  if (range === 'back9') return 'BACK 9';
+  return `${holes.length} HOLES`;
+}
+
 function holeNumbersInRange(holes: Hole[], range: HoleRange): Set<number> {
   return new Set(holesInRange(holes, range).map((h) => h.number));
 }

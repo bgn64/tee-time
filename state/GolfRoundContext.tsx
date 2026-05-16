@@ -209,6 +209,19 @@ type GolfRoundContextValue = {
    * Clamps `currentHoleNumber` into the new range.
    */
   setHoleRange: (range: HoleRange) => void;
+  /**
+   * Update the in-flight round's tee selection for one scorer.
+   *
+   * Stroke rounds: `scorerId` is the participant's `participantKey`; we
+   * patch that one entry's `teeId`. Scramble rounds: `scorerId` is the
+   * `teamId`; we patch every participant whose `teamId` matches so all
+   * team members play the same tees (mirrors the format-screen flow).
+   *
+   * Pass `undefined` for `teeId` to clear the selection. Optimistically
+   * mutates `currentRound.participants` and pushes a cloud upsert with
+   * `bumpLastScoreAt: false` — tee changes aren't score events.
+   */
+  setParticipantTee: (scorerId: string, teeId: string | undefined) => void;
   completeCurrentRound: () => void;
   abandonCurrentRound: () => void;
   /**
@@ -1460,6 +1473,37 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         // A range change isn't itself a "score event" — don't bump
         // last_score_at so a sleepy friend toggling front-9 doesn't
         // re-promote their card to the top of the live strip.
+        if (changed && snapshot) {
+          void cloudUpsertRound(snapshot, { bumpLastScoreAt: false });
+        }
+      },
+      setParticipantTee: (scorerId, teeId) => {
+        let snapshot: Round | null = null;
+        let changed = false;
+        setCurrentRound((round) => {
+          if (!round) {
+            throw new Error('Cannot set participant tee without a current round.');
+          }
+          const isScramble = round.scoringRule === 'scramble';
+          const nextParticipants = (round.participants ?? []).map((p) => {
+            const matches = isScramble
+              ? p.teamId === scorerId
+              : p.participantKey === scorerId;
+            if (!matches) return p;
+            if (p.teeId === teeId) return p;
+            changed = true;
+            if (teeId) {
+              return { ...p, teeId };
+            }
+            // Clear: omit the field instead of carrying an undefined.
+            const { teeId: _unused, ...rest } = p;
+            return rest;
+          });
+          if (!changed) return round;
+          const updated: Round = { ...round, participants: nextParticipants };
+          snapshot = updated;
+          return updated;
+        });
         if (changed && snapshot) {
           void cloudUpsertRound(snapshot, { bumpLastScoreAt: false });
         }

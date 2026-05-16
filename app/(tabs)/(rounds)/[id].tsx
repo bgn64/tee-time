@@ -36,7 +36,7 @@ import { TeePickerSheet } from '@/components/TeePickerSheet';
 import { OPENGOLF_ATTRIBUTION } from '@/lib/attribution';
 import { confirm, showAlert } from '@/lib/dialog';
 import { resolveParticipantIdentity } from '@/lib/participantIdentity';
-import { buildRoundTitle } from '@/lib/scoring';
+import { buildRoundTitle, holeRangeLabel } from '@/lib/scoring';
 import { buildTeamMembers } from '@/lib/scorerMembers';
 import {
   buildNameSegments,
@@ -340,6 +340,11 @@ export default function RoundDetailScreen() {
           <View style={styles.formatPill}>
             <Text style={styles.formatPillText}>
               {isScramble ? 'SCRAMBLE' : 'STROKE'}
+            </Text>
+          </View>
+          <View style={styles.formatPill}>
+            <Text style={styles.formatPillText}>
+              {holeRangeLabel(round.course.holes, round.holeRange)}
             </Text>
           </View>
         </View>

@@ -30,6 +30,7 @@ import { RangefinderSheet } from '@/components/RangefinderSheet';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import { ScoreEntryRow } from '@/components/ScoreEntryRow';
 import type { AvatarMember } from '@/components/TeamAvatarCluster';
+import { TeePickerSheet } from '@/components/TeePickerSheet';
 import { confirm } from '@/lib/dialog';
 import { formatScore, holesInRange } from '@/lib/scoring';
 import { buildTeamMembers } from '@/lib/scorerMembers';
@@ -64,6 +65,7 @@ export default function ScoringScreen() {
     setCustomHoleScore,
     setCurrentHole,
     setHoleRange,
+    setParticipantTee,
     completeCurrentRound,
     abandonCurrentRound,
   } = useGolfRound();
@@ -74,6 +76,7 @@ export default function ScoringScreen() {
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [rangefinderOpen, setRangefinderOpen] = useState(false);
+  const [teeEditTarget, setTeeEditTarget] = useState<string | null>(null);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const isScramble =
@@ -325,6 +328,7 @@ export default function ScoringScreen() {
               params: { id },
             })
           }
+          onEditTee={setTeeEditTarget}
         />
 
         <Pressable
@@ -363,6 +367,36 @@ export default function ScoringScreen() {
         onPick={(next) => {
           setRangeMenuOpen(false);
           setHoleRange(next);
+        }}
+      />
+
+      <TeePickerSheet
+        visible={teeEditTarget != null}
+        scorerName={(() => {
+          if (!teeEditTarget) return '';
+          const s = scorers.find((x) => x.id === teeEditTarget);
+          return s?.name ?? '';
+        })()}
+        tees={currentRound.course.tees ?? []}
+        selectedTeeId={(() => {
+          if (!teeEditTarget) return undefined;
+          if (isScramble) {
+            // For scramble, every team member shares a tee — read it
+            // off the first participant whose teamId matches.
+            const member = (currentRound.participants ?? []).find(
+              (p) => p.teamId === teeEditTarget
+            );
+            return member?.teeId;
+          }
+          const participant = (currentRound.participants ?? []).find(
+            (p) => p.participantKey === teeEditTarget
+          );
+          return participant?.teeId;
+        })()}
+        onCancel={() => setTeeEditTarget(null)}
+        onPick={(teeId) => {
+          if (teeEditTarget) setParticipantTee(teeEditTarget, teeId);
+          setTeeEditTarget(null);
         }}
       />
     </View>
