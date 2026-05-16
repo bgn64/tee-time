@@ -60,7 +60,7 @@ Rules:
 
 - `EXPO_PUBLIC_*` values are bundled into web/native clients and must only contain public client-safe values.
 - `SUPABASE_SERVICE_ROLE_KEY` is for local scripts only. Never put it in Vercel, EAS, app code, or committed docs.
-- Android standalone builds need `GOOGLE_MAPS_API_KEY` in EAS env. The key is embedded in the native app, so protect it with Google API/app restrictions and budget alerts.
+- `GOOGLE_MAPS_API_KEY` is currently unused. The in-app GPS rangefinder is hidden — the component code is kept for future re-enablement. Leave the key unset in `.env` / Vercel / EAS until the rangefinder ships again.
 
 ## Vercel environment variables
 
@@ -71,7 +71,7 @@ Set these in the existing Vercel project:
 | Preview | Staging Supabase | Staging Supabase anon/publishable key |
 | Production | Production Supabase | Production Supabase anon/publishable key |
 
-Vercel web does not currently need a Google Maps key. The web rangefinder renders a placeholder; Android native uses Google Maps.
+Vercel web does not currently need a Google Maps key. The in-app GPS rangefinder is hidden in this release; component code remains for future re-enablement.
 
 ## Supabase environment setup
 
@@ -176,8 +176,10 @@ EAS env:
 
 | EAS environment | Required variables |
 |---|---|
-| preview | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_MAPS_API_KEY` |
-| production | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `GOOGLE_MAPS_API_KEY` |
+| preview | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` |
+| production | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY` |
+
+`GOOGLE_MAPS_API_KEY` is no longer required while the rangefinder UI is hidden. If you re-enable the rangefinder later, add the key back to both EAS environments.
 
 Both EAS environments currently point at production Supabase because Android preview is the owner/internal real-use APK, not a staging web preview.
 
@@ -194,15 +196,8 @@ After installing the APK, smoke test:
 3. Course search.
 4. Start/score/finish round.
 5. Round sync to production Supabase.
-6. Location permission prompt.
-7. GPS rangefinder map.
-8. Sign out and sign back in.
-
-Before wider Android sharing, restrict the Google Maps key to:
-
-- API: Maps SDK for Android only.
-- Android app: `com.bgalindonavarro.teetime`.
-- SHA-1: EAS Android signing certificate fingerprint.
+6. Location permission prompt (course-nearby search still uses it).
+7. Sign out and sign back in.
 
 ## EAS Update flow
 

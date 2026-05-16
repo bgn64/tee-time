@@ -1,3 +1,14 @@
+/**
+ * GPS rangefinder bottom sheet.
+ *
+ * DORMANT — the live-scoring screen no longer mounts this sheet. The
+ * component is kept intact for future re-enablement (just add an entry
+ * point in `app/(tabs)/(score)/scoring.tsx` and ensure the Google Maps
+ * API key is back in the EAS env). All identity/permission plumbing in
+ * `state/LocationContext.tsx` (rangefinderLocation / startRangefinderWatch
+ * / stopRangefinderWatch) is also kept for the same reason.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 
