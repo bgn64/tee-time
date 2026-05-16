@@ -34,14 +34,22 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AvatarMember, TeamAvatarCluster } from '@/components/TeamAvatarCluster';
 import { resolveParticipantIdentity } from '@/lib/participantIdentity';
 import { formatScore } from '@/lib/scoring';
+import {
+  buildNameSegments,
+  flattenSegments,
+  type NameSegment,
+} from '@/lib/scorerNames';
+import { firstName } from '@/lib/userIdentity';
 import { useAccount } from '@/state/AccountContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
-import { Hole, Round, RoundParticipant, RoundScore } from '@/types/golf';
+import { Hole, Round, RoundParticipant, RoundScore, Tee } from '@/types/golf';
 
 type Scorer = {
   id: string;
+  /** Plain display string. Concatenation of `nameSegments`; kept as a
+   *  fallback for callers / sheets that need a raw label. */
   name: string;
   color: string;
   teeId?: string;
@@ -51,6 +59,13 @@ type Scorer = {
    * entry per team member, in `round.participants` order.
    */
   members: AvatarMember[];
+  /**
+   * Renderable name segments. For stroke rows this is one segment per
+   * row; for scramble teams it's one per member interleaved with
+   * separator segments (" & " / ", "). Linked segments are tappable
+   * with `onPressLinkedName`.
+   */
+  nameSegments: NameSegment[];
 };
 
 type Props = {
@@ -61,6 +76,21 @@ type Props = {
   onHolePress?: (holeNumber: number) => void;
   /** Suppress the bottom FINAL totals section (live scoring uses this). */
   hideFinalTotals?: boolean;
+  /**
+   * When provided, names of scorers linked to a real account (including
+   * the signed-in user) become tappable. The callback receives the
+   * navigation target id (other users' `userId`, self's `defaultPlayerId`).
+   * Routing-agnostic: this component never imports `router`; the caller
+   * decides which tab stack to push onto.
+   */
+  onPressLinkedName?: (targetId: string) => void;
+  /**
+   * When provided, the tee swatch+name pill rendered in the Final box
+   * becomes a `Pressable` with a chevron. The callback receives the
+   * scorer id (participantKey for stroke / teamId for scramble). When
+   * absent the pill is read-only.
+   */
+  onEditTee?: (scorerId: string) => void;
 };
 
 const TEE_COLOR_HEX: Record<string, string> = {
@@ -88,9 +118,11 @@ export function ReadOnlyScorecard({
   currentHoleNumber,
   onHolePress,
   hideFinalTotals,
+  onPressLinkedName,
+  onEditTee,
 }: Props) {
   const { colors } = useTheme();
-  const { allPlayers } = usePlayers();
+  const { allPlayers, defaultPlayerId } = usePlayers();
   const { account } = useAccount();
   const { profileCache } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -150,6 +182,20 @@ export function ReadOnlyScorecard({
   );
 
   const scorers: Scorer[] = useMemo(() => {
+    // First name of the signed-in account, used wherever we'd previously
+    // have hard-coded the literal `'You'`. The display falls back to the
+    // full display name when first-name extraction yields empty, and to
+    // a final `'You'` only when there's no signed-in account at all.
+    const selfLabel =
+      firstName(account?.displayName) || account?.displayName || 'You';
+
+    const nameDeps = {
+      account,
+      profileCache,
+      allPlayers,
+      defaultPlayerId,
+    };
+
     // Resolve one participant to {id, name, color}. Shared between the
     // stroke scorers path (one scorer = one participant) and the
     // scramble team-members path (each team is composed of multiple
@@ -165,7 +211,7 @@ export function ReadOnlyScorecard({
       let displayName: string;
       let color: string | undefined;
       if (isMe) {
-        displayName = 'You';
+        displayName = selfLabel;
         color = identity.color;
       } else if (p.linkedUserId || p.localDisplayName) {
         displayName = identity.displayName;
@@ -186,46 +232,60 @@ export function ReadOnlyScorecard({
     let raw: Scorer[];
     if (isScramble && round.teams) {
       raw = round.teams.map((t) => {
-        const teamMembers = (round.participants ?? [])
-          .filter((p) => p.teamId === t.id)
-          .map(resolveMember);
+        const teamParticipants = (round.participants ?? []).filter(
+          (p) => p.teamId === t.id
+        );
+        const teamMembers = teamParticipants.map(resolveMember);
+        const nameSegments = buildNameSegments(teamParticipants, nameDeps);
         return {
           id: t.id,
-          name: t.name,
+          name: flattenSegments(nameSegments),
           color: t.color,
           teeId: teamTeeIdByTeamId.get(t.id),
           members: teamMembers,
+          nameSegments,
         };
       });
     } else if (round.participants && round.participants.length > 0) {
       raw = round.participants.map((p) => {
         const member = resolveMember(p);
+        const nameSegments = buildNameSegments([p], nameDeps);
         return {
           id: p.participantKey,
-          name: member.name,
+          name: flattenSegments(nameSegments) || member.name,
           color: member.color,
           teeId: p.teeId,
           members: [member],
+          nameSegments,
         };
       });
     } else {
+      // Legacy fallback for rounds with no `participants[]`. We don't
+      // have enough metadata to build link segments here, so each row
+      // becomes a single plain (unlinked) segment.
       raw = (round.playerIds ?? []).map((pid) => {
         const local = allPlayers.find((p) => p.id === pid);
         const isMe = !!local?.userId && account?.userId === local.userId;
         const name = isMe
-          ? 'You'
-          : local?.displayName ?? local?.nickname ?? 'Player';
+          ? selfLabel
+          : firstName(local?.displayName ?? local?.nickname) ||
+            local?.displayName ||
+            local?.nickname ||
+            'Player';
         const color = local?.color ?? colors.primary;
         return {
           id: pid,
           name,
           color,
           members: [{ id: pid, name, color }],
+          nameSegments: [
+            { text: name, linked: false, linkTargetId: null, color },
+          ],
         };
       });
     }
     return raw;
-  }, [round, isScramble, teamTeeIdByTeamId, account, profileCache, allPlayers, colors.primary]);
+  }, [round, isScramble, teamTeeIdByTeamId, account, profileCache, allPlayers, defaultPlayerId, colors.primary]);
 
   const front9 = useMemo(
     () => round.course.holes.filter((h) => h.number <= 9),
@@ -315,6 +375,9 @@ export function ReadOnlyScorecard({
             scorers={scorers}
             scores={round.scores}
             ringColor={colors.cardBg}
+            courseTees={round.course.tees ?? []}
+            onPressLinkedName={onPressLinkedName}
+            onEditTee={onEditTee}
           />
         </View>
       )}
@@ -579,10 +642,30 @@ type FinalProps = {
   /** Background color for the scorer-avatar ring; pass the surface the
    *  row sits on so the ring blends with the card. */
   ringColor: string;
+  /** Full course tee list, used to resolve each scorer's tee pill. */
+  courseTees: Tee[];
+  /** Tap handler for linked scorer names; absent → plain text. */
+  onPressLinkedName?: (targetId: string) => void;
+  /** Tap handler for the tee pill; absent → read-only pill. */
+  onEditTee?: (scorerId: string) => void;
 };
 
-function FinalTotals({ styles, allHoles, scorers, scores, ringColor }: FinalProps) {
+function FinalTotals({
+  styles,
+  allHoles,
+  scorers,
+  scores,
+  ringColor,
+  courseTees,
+  onPressLinkedName,
+  onEditTee,
+}: FinalProps) {
   const parTotal = allHoles.reduce((t, h) => t + h.par, 0);
+  const teeById = useMemo(() => {
+    const m = new Map<string, Tee>();
+    for (const t of courseTees) m.set(t.id, t);
+    return m;
+  }, [courseTees]);
 
   return (
     <View style={styles.section}>
@@ -609,6 +692,58 @@ function FinalTotals({ styles, allHoles, scorers, scores, ringColor }: FinalProp
           : holesScored === allHoles.length
           ? `${totalStrokes}  ·  ${formatScore(totalRel)}`
           : `${totalStrokes}  ·  ${formatScore(totalRel)} · ${holesScored}/${allHoles.length}`;
+
+        const scorerTee = scorer.teeId ? teeById.get(scorer.teeId) : undefined;
+        const showPill = !!scorerTee;
+        const pillEditable = !!onEditTee;
+
+        const nameNode = (
+          <Text style={styles.totalName} numberOfLines={1}>
+            {scorer.nameSegments.map((seg, i) => {
+              const tappable = seg.linked && seg.linkTargetId && onPressLinkedName;
+              if (tappable) {
+                return (
+                  <Text
+                    // eslint-disable-next-line react/no-array-index-key
+                    key={i}
+                    onPress={() => onPressLinkedName!(seg.linkTargetId!)}
+                    suppressHighlighting
+                    style={styles.totalNameLinked}>
+                    {seg.text}
+                  </Text>
+                );
+              }
+              // eslint-disable-next-line react/no-array-index-key
+              return <Text key={i}>{seg.text}</Text>;
+            })}
+          </Text>
+        );
+
+        let pillNode: React.ReactNode = null;
+        if (showPill && scorerTee) {
+          const swatch = teeSwatchColor(scorerTee);
+          const pillContent = (
+            <>
+              <View style={[styles.finalTeePillDot, { backgroundColor: swatch }]} />
+              <Text style={styles.finalTeePillText} numberOfLines={1}>
+                {scorerTee.name}
+              </Text>
+              {pillEditable ? (
+                <Text style={styles.finalTeePillChev}>▾</Text>
+              ) : null}
+            </>
+          );
+          pillNode = pillEditable ? (
+            <Pressable
+              style={styles.finalTeePill}
+              onPress={() => onEditTee!(scorer.id)}>
+              {pillContent}
+            </Pressable>
+          ) : (
+            <View style={styles.finalTeePill}>{pillContent}</View>
+          );
+        }
+
         return (
           <View key={scorer.id} style={styles.totalRow}>
             <TeamAvatarCluster
@@ -616,7 +751,8 @@ function FinalTotals({ styles, allHoles, scorers, scores, ringColor }: FinalProp
               size="md"
               ringColor={ringColor}
             />
-            <Text style={styles.totalName}>{scorer.name}</Text>
+            {nameNode}
+            {pillNode}
             <Text
               style={[
                 styles.totalScore,
@@ -820,6 +956,35 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 12,
       fontWeight: '700',
       color: colors.textTitle,
+    },
+    totalNamePressable: {
+      flex: 1,
+    },
+    totalNameLinked: {
+      fontWeight: '800',
+    },
+    finalTeePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      backgroundColor: colors.chipBg,
+      borderRadius: 7,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+    },
+    finalTeePillDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    finalTeePillText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    finalTeePillChev: {
+      fontSize: 11,
+      color: colors.textMuted,
     },
     totalScore: {
       fontSize: 12,

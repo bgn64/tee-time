@@ -33,6 +33,11 @@ import type { AvatarMember } from '@/components/TeamAvatarCluster';
 import { confirm } from '@/lib/dialog';
 import { formatScore, holesInRange } from '@/lib/scoring';
 import { buildTeamMembers } from '@/lib/scorerMembers';
+import {
+  buildNameSegments,
+  flattenSegments,
+  type NameSegment,
+} from '@/lib/scorerNames';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -45,6 +50,11 @@ type Scorer = {
   name: string;
   color: string;
   members: AvatarMember[];
+  /**
+   * Rich name segments for ScoreEntryRow. Stroke = one segment per
+   * scorer; scramble teams = N segments interleaved with " & " / ", ".
+   */
+  nameSegments: NameSegment[];
 };
 
 export default function ScoringScreen() {
@@ -57,7 +67,7 @@ export default function ScoringScreen() {
     completeCurrentRound,
     abandonCurrentRound,
   } = useGolfRound();
-  const { getPlayer, allPlayers } = usePlayers();
+  const { getPlayer, allPlayers, defaultPlayerId } = usePlayers();
   const { account } = useAccount();
   const { profileCache } = useSocial();
 
@@ -149,27 +159,55 @@ export default function ScoringScreen() {
       : null;
 
   const scorers: Scorer[] = isScramble
-    ? currentRound.teams!.map((t) => ({
-        id: t.id,
-        name: t.name,
-        color: t.color,
-        members: buildTeamMembers(currentRound, t.id, {
+    ? currentRound.teams!.map((t) => {
+        const teamParticipants = (currentRound.participants ?? []).filter(
+          (p) => p.teamId === t.id
+        );
+        const nameSegments = buildNameSegments(teamParticipants, {
           account,
           profileCache,
           allPlayers,
-          fallbackColor: colors.primary,
-        }),
-      }))
+          defaultPlayerId,
+        });
+        return {
+          id: t.id,
+          name: flattenSegments(nameSegments) || t.name,
+          color: t.color,
+          members: buildTeamMembers(currentRound, t.id, {
+            account,
+            profileCache,
+            allPlayers,
+            fallbackColor: colors.primary,
+          }),
+          nameSegments,
+        };
+      })
     : currentRound.playerIds
         .map((pid) => {
           const p = getPlayer(pid);
           if (!p) return null;
           const color = p.color || colors.primary;
+          // Find the matching participant; fall back to a minimal stub
+          // so we still get a single non-linked segment when the
+          // participants[] hasn't been seeded with this entry yet.
+          const participant =
+            currentRound.participants?.find((q) => q.participantKey === pid) ??
+            ({
+              participantKey: pid,
+            } as const);
+          const nameSegments = buildNameSegments([participant], {
+            account,
+            profileCache,
+            allPlayers,
+            defaultPlayerId,
+          });
+          const name = flattenSegments(nameSegments) || p.displayName || p.nickname;
           return {
             id: p.id,
-            name: p.nickname,
+            name,
             color,
-            members: [{ id: p.id, name: p.nickname, color }],
+            members: [{ id: p.id, name, color }],
+            nameSegments,
           };
         })
         .filter((s): s is Scorer => s !== null);
@@ -255,6 +293,13 @@ export default function ScoringScreen() {
                 <ScoreEntryRow
                   members={s.members}
                   name={isScramble ? undefined : s.name}
+                  nameSegments={isScramble ? undefined : s.nameSegments}
+                  onPressLinkedName={(id) =>
+                    router.push({
+                      pathname: '/(tabs)/(score)/player/[id]',
+                      params: { id },
+                    })
+                  }
                   runningText={`${runningValue} · thru ${totals.holes}`}
                   runningTone={tone}
                   holeNumber={currentHole.number}
@@ -274,6 +319,12 @@ export default function ScoringScreen() {
           round={currentRound}
           currentHoleNumber={currentHole.number}
           onHolePress={setCurrentHole}
+          onPressLinkedName={(id) =>
+            router.push({
+              pathname: '/(tabs)/(score)/player/[id]',
+              params: { id },
+            })
+          }
         />
 
         <Pressable

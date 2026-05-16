@@ -218,12 +218,20 @@ type GolfRoundContextValue = {
    * a single owner UPDATE. On failure the change is rolled back. RLS
    * gates the write to the owner.
    *
+   * Optionally accepts `participantTeeEdits` to retroactively change the
+   * tee a participant (stroke) or team (scramble) played from. For
+   * scramble, the tee is applied to every participant whose `teamId`
+   * matches `scorerId`. Pass `teeId: undefined` to clear a previously-
+   * set tee. Tee + score edits are written together in a single UPDATE
+   * and roll back together on failure.
+   *
    * Always prefer this over multiple `editHoleScore` calls — concurrent
    * single-edit calls race each other and clobber state.
    */
   commitScoreEdits: (
     roundId: string,
-    edits: Array<{ scorerId: string; holeNumber: number; strokes: number }>
+    edits: Array<{ scorerId: string; holeNumber: number; strokes: number }>,
+    participantTeeEdits?: Array<{ scorerId: string; teeId?: string }>
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   /**
    * Mutate one (scorerId, hole) entry on a completed Round. Optimistically
@@ -1522,14 +1530,16 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         }
         return { ok: true };
       },
-      commitScoreEdits: async (roundId, edits) => {
-        if (edits.length === 0) return { ok: true };
+      commitScoreEdits: async (roundId, edits, participantTeeEdits) => {
+        const hasScoreEdits = edits.length > 0;
+        const hasTeeEdits = !!participantTeeEdits && participantTeeEdits.length > 0;
+        if (!hasScoreEdits && !hasTeeEdits) return { ok: true };
         const previous = cloudRoundsRef.current.find((r) => r.id === roundId);
         if (!previous) {
           return { ok: false, error: 'Round not found in local history.' };
         }
-        // Fold every edit into a single next-scores array so concurrent
-        // edits across multiple holes can't clobber one another.
+        // Fold every score edit into a single next-scores array so
+        // concurrent edits across multiple holes can't clobber one another.
         let nextScores = previous.scores;
         for (const e of edits) {
           nextScores = replaceScore(nextScores, {
@@ -1538,13 +1548,49 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
             strokes: Math.max(1, e.strokes),
           });
         }
+
+        // Build the next participants array. Each tee edit either targets
+        // one stroke participant (participantKey match) or every member
+        // of a scramble team (teamId match). `teeId: undefined` clears
+        // a previously-set tee.
+        let nextParticipants = previous.participants;
+        if (hasTeeEdits) {
+          const isScramble = previous.scoringRule === 'scramble';
+          nextParticipants = (previous.participants ?? []).map((p) => {
+            let nextTeeId: string | undefined = p.teeId;
+            let touched = false;
+            for (const t of participantTeeEdits!) {
+              const matches = isScramble
+                ? p.teamId === t.scorerId
+                : p.participantKey === t.scorerId;
+              if (matches) {
+                nextTeeId = t.teeId;
+                touched = true;
+              }
+            }
+            if (!touched) return p;
+            if (nextTeeId == null) {
+              const { teeId: _drop, ...rest } = p;
+              return rest;
+            }
+            return { ...p, teeId: nextTeeId };
+          });
+        }
+
+        const optimistic = {
+          ...previous,
+          scores: nextScores,
+          participants: nextParticipants,
+        };
         setCloudRounds((rounds) =>
-          rounds.map((r) => (r.id === roundId ? { ...r, scores: nextScores } : r))
+          rounds.map((r) => (r.id === roundId ? optimistic : r))
         );
         if (!account) return { ok: true };
+        const update: Record<string, unknown> = { scores: nextScores };
+        if (hasTeeEdits) update.participants = nextParticipants;
         const { data, error } = await supabase
           .from('scorecards')
-          .update({ scores: nextScores })
+          .update(update)
           .eq('id', roundId)
           .select();
         if (error) {

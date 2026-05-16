@@ -116,4 +116,46 @@ describe('ScoreEntryRow', () => {
     fireEvent.press(getByText('−2'));
     expect(onChange).toHaveBeenLastCalledWith(1);
   });
+
+  test('nameSegments path: linked segment fires onPressLinkedName, plain segments do not', () => {
+    const onPressLinkedName = jest.fn();
+    const { getByText } = render(
+      wrap(
+        <ScoreEntryRow
+          members={[{ id: 'a', name: 'Alice', color: '#f00' }]}
+          nameSegments={[
+            { text: 'Alice', linked: true, linkTargetId: 'player-self', color: '#f00' },
+          ]}
+          onPressLinkedName={onPressLinkedName}
+          holeNumber={1}
+          par={4}
+          strokes={null}
+          onChange={() => {}}
+        />
+      )
+    );
+    fireEvent.press(getByText('Alice'));
+    expect(onPressLinkedName).toHaveBeenCalledWith('player-self');
+  });
+
+  test('nameSegments path: unlinked segment does NOT fire onPressLinkedName', () => {
+    const onPressLinkedName = jest.fn();
+    const { getByText } = render(
+      wrap(
+        <ScoreEntryRow
+          members={[{ id: 'a', name: 'Carol', color: '#f00' }]}
+          nameSegments={[
+            { text: 'Carol', linked: false, linkTargetId: null },
+          ]}
+          onPressLinkedName={onPressLinkedName}
+          holeNumber={1}
+          par={4}
+          strokes={null}
+          onChange={() => {}}
+        />
+      )
+    );
+    fireEvent.press(getByText('Carol'));
+    expect(onPressLinkedName).not.toHaveBeenCalled();
+  });
 });

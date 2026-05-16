@@ -26,6 +26,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { CustomScoreSheet } from '@/components/CustomScoreSheet';
 import { TeamAvatarCluster, type AvatarMember } from '@/components/TeamAvatarCluster';
 import { formatScore } from '@/lib/scoring';
+import { type NameSegment, flattenSegments } from '@/lib/scorerNames';
 import { useTheme } from '@/state/ThemeContext';
 
 type RunningTone = 'over' | 'under' | 'even';
@@ -36,8 +37,19 @@ type Props = {
   /**
    * Display name shown next to the cluster. Omit in scramble — the cluster
    * itself identifies the team and an arbitrary team name adds noise.
+   * Ignored when `nameSegments` is provided.
    */
   name?: string;
+  /**
+   * Rich rendering of the name line. Linked segments render bold + in
+   * the segment's color and call `onPressLinkedName` on tap. Plain
+   * separator segments stay default-styled. When set, this overrides
+   * `name`; the `flattenSegments(nameSegments)` value is used as the
+   * fallback heading for `CustomScoreSheet`.
+   */
+  nameSegments?: ReadonlyArray<NameSegment>;
+  /** Tap handler for linked segments. Routing stays at the caller. */
+  onPressLinkedName?: (targetId: string) => void;
   /** When provided, rendered as a small chip under the name. Live scoring uses this. */
   runningText?: string;
   /** Tone of the running-score chip's value portion. */
@@ -62,6 +74,8 @@ const QUICK_PICKS: ReadonlyArray<{ rel: number; label: string }> = [
 export function ScoreEntryRow({
   members,
   name,
+  nameSegments,
+  onPressLinkedName,
   runningText,
   runningTone,
   subtext,
@@ -82,12 +96,47 @@ export function ScoreEntryRow({
     onChange(Math.max(1, par + relVal));
   };
 
+  // The plain string variant of the name is still used in two places:
+  //   · the CustomScoreSheet heading (no rich rendering there)
+  //   · the legacy `hasInfo` / fallback path when `nameSegments` is
+  //     not provided
+  const flatName = nameSegments ? flattenSegments(nameSegments) : name;
+
+  const hasSegments = !!nameSegments && nameSegments.length > 0;
   const hasSecondLine = !!(runningText || subtext);
-  const hasInfo = !!name || hasSecondLine;
-  // `CustomScoreSheet` always wants a heading; for scramble (no `name`)
-  // we synthesize one from the member names so the modal isn't anonymous.
+  const hasInfo = hasSegments || !!name || hasSecondLine;
+  // `CustomScoreSheet` always wants a heading; for scramble (no `name`
+  // and no segments) we synthesize one from the member names so the
+  // modal isn't anonymous.
   const sheetHeading =
-    name ?? members.map((m) => m.name).filter(Boolean).join(' & ');
+    flatName ?? members.map((m) => m.name).filter(Boolean).join(' & ');
+
+  const nameTextStyle = hasSecondLine ? styles.name : styles.nameLarge;
+  const nameNode = hasSegments ? (
+    <Text style={nameTextStyle} numberOfLines={1}>
+      {nameSegments!.map((seg, i) => {
+        const tappable = seg.linked && seg.linkTargetId && onPressLinkedName;
+        if (tappable) {
+          return (
+            <Text
+              // eslint-disable-next-line react/no-array-index-key
+              key={i}
+              onPress={() => onPressLinkedName!(seg.linkTargetId!)}
+              suppressHighlighting
+              style={styles.nameLinked}>
+              {seg.text}
+            </Text>
+          );
+        }
+        // eslint-disable-next-line react/no-array-index-key
+        return <Text key={i}>{seg.text}</Text>;
+      })}
+    </Text>
+  ) : name ? (
+    <Text style={nameTextStyle} numberOfLines={1}>
+      {name}
+    </Text>
+  ) : null;
 
   return (
     <View style={styles.row}>
@@ -99,13 +148,7 @@ export function ScoreEntryRow({
         />
         {hasInfo ? (
           <View style={styles.whoInfo}>
-            {name ? (
-              <Text
-                style={hasSecondLine ? styles.name : styles.nameLarge}
-                numberOfLines={1}>
-                {name}
-              </Text>
-            ) : null}
+            {nameNode}
             {runningText ? (
               <Text style={styles.running} numberOfLines={1}>
                 <Text style={runningTone ? styles[`tone_${runningTone}`] : undefined}>
@@ -197,6 +240,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 15,
       fontWeight: '800',
       color: colors.textTitle,
+    },
+    nameLinked: {
+      fontWeight: '900',
     },
     running: {
       fontSize: 10.5,

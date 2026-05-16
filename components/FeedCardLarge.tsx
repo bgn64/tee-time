@@ -21,6 +21,7 @@
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
+import { router } from 'expo-router';
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -178,7 +179,15 @@ export function FeedCardLarge({
 
       {round.scores.length > 0 ? (
         <View style={styles.body}>
-          <ReadOnlyScorecard round={round} />
+          <ReadOnlyScorecard
+            round={round}
+            onPressLinkedName={(id) =>
+              router.push({
+                pathname: '/(tabs)/(feed)/player/[id]',
+                params: { id },
+              })
+            }
+          />
         </View>
       ) : null}
     </View>

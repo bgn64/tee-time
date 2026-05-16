@@ -11,6 +11,7 @@ export default function RoundsLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="[id]" />
+      <Stack.Screen name="player/[id]" />
     </Stack>
   );
 }

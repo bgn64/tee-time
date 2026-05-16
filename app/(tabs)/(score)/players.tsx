@@ -28,6 +28,8 @@ import {
 } from 'react-native';
 
 import { newPlayerId } from '@/lib/ids';
+import { firstName } from '@/lib/userIdentity';
+import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
@@ -51,6 +53,7 @@ export default function PlayersScreen() {
   const { allPlayers, recentPlayers, addPlayer, markRecent, defaultPlayerId, getPlayer } =
     usePlayers();
   const { profileCache } = useSocial();
+  const { account } = useAccount();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -222,7 +225,9 @@ export default function PlayersScreen() {
             if (!p) return null;
             const isDefault = id === defaultPlayerId;
             const { letter, color } = resolveAvatar(p);
-            const label = isDefault ? 'You' : p.displayName ?? p.nickname;
+            const label = isDefault
+              ? firstName(account?.displayName) || p.displayName || p.nickname || 'You'
+              : p.displayName ?? p.nickname;
             return (
               <View key={id} style={[styles.chip, isDefault && styles.chipYou]}>
                 <View style={[styles.chipAvatar, { backgroundColor: color }]}>

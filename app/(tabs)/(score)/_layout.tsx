@@ -17,6 +17,7 @@ export default function ScoreLayout() {
       <Stack.Screen name="format" />
       <Stack.Screen name="scoring" options={{ gestureEnabled: false }} />
       <Stack.Screen name="new-course" />
+      <Stack.Screen name="player/[id]" />
     </Stack>
   );
 }

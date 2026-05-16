@@ -7,14 +7,19 @@
  * identity (id) survives, but its name/color recompute automatically.
  *
  * Rules:
- *   · Display name = Oxford-comma join of members' displayNames, with
- *     "You" used for the current default player when present.
+ *   · Display name = Oxford-comma join of members' displayNames. When
+ *     the default player is in the team and the caller supplies a
+ *     `firstNameForSelf` (e.g. "Ben"), that label is used in place of
+ *     the player's nickname/displayName. If `firstNameForSelf` is
+ *     omitted/empty, we fall through to the standard
+ *     displayName/nickname lookup (NOT the literal "You").
  *   · Color = the default-player's color when they're in the team;
  *     otherwise the first member's color. Falls back to a palette
  *     fallback if no member has a color set.
  *   · A singleton (1-member) team shows just that player's name.
  *
- * These helpers are pure — caller supplies all inputs.
+ * These helpers are pure — caller supplies all inputs. No React hooks,
+ * no `state/` imports; safe to call from non-component code.
  */
 
 import type { Player, Team } from '@/types/golf';
@@ -24,11 +29,19 @@ export const TEAM_FALLBACK_COLORS = ['#7cb342', '#4a90e2', '#9c5dde', '#ff8f00']
 export function deriveTeamName(
   memberIds: string[],
   resolvePlayer: (id: string) => Player | undefined,
-  defaultPlayerId: string | null
+  defaultPlayerId: string | null,
+  firstNameForSelf?: string
 ): string {
   if (memberIds.length === 0) return 'Empty group';
   const labels = memberIds.map((id) => {
-    if (defaultPlayerId && id === defaultPlayerId) return 'You';
+    if (
+      defaultPlayerId &&
+      id === defaultPlayerId &&
+      firstNameForSelf &&
+      firstNameForSelf.length > 0
+    ) {
+      return firstNameForSelf;
+    }
     const p = resolvePlayer(id);
     return p?.displayName ?? p?.nickname ?? 'Player';
   });
@@ -74,11 +87,12 @@ export function buildTeamsFromGroups(
   groups: string[][],
   resolvePlayer: (id: string) => Player | undefined,
   defaultPlayerId: string | null,
-  existingTeamIds: string[] = []
+  existingTeamIds: string[] = [],
+  firstNameForSelf?: string
 ): Team[] {
   return groups.map((memberIds, i) => ({
     id: existingTeamIds[i] ?? `team-${i + 1}-${Date.now()}`,
-    name: deriveTeamName(memberIds, resolvePlayer, defaultPlayerId),
+    name: deriveTeamName(memberIds, resolvePlayer, defaultPlayerId, firstNameForSelf),
     color: deriveTeamColor(memberIds, resolvePlayer, defaultPlayerId, i),
     playerIds: memberIds,
   }));

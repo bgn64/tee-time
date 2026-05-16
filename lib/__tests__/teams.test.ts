@@ -32,27 +32,49 @@ describe('deriveTeamName', () => {
   const roster = makeRoster();
   const r = resolver(roster);
 
-  test('uses "You" for the default player', () => {
+  test('uses firstNameForSelf for the default player when provided', () => {
+    expect(deriveTeamName(['user', 'dad'], r, 'user', 'Ben')).toBe('Ben & Dad');
+  });
+
+  test('falls back to player nickname for default player when firstNameForSelf is undefined', () => {
+    // Default player's roster nickname is "You" in this test fixture,
+    // but the helper itself must NOT hardcode the literal "You". It
+    // returns whatever the player record exposes via displayName /
+    // nickname.
     expect(deriveTeamName(['user', 'dad'], r, 'user')).toBe('You & Dad');
   });
 
+  test('falls back to player nickname when firstNameForSelf is empty string', () => {
+    expect(deriveTeamName(['user', 'dad'], r, 'user', '')).toBe('You & Dad');
+  });
+
+  test('prefers roster displayName for the default player when no firstNameForSelf', () => {
+    const localRoster = new Map<string, Player>([
+      ['user', { id: 'user', nickname: 'me', displayName: 'Benjamin Gardner', color: '#ff8f00' }],
+      ['dad', { id: 'dad', nickname: 'Dad' }],
+    ]);
+    expect(
+      deriveTeamName(['user', 'dad'], (id) => localRoster.get(id), 'user')
+    ).toBe('Benjamin Gardner & Dad');
+  });
+
   test('uses displayName when present, nickname otherwise', () => {
-    expect(deriveTeamName(['mike', 'sarah', 'dad'], r, 'user')).toBe(
+    expect(deriveTeamName(['mike', 'sarah', 'dad'], r, 'user', 'Ben')).toBe(
       'Mike Chen, Sarah Lin & Dad'
     );
   });
 
   test('singleton', () => {
-    expect(deriveTeamName(['user'], r, 'user')).toBe('You');
-    expect(deriveTeamName(['dad'], r, 'user')).toBe('Dad');
+    expect(deriveTeamName(['user'], r, 'user', 'Ben')).toBe('Ben');
+    expect(deriveTeamName(['dad'], r, 'user', 'Ben')).toBe('Dad');
   });
 
   test('empty', () => {
-    expect(deriveTeamName([], r, 'user')).toBe('Empty group');
+    expect(deriveTeamName([], r, 'user', 'Ben')).toBe('Empty group');
   });
 
-  test('no defaultPlayer', () => {
-    expect(deriveTeamName(['user', 'mike'], r, null)).toBe('You & Mike Chen');
+  test('no defaultPlayer ignores firstNameForSelf', () => {
+    expect(deriveTeamName(['user', 'mike'], r, null, 'Ben')).toBe('You & Mike Chen');
   });
 });
 
@@ -111,14 +133,40 @@ describe('buildTeamsFromGroups', () => {
       ],
       r,
       'user',
-      []
+      [],
+      'Ben'
     );
     expect(teams).toHaveLength(2);
-    expect(teams[0].name).toBe('You & Dad');
+    expect(teams[0].name).toBe('Ben & Dad');
     expect(teams[0].color).toBe('#ff8f00');
     expect(teams[0].playerIds).toEqual(['user', 'dad']);
     expect(teams[1].name).toBe('Mike Chen & Sarah Lin');
     expect(teams[1].color).toBe('#4a90e2');
+  });
+
+  test('threads firstNameForSelf through to deriveTeamName', () => {
+    const teams = buildTeamsFromGroups(
+      [['user', 'dad']],
+      r,
+      'user',
+      [],
+      'Alex'
+    );
+    expect(teams[0].name).toBe('Alex & Dad');
+  });
+
+  test('omitting firstNameForSelf falls back to roster nickname (not "You" literal from helper)', () => {
+    const localRoster = new Map<string, Player>([
+      ['user', { id: 'user', nickname: 'me', displayName: 'Benjamin Gardner', color: '#ff8f00' }],
+      ['dad', { id: 'dad', nickname: 'Dad' }],
+    ]);
+    const teams = buildTeamsFromGroups(
+      [['user', 'dad']],
+      (id) => localRoster.get(id),
+      'user',
+      []
+    );
+    expect(teams[0].name).toBe('Benjamin Gardner & Dad');
   });
 
   test('reuses existingTeamIds when provided', () => {
@@ -126,7 +174,8 @@ describe('buildTeamsFromGroups', () => {
       [['user'], ['mike', 'sarah']],
       r,
       'user',
-      ['stable-1', 'stable-2']
+      ['stable-1', 'stable-2'],
+      'Ben'
     );
     expect(teams[0].id).toBe('stable-1');
     expect(teams[1].id).toBe('stable-2');
@@ -137,7 +186,8 @@ describe('buildTeamsFromGroups', () => {
       [['user'], ['mike']],
       r,
       'user',
-      ['stable-1']
+      ['stable-1'],
+      'Ben'
     );
     expect(teams[0].id).toBe('stable-1');
     expect(teams[1].id).toMatch(/^team-2-/);

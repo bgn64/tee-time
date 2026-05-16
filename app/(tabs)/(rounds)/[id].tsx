@@ -32,11 +32,17 @@ import { HoleNavBar } from '@/components/HoleNavBar';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import { ScoreEntryRow } from '@/components/ScoreEntryRow';
 import type { AvatarMember } from '@/components/TeamAvatarCluster';
+import { TeePickerSheet } from '@/components/TeePickerSheet';
 import { OPENGOLF_ATTRIBUTION } from '@/lib/attribution';
 import { confirm, showAlert } from '@/lib/dialog';
 import { resolveParticipantIdentity } from '@/lib/participantIdentity';
 import { buildRoundTitle } from '@/lib/scoring';
 import { buildTeamMembers } from '@/lib/scorerMembers';
+import {
+  buildNameSegments,
+  flattenSegments,
+  type NameSegment,
+} from '@/lib/scorerNames';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -55,7 +61,7 @@ export default function RoundDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { colors } = useTheme();
   const { account } = useAccount();
-  const { allPlayers } = usePlayers();
+  const { allPlayers, defaultPlayerId } = usePlayers();
   const { profileCache } = useSocial();
   const { completedRounds, deleteRound, commitScoreEdits } = useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -70,6 +76,16 @@ export default function RoundDetailScreen() {
   const [pendingEdits, setPendingEdits] = useState<Record<string, number>>({});
   const pendingEditsRef = useRef(pendingEdits);
   pendingEditsRef.current = pendingEdits;
+  // Parallel buffer of in-flight tee edits keyed by scorerId
+  // (participantKey for stroke / teamId for scramble). `undefined` value
+  // explicitly clears a previously-set tee on Save.
+  const [pendingTeeEdits, setPendingTeeEdits] = useState<
+    Record<string, string | undefined>
+  >({});
+  const pendingTeeEditsRef = useRef(pendingTeeEdits);
+  pendingTeeEditsRef.current = pendingTeeEdits;
+  // Scorer whose tee pill was tapped; null when the sheet is closed.
+  const [teeEditTarget, setTeeEditTarget] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(saving);
   savingRef.current = saving;
@@ -90,21 +106,35 @@ export default function RoundDetailScreen() {
     name: string;
     color: string;
     members: AvatarMember[];
+    nameSegments: NameSegment[];
   };
   const editableScorerList = useMemo<EditScorer[]>(() => {
     if (!round || !isOwner) return [];
+    const nameDeps = {
+      account,
+      profileCache,
+      allPlayers,
+      defaultPlayerId,
+    };
     if (isScramble && round.teams) {
-      return round.teams.map((team) => ({
-        id: team.id,
-        name: team.name,
-        color: team.color,
-        members: buildTeamMembers(round, team.id, {
-          account,
-          profileCache,
-          allPlayers,
-          fallbackColor: colors.primary,
-        }),
-      }));
+      return round.teams.map((team) => {
+        const teamParticipants = (round.participants ?? []).filter(
+          (p) => p.teamId === team.id
+        );
+        const nameSegments = buildNameSegments(teamParticipants, nameDeps);
+        return {
+          id: team.id,
+          name: flattenSegments(nameSegments) || team.name,
+          color: team.color,
+          members: buildTeamMembers(round, team.id, {
+            account,
+            profileCache,
+            allPlayers,
+            fallbackColor: colors.primary,
+          }),
+          nameSegments,
+        };
+      });
     }
     return (round.participants ?? []).map((p) => {
       const identity = resolveParticipantIdentity(p, {
@@ -113,23 +143,35 @@ export default function RoundDetailScreen() {
         allPlayers,
       });
       const color = identity.color ?? colors.primary;
+      const nameSegments = buildNameSegments([p], nameDeps);
+      const name = flattenSegments(nameSegments) || identity.displayName;
       return {
         id: p.participantKey,
-        name: identity.displayName,
+        name,
         color,
-        members: [{ id: p.participantKey, name: identity.displayName, color }],
+        members: [{ id: p.participantKey, name, color }],
+        nameSegments,
       };
     });
-  }, [round, isOwner, isScramble, account, profileCache, allPlayers, colors.primary]);
+  }, [round, isOwner, isScramble, account, profileCache, allPlayers, defaultPlayerId, colors.primary]);
 
   const handleSave = useCallback(async () => {
     if (savingRef.current) return;
     const currentRound = roundRef.current;
     const buffer = pendingEditsRef.current;
+    const teeBuffer = pendingTeeEditsRef.current;
     const entries: Array<[string, number]> = Object.entries(buffer);
-    if (entries.length === 0 || !currentRound) {
+    const teeEntries: Array<[string, string | undefined]> = Object.entries(teeBuffer);
+    if (entries.length === 0 && teeEntries.length === 0) {
       setEditMode(false);
       setPendingEdits({});
+      setPendingTeeEdits({});
+      return;
+    }
+    if (!currentRound) {
+      setEditMode(false);
+      setPendingEdits({});
+      setPendingTeeEdits({});
       return;
     }
     setSaving(true);
@@ -147,7 +189,28 @@ export default function RoundDetailScreen() {
         return { scorerId, holeNumber: Number(holeStr), strokes };
       });
 
-    const result = await commitScoreEdits(currentRound.id, dirty);
+    // Filter tee edits down to those that would actually change the
+    // current round (scramble = compare against the team's most-common
+    // teeId; stroke = compare against the matching participant's teeId).
+    const isScrambleRound = currentRound.scoringRule === 'scramble';
+    const dirtyTees = teeEntries
+      .filter(([scorerId, teeId]) => {
+        if (isScrambleRound) {
+          const teamParticipants = (currentRound.participants ?? []).filter(
+            (p) => p.teamId === scorerId
+          );
+          if (teamParticipants.length === 0) return false;
+          return teamParticipants.some((p) => p.teeId !== teeId);
+        }
+        const p = (currentRound.participants ?? []).find(
+          (q) => q.participantKey === scorerId
+        );
+        if (!p) return false;
+        return p.teeId !== teeId;
+      })
+      .map(([scorerId, teeId]) => ({ scorerId, teeId }));
+
+    const result = await commitScoreEdits(currentRound.id, dirty, dirtyTees);
     setSaving(false);
     if (!result.ok) {
       showAlert('Save failed', result.error);
@@ -155,6 +218,7 @@ export default function RoundDetailScreen() {
     }
     setEditMode(false);
     setPendingEdits({});
+    setPendingTeeEdits({});
   }, [commitScoreEdits]);
 
   useScreenHeader({
@@ -171,35 +235,69 @@ export default function RoundDetailScreen() {
               setEditMode(true);
               setEditingHole(1);
               setPendingEdits({});
+              setPendingTeeEdits({});
             }
           },
         }
       : { kind: 'profile' },
   });
 
-  // displayRound merges pendingEdits into round.scores so the scorecard
-  // and entry rows both reflect unsaved edits while in edit mode. Returns
+  // displayRound merges pendingEdits into round.scores AND pendingTeeEdits
+  // into round.participants[].teeId so the scorecard, entry rows, and
+  // Final-box pill all reflect unsaved edits while in edit mode. Returns
   // undefined when round is missing so the early-return below can short-
   // circuit without unbalancing hook count.
   const displayRound = useMemo(() => {
     if (!round) return undefined;
-    if (!editMode || Object.keys(pendingEdits).length === 0) return round;
-    const overrideMap = new Map<string, number>();
-    for (const [key, strokes] of Object.entries(pendingEdits)) overrideMap.set(key, strokes);
-    const merged = round.scores.map((s) => {
-      const key = `${s.scorerId}::${s.holeNumber}`;
-      if (overrideMap.has(key)) return { ...s, strokes: overrideMap.get(key)! };
-      return s;
-    });
-    for (const [key, strokes] of overrideMap.entries()) {
-      const [scorerId, holeStr] = key.split('::');
-      const holeNumber = Number(holeStr);
-      if (!merged.find((s) => s.scorerId === scorerId && s.holeNumber === holeNumber)) {
-        merged.push({ scorerId, holeNumber, strokes });
+    const hasScoreEdits = editMode && Object.keys(pendingEdits).length > 0;
+    const hasTeeEdits = editMode && Object.keys(pendingTeeEdits).length > 0;
+    if (!hasScoreEdits && !hasTeeEdits) return round;
+
+    let nextScores = round.scores;
+    if (hasScoreEdits) {
+      const overrideMap = new Map<string, number>();
+      for (const [key, strokes] of Object.entries(pendingEdits)) overrideMap.set(key, strokes);
+      const merged = round.scores.map((s) => {
+        const key = `${s.scorerId}::${s.holeNumber}`;
+        if (overrideMap.has(key)) return { ...s, strokes: overrideMap.get(key)! };
+        return s;
+      });
+      for (const [key, strokes] of overrideMap.entries()) {
+        const [scorerId, holeStr] = key.split('::');
+        const holeNumber = Number(holeStr);
+        if (!merged.find((s) => s.scorerId === scorerId && s.holeNumber === holeNumber)) {
+          merged.push({ scorerId, holeNumber, strokes });
+        }
       }
+      nextScores = merged;
     }
-    return { ...round, scores: merged };
-  }, [round, editMode, pendingEdits]);
+
+    let nextParticipants = round.participants;
+    if (hasTeeEdits && round.participants) {
+      const isScrambleRound = round.scoringRule === 'scramble';
+      nextParticipants = round.participants.map((p) => {
+        let nextTeeId: string | undefined = p.teeId;
+        let touched = false;
+        for (const [scorerId, teeId] of Object.entries(pendingTeeEdits)) {
+          const matches = isScrambleRound
+            ? p.teamId === scorerId
+            : p.participantKey === scorerId;
+          if (matches) {
+            nextTeeId = teeId;
+            touched = true;
+          }
+        }
+        if (!touched) return p;
+        if (nextTeeId == null) {
+          const { teeId: _drop, ...rest } = p;
+          return rest;
+        }
+        return { ...p, teeId: nextTeeId };
+      });
+    }
+
+    return { ...round, scores: nextScores, participants: nextParticipants };
+  }, [round, editMode, pendingEdits, pendingTeeEdits]);
 
   const setEntryScore = useCallback(
     (scorerId: string, holeNumber: number, strokes: number) => {
@@ -208,6 +306,10 @@ export default function RoundDetailScreen() {
     },
     []
   );
+
+  const handleEditTee = useCallback((scorerId: string) => {
+    setTeeEditTarget(scorerId);
+  }, []);
 
   // -- Early return AFTER every hook so React's hook-order invariant
   // holds even when the round disappears mid-screen (e.g., during a
@@ -228,7 +330,8 @@ export default function RoundDetailScreen() {
     : undefined;
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <>
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.titleBlock}>
         <Text style={styles.title} numberOfLines={1}>
           {round.course.name}
@@ -272,6 +375,13 @@ export default function RoundDetailScreen() {
                   <ScoreEntryRow
                     members={s.members}
                     name={isScramble ? undefined : s.name}
+                    nameSegments={isScramble ? undefined : s.nameSegments}
+                    onPressLinkedName={(linkId) =>
+                      router.push({
+                        pathname: '/(tabs)/(rounds)/player/[id]',
+                        params: { id: linkId },
+                      })
+                    }
                     holeNumber={currentEditHole.number}
                     par={currentEditHole.par}
                     strokes={score ? score.strokes : null}
@@ -291,6 +401,13 @@ export default function RoundDetailScreen() {
         round={displayRound}
         currentHoleNumber={editMode ? editingHole : undefined}
         onHolePress={editMode ? setEditingHole : undefined}
+        onPressLinkedName={(linkId) =>
+          router.push({
+            pathname: '/(tabs)/(rounds)/player/[id]',
+            params: { id: linkId },
+          })
+        }
+        onEditTee={editMode ? handleEditTee : undefined}
       />
 
       {!editMode && isOwner ? (
@@ -320,6 +437,47 @@ export default function RoundDetailScreen() {
         <Text style={styles.attribution}>{OPENGOLF_ATTRIBUTION}</Text>
       )}
     </ScrollView>
+
+      <TeePickerSheet
+        visible={teeEditTarget != null}
+        scorerName={
+          (teeEditTarget &&
+            editableScorerList.find((s) => s.id === teeEditTarget)?.name) ||
+          ''
+        }
+        tees={round.course.tees ?? []}
+        selectedTeeId={
+          teeEditTarget
+            ? (() => {
+                if (teeEditTarget in pendingTeeEdits) {
+                  return pendingTeeEdits[teeEditTarget];
+                }
+                if (isScramble) {
+                  // Same most-common-teeId convention as ReadOnlyScorecard.
+                  const counts = new Map<string, number>();
+                  for (const p of round.participants ?? []) {
+                    if (p.teamId === teeEditTarget && p.teeId) {
+                      counts.set(p.teeId, (counts.get(p.teeId) ?? 0) + 1);
+                    }
+                  }
+                  const sorted = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+                  return sorted[0]?.[0];
+                }
+                return (round.participants ?? []).find(
+                  (p) => p.participantKey === teeEditTarget
+                )?.teeId;
+              })()
+            : undefined
+        }
+        onCancel={() => setTeeEditTarget(null)}
+        onPick={(teeId) => {
+          if (!teeEditTarget) return;
+          const target = teeEditTarget;
+          setPendingTeeEdits((prev) => ({ ...prev, [target]: teeId }));
+          setTeeEditTarget(null);
+        }}
+      />
+    </>
   );
 }
 

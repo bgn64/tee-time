@@ -24,6 +24,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { AVATAR_COLORS } from '@/constants/avatarColors';
 import { formatScore } from '@/lib/scoring';
+import { firstName } from '@/lib/userIdentity';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
@@ -59,7 +60,7 @@ export default function YouScreen() {
   const me = defaultPlayerId ? getPlayer(defaultPlayerId) : undefined;
   const displayName = account?.displayName ?? me?.nickname ?? 'You';
   const avatarColor = account?.avatarColor ?? me?.color ?? colors.primary;
-  const avatarLetter = displayName[0]?.toUpperCase() ?? 'Y';
+  const avatarLetter = (firstName(displayName) || displayName)[0]?.toUpperCase() ?? 'Y';
 
   // Stats: only stroke rounds where the viewer participated. Scramble
   // is collaborative — no individual credit.

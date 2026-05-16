@@ -32,6 +32,8 @@ import {
   deriveTeamColor,
   deriveTeamName,
 } from '@/lib/teams';
+import { firstName } from '@/lib/userIdentity';
+import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
@@ -50,6 +52,7 @@ export default function FormatScreen() {
   }>();
   const { courses, startRound } = useGolfRound();
   const { getPlayer, defaultPlayerId } = usePlayers();
+  const { account } = useAccount();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -93,13 +96,20 @@ export default function FormatScreen() {
     null
   );
 
+  const selfFirstName = useMemo(
+    () => firstName(account?.displayName),
+    [account?.displayName]
+  );
+
   const resolveName = useCallback(
     (playerId: string) => {
-      if (defaultPlayerId && playerId === defaultPlayerId) return 'You';
       const p = getPlayer(playerId);
+      if (defaultPlayerId && playerId === defaultPlayerId) {
+        return selfFirstName || p?.displayName || p?.nickname || 'Player';
+      }
       return p?.displayName ?? p?.nickname ?? 'Player';
     },
-    [defaultPlayerId, getPlayer]
+    [defaultPlayerId, getPlayer, selfFirstName]
   );
 
   function moveMember(playerId: string, fromGroup: number, toGroup: number | 'new') {
@@ -123,7 +133,7 @@ export default function FormatScreen() {
         isLiveShareable: shareLive,
       });
     } else {
-      const teams = buildTeamsFromGroups(groups, getPlayer, defaultPlayerId, groupIds);
+      const teams = buildTeamsFromGroups(groups, getPlayer, defaultPlayerId, groupIds, selfFirstName);
       const scrambleTeeIds: Record<string, string | undefined> = {};
       teams.forEach((team) => {
         const teeId = teamTeeIds[team.id];
@@ -198,6 +208,7 @@ export default function FormatScreen() {
             resolveName={resolveName}
             getPlayer={getPlayer}
             defaultPlayerId={defaultPlayerId}
+            selfFirstName={selfFirstName}
             groupIds={groupIds}
             onTapMember={(playerId, fromGroup) =>
               setMoveSource({ playerId, fromGroup })
@@ -250,6 +261,7 @@ export default function FormatScreen() {
         resolveName={resolveName}
         getPlayer={getPlayer}
         defaultPlayerId={defaultPlayerId}
+        selfFirstName={selfFirstName}
         onClose={() => setMoveSource(null)}
         onPick={(toGroup) => {
           if (!moveSource) return;
@@ -264,7 +276,7 @@ export default function FormatScreen() {
           pickerTarget?.kind === 'player'
             ? resolveName(pickerTarget.playerId)
             : pickerTarget?.kind === 'team'
-            ? deriveTeamName(groups[pickerTarget.groupIndex] ?? [], getPlayer, defaultPlayerId)
+            ? deriveTeamName(groups[pickerTarget.groupIndex] ?? [], getPlayer, defaultPlayerId, selfFirstName)
             : ''
         }
         tees={course?.tees ?? []}
@@ -334,7 +346,6 @@ function StrokeBody({
       <View style={styles.list}>
         {playerIds.map((id) => {
           const p = getPlayer(id);
-          const isYou = defaultPlayerId === id;
           const color = p?.color ?? colors.primary;
           const letter = (p?.displayName ?? p?.nickname ?? '?')[0]?.toUpperCase() ?? '?';
           const tee = teeIds[id] ? teeById.get(teeIds[id]!) : undefined;
@@ -344,7 +355,7 @@ function StrokeBody({
                 <Text style={styles.rowAvatarText}>{letter}</Text>
               </View>
               <Text style={styles.rowName} numberOfLines={1}>
-                {isYou ? 'You' : resolveName(id)}
+                {resolveName(id)}
               </Text>
               {hasTees && (
                 <TeeSelectionPill
@@ -368,6 +379,7 @@ function ScrambleBody({
   resolveName,
   getPlayer,
   defaultPlayerId,
+  selfFirstName,
   groupIds,
   onTapMember,
   courseTees,
@@ -380,6 +392,7 @@ function ScrambleBody({
   resolveName: (id: string) => string;
   getPlayer: ReturnType<typeof usePlayers>['getPlayer'];
   defaultPlayerId: string | null;
+  selfFirstName: string;
   groupIds: string[];
   onTapMember: (playerId: string, fromGroup: number) => void;
   courseTees: Tee[];
@@ -406,7 +419,7 @@ function ScrambleBody({
       <Text style={styles.sectionLabel}>GROUPS</Text>
       <View style={styles.list}>
         {groups.map((members, i) => {
-          const teamName = deriveTeamName(members, getPlayer, defaultPlayerId);
+          const teamName = deriveTeamName(members, getPlayer, defaultPlayerId, selfFirstName);
           const teamColor = deriveTeamColor(members, getPlayer, defaultPlayerId, i);
           const teamId = groupIds[i];
           const tee = teamId && teamTeeIds[teamId] ? teeById.get(teamTeeIds[teamId]!) : undefined;
@@ -432,7 +445,6 @@ function ScrambleBody({
               <View style={styles.teamMembers}>
                 {members.map((id) => {
                   const p = getPlayer(id);
-                  const isYou = defaultPlayerId === id;
                   const color = p?.color ?? colors.primary;
                   const letter =
                     (p?.displayName ?? p?.nickname ?? '?')[0]?.toUpperCase() ?? '?';
@@ -444,7 +456,7 @@ function ScrambleBody({
                       <View style={[styles.memberAvatar, { backgroundColor: color }]}>
                         <Text style={styles.memberAvatarText}>{letter}</Text>
                       </View>
-                      <Text style={styles.memberLabel}>{isYou ? 'You' : resolveName(id)}</Text>
+                      <Text style={styles.memberLabel}>{resolveName(id)}</Text>
                     </Pressable>
                   );
                 })}
@@ -493,6 +505,7 @@ function MoveSheet({
   resolveName,
   getPlayer,
   defaultPlayerId,
+  selfFirstName,
   onClose,
   onPick,
 }: {
@@ -503,6 +516,7 @@ function MoveSheet({
   resolveName: (id: string) => string;
   getPlayer: ReturnType<typeof usePlayers>['getPlayer'];
   defaultPlayerId: string | null;
+  selfFirstName: string;
   onClose: () => void;
   onPick: (toGroup: number | 'new') => void;
 }) {
@@ -510,7 +524,7 @@ function MoveSheet({
   const movedName = moveSource ? resolveName(moveSource.playerId) : '';
   const currentGroup = moveSource ? groups[moveSource.fromGroup] : null;
   const currentName = currentGroup
-    ? deriveTeamName(currentGroup, getPlayer, defaultPlayerId)
+    ? deriveTeamName(currentGroup, getPlayer, defaultPlayerId, selfFirstName)
     : '';
   const currentColor = currentGroup
     ? deriveTeamColor(currentGroup, getPlayer, defaultPlayerId, moveSource!.fromGroup)
@@ -521,7 +535,8 @@ function MoveSheet({
     ? deriveTeamName(
         currentGroup.filter((id) => id !== moveSource!.playerId),
         getPlayer,
-        defaultPlayerId
+        defaultPlayerId,
+        selfFirstName
       )
     : '';
 
@@ -541,7 +556,7 @@ function MoveSheet({
           <View style={styles.sheetList}>
             {groups.map((members, i) => {
               if (!moveSource || moveSource.fromGroup === i) return null;
-              const name = deriveTeamName(members, getPlayer, defaultPlayerId);
+              const name = deriveTeamName(members, getPlayer, defaultPlayerId, selfFirstName);
               const color = deriveTeamColor(members, getPlayer, defaultPlayerId, i);
               return (
                 <Pressable
