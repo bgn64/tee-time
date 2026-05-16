@@ -33,7 +33,7 @@ export function AppHeader() {
       <View style={styles.row}>
         <View style={styles.leftSlot}>{renderLeft(slots.left, styles)}</View>
         <View pointerEvents="none" style={styles.centerSlot}>
-          <Logo size={36} color={colors.primaryDark} ballFill={colors.cardBg} />
+          <Logo size={36} variant="disc" />
         </View>
         <View style={styles.rightSlot}>{renderRight(slots.right, styles, colors)}</View>
       </View>

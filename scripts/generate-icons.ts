@@ -35,13 +35,13 @@ type Job = {
 };
 
 const jobs: Job[] = [
-  { svg: 'icon.svg',          out: 'icon-modern-scorecard.png',            size: 1024 },
+  { svg: 'icon-ios.svg',      out: 'icon-modern-scorecard.png',            size: 1024 },
   { svg: 'adaptive-icon.svg', out: 'adaptive-icon-modern-scorecard.png',   size: 1024 },
   { svg: 'splash.svg',        out: 'splash-modern-scorecard.png',          size: 1024 },
   { svg: 'icon.svg',          out: 'favicon.png',          size: 48 },
-  { svg: 'icon.svg',          out: 'icon-192.png',         size: 192, dir: 'public' },
-  { svg: 'icon.svg',          out: 'icon-512.png',         size: 512, dir: 'public' },
-  { svg: 'icon.svg',          out: 'apple-touch-icon.png', size: 180, dir: 'public' },
+  { svg: 'icon-ios.svg',      out: 'icon-192.png',         size: 192, dir: 'public' },
+  { svg: 'icon-ios.svg',      out: 'icon-512.png',         size: 512, dir: 'public' },
+  { svg: 'icon-ios.svg',      out: 'apple-touch-icon.png', size: 180, dir: 'public' },
   { svg: 'icon.svg',          out: 'tee-time-logo.png',    size: 1024, dir: 'logo' },
 ];
 

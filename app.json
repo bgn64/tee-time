@@ -24,7 +24,7 @@
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon-modern-scorecard.png",
-        "backgroundColor": "#f6f7f2"
+        "backgroundColor": "#2f7d4b"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

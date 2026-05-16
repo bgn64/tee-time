@@ -1,9 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
-  <!-- Android adaptive-icon foreground · 2c sunset, edge-to-edge (no wordmark).
-       The Android launcher applies its own mask (circle on Pixel, squircle
-       on Samsung One UI, etc.) to a 108dp square. We fill the entire square
-       with the sunset gradient and let the launcher trim the corners — no
-       inner disc, no text. -->
+  <!-- Tee Time iOS app icon · 2c sunset, edge-to-edge (no wordmark).
+       iOS / PWA / Apple Touch contexts apply their own rounded-corner mask.
+       The source is a flat full-bleed square with the horizon gradient and
+       the mark on the horizon line — no inner disc, no text. -->
   <defs>
     <linearGradient id="sunsetGrad" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%"   stop-color="#f8d4a0"/>
