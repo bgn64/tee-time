@@ -1270,6 +1270,34 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     };
   }, [accountUserId, cloudToLocalRound]);
 
+  // Auto-promote a cloud in-progress round into `currentRound` on
+  // fresh devices / clean installs. Without this, a user who started
+  // a round on phone A and signs into phone B would see no live round
+  // locally; if they tried to start a new one, the partial unique
+  // index from migration 020 would reject the insert with 23505 and
+  // strand them. We only promote when local state is *empty* — never
+  // overwrite an existing local round (avoids stomping on a diverged
+  // setup; that conflict is a separate problem worth its own UI).
+  //
+  // Picker: deterministic by `lastScoreAt ?? startedAt` desc so two
+  // rows in cloudRounds (shouldn't happen after migration 020, but
+  // defense-in-depth) resolve to the most recently-active one.
+  useEffect(() => {
+    if (!hydrated || !accountHydrated) return;
+    if (!accountUserId) return;
+    if (currentRound) return;
+    const mine = cloudRounds.filter(
+      (r) => r.ownerUserId === accountUserId && !r.completedAt
+    );
+    if (mine.length === 0) return;
+    const pick = mine.reduce((best, r) => {
+      const bestT = new Date(best.lastScoreAt ?? best.startedAt).getTime();
+      const rT = new Date(r.lastScoreAt ?? r.startedAt).getTime();
+      return rT > bestT ? r : best;
+    });
+    setCurrentRound(pick);
+  }, [accountUserId, hydrated, accountHydrated, cloudRounds, currentRound]);
+
   const value = useMemo<GolfRoundContextValue>(
     () => ({
       completedRounds,
@@ -1299,6 +1327,18 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         void cloudDeleteCourse(courseId);
       },
       startRound: (courseId, playerIds = [], scoringRule = 'stroke', teams, opts) => {
+        // Idempotency guard. A round is already live — refuse to start a
+        // second one. The DB also enforces this via the partial unique
+        // index on `scorecards (owner_user_id) WHERE completed_at IS NULL`
+        // (migration 020); this client check is the friendlier first line
+        // of defense behind the route gates in players/format/new-course.
+        // The caller (format.tsx#handleStart) still calls
+        // router.replace('/scoring') after, landing the user on their
+        // existing round.
+        if (currentRound) {
+          console.warn('[startRound] ignored — a round is already in progress');
+          return;
+        }
         const course = courses.find((c) => c.id === courseId);
         if (!course) {
           throw new Error(`Cannot start round for unknown course: ${courseId}`);
@@ -1377,39 +1417,51 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         void cloudUpsertRound(newRound, { bumpLastScoreAt: false });
       },
       setHoleScore: (scorerId, holeNumber, relativeScore) => {
-        setCurrentRound((round) => {
-          if (!round) {
-            throw new Error('Cannot set score without a current round.');
-          }
-          const hole = round.course.holes.find((courseHole) => courseHole.number === holeNumber);
-          if (!hole) {
-            throw new Error(`Cannot set score for unknown hole: ${holeNumber}`);
-          }
-          const strokes = Math.max(1, hole.par + relativeScore);
-          return {
-            ...round,
-            scores: replaceScore(round.scores, { scorerId, holeNumber, strokes }),
-          };
-        });
+        if (!currentRound) {
+          throw new Error('Cannot set score without a current round.');
+        }
+        const hole = currentRound.course.holes.find(
+          (courseHole) => courseHole.number === holeNumber,
+        );
+        if (!hole) {
+          throw new Error(`Cannot set score for unknown hole: ${holeNumber}`);
+        }
+        const strokes = Math.max(1, hole.par + relativeScore);
+        const next: Round = {
+          ...currentRound,
+          scores: replaceScore(currentRound.scores, {
+            scorerId,
+            holeNumber,
+            strokes,
+          }),
+        };
+        setCurrentRound(next);
+        // Push every score tap to the cloud so a tab close / crash mid-
+        // hole doesn't drop the entry, and so `last_score_at` correctly
+        // reflects the latest score event (it powers the friends'
+        // live-strip ordering — see migration 017).
+        void cloudUpsertRound(next);
       },
       setCustomHoleScore: (scorerId, holeNumber, strokes) => {
-        setCurrentRound((round) => {
-          if (!round) {
-            throw new Error('Cannot set custom score without a current round.');
-          }
-          const hasHole = round.course.holes.some((courseHole) => courseHole.number === holeNumber);
-          if (!hasHole) {
-            throw new Error(`Cannot set custom score for unknown hole: ${holeNumber}`);
-          }
-          return {
-            ...round,
-            scores: replaceScore(round.scores, {
-              scorerId,
-              holeNumber,
-              strokes: Math.max(1, strokes),
-            }),
-          };
-        });
+        if (!currentRound) {
+          throw new Error('Cannot set custom score without a current round.');
+        }
+        const hasHole = currentRound.course.holes.some(
+          (courseHole) => courseHole.number === holeNumber,
+        );
+        if (!hasHole) {
+          throw new Error(`Cannot set custom score for unknown hole: ${holeNumber}`);
+        }
+        const next: Round = {
+          ...currentRound,
+          scores: replaceScore(currentRound.scores, {
+            scorerId,
+            holeNumber,
+            strokes: Math.max(1, strokes),
+          }),
+        };
+        setCurrentRound(next);
+        void cloudUpsertRound(next);
       },
       goToPreviousHole: () => {
         let snapshot: Round | null = null;

@@ -24,11 +24,13 @@
 jest.mock('@/state/supabaseClient');
 
 import { act, waitFor } from '@testing-library/react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 
 import {
+  mockSupabaseCallLog,
   mockSupabaseEmitChannel,
   mockSupabaseGetTable,
   mockSupabaseReset,
@@ -102,8 +104,12 @@ function useGolfAndAccount() {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   mockSupabaseReset();
+  // The new startRound / setHoleScore tests below persist `currentRound`
+  // to AsyncStorage as a side effect. Clearing here prevents that state
+  // from bleeding into subsequent tests that expect a clean hydrate.
+  await AsyncStorage.clear();
 });
 
 // =============================================================================
@@ -348,5 +354,370 @@ describe('GolfRoundContext initial pull (post-refactor)', () => {
     // were spuriously synthesized.
     expect(result.current.golf.completedRounds).toEqual([]);
     expect(mockSupabaseGetTable('scorecards')).toEqual([]);
+  });
+});
+
+// =============================================================================
+// startRound idempotency (Tier 3a)
+//
+// A live round is structurally a singleton — only Finish / Abandon may
+// clear it. Belt-and-suspenders behind the route gates on
+// players/format/new-course: even if a stale caller manages to invoke
+// `startRound` while `currentRound` is set, the call is a no-op and the
+// existing round is preserved.
+// =============================================================================
+
+describe('GolfRoundContext.startRound idempotency', () => {
+  function seedCourseLocally(golf: ReturnType<typeof useGolfRound>) {
+    golf.addCourse({
+      id: 'course-test',
+      name: 'Test Course',
+      location: 'Nowhere, USA',
+      source: 'custom',
+      holes: [
+        { number: 1, par: 4 },
+        { number: 2, par: 3 },
+        { number: 3, par: 5 },
+      ],
+    });
+  }
+
+  test('refuses to start a second round when one is already in progress', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    await act(async () => {
+      seedCourseLocally(result.current.golf);
+    });
+
+    // First call seeds a round.
+    await act(async () => {
+      result.current.golf.startRound('course-test', ['player-alice'], 'stroke');
+    });
+    const firstRoundId = result.current.golf.currentRound?.id;
+    expect(firstRoundId).toBeTruthy();
+
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Second call must be a no-op: same round id retained.
+    await act(async () => {
+      result.current.golf.startRound('course-test', ['player-bob'], 'stroke');
+    });
+    expect(result.current.golf.currentRound?.id).toBe(firstRoundId);
+    // The original player list is preserved (we passed a different one
+    // on the second call to prove the no-op).
+    expect(result.current.golf.currentRound?.playerIds).toEqual(['player-alice']);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[startRound] ignored'),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  test('starts normally when no round is in progress (regression guard)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    expect(result.current.golf.currentRound).toBeNull();
+
+    await act(async () => {
+      seedCourseLocally(result.current.golf);
+    });
+    await act(async () => {
+      result.current.golf.startRound('course-test', ['player-alice'], 'stroke');
+    });
+
+    expect(result.current.golf.currentRound).not.toBeNull();
+    expect(result.current.golf.currentRound?.course.id).toBe('course-test');
+    expect(result.current.golf.currentRound?.playerIds).toEqual(['player-alice']);
+  });
+});
+
+// =============================================================================
+// Score-tap cloud upserts (Tier 3d)
+//
+// setHoleScore / setCustomHoleScore now push the post-update round to
+// the cloud immediately. Before: scores survived in AsyncStorage only
+// until the next hole-nav / range / tee change fired its own upsert,
+// which left a "scored a few holes then closed the tab" window where
+// taps were silently dropped from the cloud and `last_score_at` lagged
+// behind the actual last score event.
+// =============================================================================
+
+describe('GolfRoundContext score-tap cloud upserts', () => {
+  function seedCourseLocally(golf: ReturnType<typeof useGolfRound>) {
+    golf.addCourse({
+      id: 'course-test',
+      name: 'Test Course',
+      location: 'Nowhere, USA',
+      source: 'custom',
+      holes: [
+        { number: 1, par: 4 },
+        { number: 2, par: 3 },
+        { number: 3, par: 5 },
+      ],
+    });
+  }
+
+  function findUpsertedScores(roundId: string): any[][] {
+    return mockSupabaseCallLog()
+      .filter(
+        (e) =>
+          e.kind === 'from.upsert' &&
+          e.args[0]?.table === 'scorecards' &&
+          e.args[0]?.payload?.id === roundId,
+      )
+      .map((e) => e.args[0].payload.scores);
+  }
+
+  test('setCustomHoleScore upserts the post-update scores array to the cloud', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    await act(async () => {
+      seedCourseLocally(result.current.golf);
+    });
+    await act(async () => {
+      result.current.golf.startRound('course-test', ['player-alice'], 'stroke');
+    });
+    const roundId = result.current.golf.currentRound!.id;
+
+    await act(async () => {
+      result.current.golf.setCustomHoleScore('player-alice', 1, 5);
+    });
+
+    const scoresList = findUpsertedScores(roundId);
+    const lastScores = scoresList[scoresList.length - 1];
+    expect(lastScores).toEqual([
+      { scorerId: 'player-alice', holeNumber: 1, strokes: 5 },
+    ]);
+  });
+
+  test('setHoleScore (relative-to-par form) upserts the post-update scores array', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    await act(async () => {
+      seedCourseLocally(result.current.golf);
+    });
+    await act(async () => {
+      result.current.golf.startRound('course-test', ['player-alice'], 'stroke');
+    });
+    const roundId = result.current.golf.currentRound!.id;
+
+    // Hole 2 par is 3 → +1 relative → 4 strokes.
+    await act(async () => {
+      result.current.golf.setHoleScore('player-alice', 2, 1);
+    });
+
+    const scoresList = findUpsertedScores(roundId);
+    const lastScores = scoresList[scoresList.length - 1];
+    expect(lastScores).toEqual([
+      { scorerId: 'player-alice', holeNumber: 2, strokes: 4 },
+    ]);
+  });
+});
+
+// =============================================================================
+// Cloud → local auto-promote (Tier 3c)
+//
+// On a fresh device (or after AsyncStorage was cleared), `currentRound`
+// is null but the user's in-progress scorecard exists in Supabase. After
+// the initial cloud pull populates `cloudRounds`, the auto-promote
+// effect lifts that row into `currentRound` so the user can resume.
+// Closes the gap that migration 020's partial unique index would
+// otherwise turn into a 23505 dead-letter if the user tried to start a
+// fresh round.
+// =============================================================================
+
+describe('GolfRoundContext auto-promote in-progress cloud round', () => {
+  // Local helper that produces a *truly* in-progress row. The shared
+  // `makeScorecardRow` helper uses `??` for defaults, which means
+  // passing `completed_at: null` would fall back to the completed
+  // default. Build the row inline here to force the null through.
+  function makeInProgressRow(overrides: Partial<Record<string, any>> & {
+    id: string;
+    owner_user_id: string;
+  }): Record<string, any> {
+    return {
+      ...makeScorecardRow(overrides),
+      completed_at: null,
+      last_score_at: overrides.last_score_at ?? null,
+    };
+  }
+
+  test('promotes a single in-progress cloud row to currentRound when local is empty', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', [
+      makeInProgressRow({
+        id: 'sc-live',
+        owner_user_id: aliceUserId,
+        started_at: '2025-03-01T10:00:00Z',
+        last_score_at: '2025-03-01T10:30:00Z',
+      }),
+    ]);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+      expect(result.current.golf.currentRound?.id).toBe('sc-live');
+    });
+  });
+
+  test('does not overwrite an existing local currentRound', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    // Seed a local round.
+    await act(async () => {
+      result.current.golf.addCourse({
+        id: 'course-test',
+        name: 'Test',
+        location: '',
+        source: 'custom',
+        holes: [{ number: 1, par: 4 }],
+      });
+    });
+    await act(async () => {
+      result.current.golf.startRound('course-test', ['player-alice'], 'stroke');
+    });
+    const localId = result.current.golf.currentRound!.id;
+
+    // Now a DIFFERENT in-progress row appears in the cloud (simulated
+    // realtime / refresh). The auto-promote must NOT touch the local
+    // round.
+    await act(async () => {
+      mockSupabaseEmitChannel('scorecards-stream', 'scorecards', 'INSERT', {
+        new: makeInProgressRow({
+          id: 'sc-cloud-other',
+          owner_user_id: aliceUserId,
+          last_score_at: '2025-04-01T00:00:00Z',
+        }),
+      });
+    });
+
+    expect(result.current.golf.currentRound?.id).toBe(localId);
+  });
+
+  test('picks the most recent of multiple in-progress rows (defense-in-depth)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', [
+      makeInProgressRow({
+        id: 'sc-old',
+        owner_user_id: aliceUserId,
+        started_at: '2025-03-01T08:00:00Z',
+        last_score_at: '2025-03-01T08:30:00Z',
+      }),
+      makeInProgressRow({
+        id: 'sc-new',
+        owner_user_id: aliceUserId,
+        started_at: '2025-03-02T08:00:00Z',
+        last_score_at: '2025-03-02T09:00:00Z',
+      }),
+    ]);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+      expect(result.current.golf.currentRound?.id).toBe('sc-new');
+    });
+  });
+
+  test('ignores in-progress rows owned by a different user', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', [
+      makeInProgressRow({
+        id: 'sc-friend-live',
+        owner_user_id: bobUserId,
+        last_score_at: '2025-03-01T10:30:00Z',
+      }),
+    ]);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    // Give the effect a chance to fire if it were going to.
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    expect(result.current.golf.currentRound).toBeNull();
+  });
+
+  test('ignores completed rows even if they are the viewer\'s own', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', [
+      makeScorecardRow({
+        id: 'sc-done',
+        owner_user_id: aliceUserId,
+        completed_at: '2025-03-01T13:00:00Z',
+        last_score_at: '2025-03-01T12:55:00Z',
+      }),
+    ]);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    expect(result.current.golf.currentRound).toBeNull();
   });
 });

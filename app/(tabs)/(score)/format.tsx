@@ -21,7 +21,7 @@
  * into `/scoring`.
  */
 
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, Redirect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -45,7 +45,21 @@ type TeePickerTarget =
   | { kind: 'team'; groupIndex: number }
   | null;
 
-export default function FormatScreen() {
+/**
+ * Gate component: format selection is round-setup territory; if a round
+ * is already in progress, redirect to `/scoring` synchronously so we
+ * never tap `startRound` a second time. See
+ * `app/(tabs)/(score)/_layout.tsx` for the broader invariant.
+ */
+export default function FormatScreenGate() {
+  const { currentRound } = useGolfRound();
+  if (currentRound) {
+    return <Redirect href="/(tabs)/(score)/scoring" />;
+  }
+  return <FormatScreen />;
+}
+
+function FormatScreen() {
   const { courseId, playerIds: rawPlayerIds } = useLocalSearchParams<{
     courseId: string;
     playerIds: string;

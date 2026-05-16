@@ -13,7 +13,7 @@
  * ids serialized as a URL param.
  */
 
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams, Redirect } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -47,7 +47,22 @@ function pickColor(seedKey: string): string {
   return NEW_PLAYER_COLORS[Math.abs(hash) % NEW_PLAYER_COLORS.length];
 }
 
-export default function PlayersScreen() {
+/**
+ * Gate component: if a round is already in progress, the user has no
+ * business on the player-picker. Redirect them straight to `/scoring`
+ * synchronously so the body never mounts (no header flash, no stale
+ * selection state). See docs in `app/(tabs)/(score)/_layout.tsx` for
+ * the broader "Finish / Abandon are the only round exits" invariant.
+ */
+export default function PlayersScreenGate() {
+  const { currentRound } = useGolfRound();
+  if (currentRound) {
+    return <Redirect href="/(tabs)/(score)/scoring" />;
+  }
+  return <PlayersScreen />;
+}
+
+function PlayersScreen() {
   const { courseId } = useLocalSearchParams<{ courseId: string }>();
   const { courses } = useGolfRound();
   const { allPlayers, recentPlayers, addPlayer, markRecent, defaultPlayerId, getPlayer } =

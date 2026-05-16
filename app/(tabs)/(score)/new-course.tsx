@@ -16,7 +16,7 @@
  * Header chrome: left = "‹ Course" back button. The form uses no right slot.
  */
 
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, Redirect } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -57,7 +57,21 @@ function buildHoles(pars: number[], yardages: (number | null)[]): Hole[] {
   });
 }
 
-export default function CourseFormScreen() {
+/**
+ * Gate component: custom-course creation lives in the Score-tab setup
+ * flow. If a round is already in progress, redirect to `/scoring` —
+ * the user can manage courses from elsewhere or after the round.
+ * See `app/(tabs)/(score)/_layout.tsx` for the broader invariant.
+ */
+export default function CourseFormScreenGate() {
+  const { currentRound } = useGolfRound();
+  if (currentRound) {
+    return <Redirect href="/(tabs)/(score)/scoring" />;
+  }
+  return <CourseFormScreen />;
+}
+
+function CourseFormScreen() {
   const { prefillName, prefillLocation, prefillHoles, courseId } = useLocalSearchParams<{
     prefillName?: string;
     prefillLocation?: string;
