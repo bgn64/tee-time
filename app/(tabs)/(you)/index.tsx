@@ -24,6 +24,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 
 import { RefreshButton } from '@/components/RefreshButton';
 import { AVATAR_COLORS } from '@/constants/avatarColors';
+import { computePersonalStats } from '@/lib/personalStats';
 import { formatScore } from '@/lib/scoring';
 import { firstName } from '@/lib/userIdentity';
 import { useAccount } from '@/state/AccountContext';
@@ -76,42 +77,19 @@ export default function YouScreen() {
   const avatarLetter = (firstName(displayName) || displayName)[0]?.toUpperCase() ?? 'Y';
 
   // Stats: only stroke rounds where the viewer participated. Scramble
-  // is collaborative — no individual credit.
-  const myUserId = account?.userId;
-  const stats = useMemo(() => {
-    const perRound: number[] = [];
-    for (const round of completedRounds) {
-      if (round.scoringRule !== 'stroke') continue;
-      // Identify the viewer's participantKey within this round.
-      let scorerId: string | undefined;
-      if (myUserId) {
-        const p = round.participants?.find((q) => q.linkedUserId === myUserId);
-        scorerId = p?.participantKey;
-      } else if (defaultPlayerId) {
-        scorerId = defaultPlayerId;
-      }
-      if (!scorerId) continue;
-      if (!round.playerIds.includes(scorerId)) continue;
-      let total = 0;
-      let scored = 0;
-      for (const score of round.scores) {
-        if (score.scorerId !== scorerId) continue;
-        const hole = round.course.holes.find((h) => h.number === score.holeNumber);
-        if (hole) {
-          total += score.strokes - hole.par;
-          scored++;
-        }
-      }
-      if (scored > 0) perRound.push(total);
-    }
-    if (perRound.length === 0) return { rounds: 0, avg: null as number | null, best: null as number | null };
-    const sum = perRound.reduce((a, b) => a + b, 0);
-    return {
-      rounds: perRound.length,
-      avg: sum / perRound.length,
-      best: Math.min(...perRound),
-    };
-  }, [completedRounds, defaultPlayerId, myUserId]);
+  // is collaborative — no individual credit. The signed-out fallback
+  // is strict-anon-only to defend against stale cross-account cache
+  // leakage; see `lib/personalStats.ts` for the full rule table.
+  const myUserId = account?.userId ?? null;
+  const stats = useMemo(
+    () =>
+      computePersonalStats({
+        completedRounds,
+        myUserId,
+        defaultPlayerId,
+      }),
+    [completedRounds, myUserId, defaultPlayerId]
+  );
 
   const friendsSubtitle = !account
     ? 'Sign in to find friends'
