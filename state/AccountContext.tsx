@@ -31,6 +31,7 @@ import { Platform } from 'react-native';
 import { pickAvatarColor } from '@/constants/avatarColors';
 import { useRefreshGeneration } from '@/state/cloudSync';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
+import { runSignOutPurge } from '@/state/signOutRegistry';
 import { supabase } from '@/state/supabaseClient';
 import { Account } from '@/types/account';
 
@@ -235,6 +236,12 @@ export function AccountProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
+        // Run every registered purge handler BEFORE clearing the
+        // viewer's account state. Each handler synchronously wipes
+        // its in-memory state AND removes its AsyncStorage keys, so
+        // a crash mid-sign-out can't leak the previous user's data
+        // into the next sign-in.
+        void runSignOutPurge();
         setAccount(null);
         setNeedsProfile(false);
         setPendingEmail(null);

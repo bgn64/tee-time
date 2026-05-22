@@ -24,13 +24,16 @@
 
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { recentCourses as seededRecentCourses } from '@/data/courses';
 import { newRoundId } from '@/lib/ids';
 import { replaceScore } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
-import { useOneShotSyncOnSignIn, useRefreshGeneration, useSignOutReset } from '@/state/cloudSync';
+import { useOneShotSyncOnSignIn, useRefreshGeneration } from '@/state/cloudSync';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { usePlayers } from '@/state/PlayerContext';
+import { registerSignOutPurge } from '@/state/signOutRegistry';
 import { supabase } from '@/state/supabaseClient';
 import { writeQueue } from '@/state/writeQueue';
 import {
@@ -430,19 +433,27 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     saveJSON(STORAGE_KEYS.COMPLETED_ROUNDS, completedRounds);
   }, [completedRounds, hydrated]);
 
-  // Sign-out reset. Sentinel re-arming is handled inside the
-  // `useOneShotSyncOnSignIn` calls below.
-  useSignOutReset({
-    accountUserId,
-    ready: hydrated && accountHydrated,
-    reset: () => {
-      // Clear all locally-cached courses; both customs (account-specific)
-      // and any catalog rows the previous user had interacted with.
+  // Sign-out purge: synchronously wipe in-memory courses + rounds +
+  // currentRound AND remove the AsyncStorage keys, so the previous
+  // user's history can't leak into the next sign-in even if the app
+  // crashes mid-sign-out. Triggered directly by AccountContext's
+  // SIGNED_OUT event via the registry.
+  useEffect(() => {
+    return registerSignOutPurge(async () => {
+      // Clear all locally-cached courses; both customs (account-
+      // specific) and any catalog rows the previous user had
+      // interacted with (recently-picked catalog courses give away
+      // which courses the previous user played).
       setCourses([]);
       setCloudRounds([]);
       setCurrentRound(null);
-    },
-  });
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEYS.COURSES),
+        AsyncStorage.removeItem(STORAGE_KEYS.COMPLETED_ROUNDS),
+        AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_ROUND),
+      ]);
+    });
+  }, []);
 
   // Register write-queue rollback handlers exactly once. These run when
   // an enqueued mutation is dead-lettered (5 transient failures or any

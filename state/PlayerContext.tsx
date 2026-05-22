@@ -35,10 +35,13 @@ import {
   useState,
 } from 'react';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { defaultPlayers } from '@/data/players';
 import { useAccount } from '@/state/AccountContext';
-import { useOneShotSyncOnSignIn, useRefreshGeneration, useSignOutReset } from '@/state/cloudSync';
+import { useOneShotSyncOnSignIn, useRefreshGeneration } from '@/state/cloudSync';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
+import { registerSignOutPurge } from '@/state/signOutRegistry';
 import { supabase } from '@/state/supabaseClient';
 import { writeQueue } from '@/state/writeQueue';
 import { Player } from '@/types/golf';
@@ -198,21 +201,24 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     saveJSON(STORAGE_KEYS.DEFAULT_PLAYER_ID, defaultPlayerId);
   }, [defaultPlayerId, hydrated]);
 
-  // Sign-out reset: when accountUserId transitions non-null -> null,
-  // wipe the local cloud-cached roster back to seed defaults. The
-  // persistence effects above will then write the cleared state to
-  // AsyncStorage. Theme and other purely local state stay intact (they
-  // live in their own contexts). Sentinel re-arming is handled inside
-  // `useOneShotSyncOnSignIn` below.
-  useSignOutReset({
-    accountUserId,
-    ready: hydrated && accountHydrated,
-    reset: () => {
+  // Sign-out purge: register a handler that synchronously wipes the
+  // in-memory roster AND removes the AsyncStorage keys. Triggered
+  // directly by AccountContext's SIGNED_OUT auth event (not by a
+  // delayed React effect observing accountUserId change), so the
+  // crash window between sign-out and persistence-effect mirroring
+  // is closed.
+  useEffect(() => {
+    return registerSignOutPurge(async () => {
       setAllPlayers(defaultPlayers);
       setRecentIds(DEFAULT_RECENT_IDS);
       setDefaultPlayerId(DEFAULT_DEFAULT_ID);
-    },
-  });
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEYS.PLAYERS),
+        AsyncStorage.removeItem(STORAGE_KEYS.RECENT_PLAYER_IDS),
+        AsyncStorage.removeItem(STORAGE_KEYS.DEFAULT_PLAYER_ID),
+      ]);
+    });
+  }, []);
 
   // Register the rollback handler exactly once. Restores the pre-mutation
   // snapshot when a queued upsert is dead-lettered (5 transient failures

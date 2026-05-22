@@ -11,7 +11,6 @@ import { act, renderHook } from '@testing-library/react-native';
 import {
   useOneShotSyncOnSignIn,
   useRefreshGeneration,
-  useSignOutReset,
 } from '@/state/cloudSync';
 
 function deferred<T>() {
@@ -141,72 +140,6 @@ describe('useOneShotSyncOnSignIn', () => {
       await Promise.resolve();
     });
     expect(callCount).toBe(1);
-  });
-});
-
-describe('useSignOutReset', () => {
-  test('does not fire reset on initial mount when accountUserId is null', async () => {
-    const reset = jest.fn();
-    renderHook(() =>
-      useSignOutReset({
-        accountUserId: null,
-        ready: true,
-        reset,
-      })
-    );
-    expect(reset).not.toHaveBeenCalled();
-  });
-
-  test('does not fire reset on initial mount when accountUserId is non-null', async () => {
-    const reset = jest.fn();
-    renderHook(() =>
-      useSignOutReset({
-        accountUserId: 'u-1',
-        ready: true,
-        reset,
-      })
-    );
-    expect(reset).not.toHaveBeenCalled();
-  });
-
-  test('fires reset on non-null → null transition', async () => {
-    const reset = jest.fn();
-    const { rerender } = renderHook(
-      (props: { accountUserId: string | null }) =>
-        useSignOutReset({ ...props, ready: true, reset }),
-      { initialProps: { accountUserId: 'u-1' } }
-    );
-    expect(reset).not.toHaveBeenCalled();
-
-    rerender({ accountUserId: null });
-    expect(reset).toHaveBeenCalledTimes(1);
-  });
-
-  test('does NOT fire reset on user switch (non-null → different non-null)', async () => {
-    const reset = jest.fn();
-    const { rerender } = renderHook(
-      (props: { accountUserId: string | null }) =>
-        useSignOutReset({ ...props, ready: true, reset }),
-      { initialProps: { accountUserId: 'u-1' } }
-    );
-
-    rerender({ accountUserId: 'u-2' });
-    // User switch is NOT a sign-out. Sign-out reset is a no-op here.
-    // (A real impersonation flow signs out first; that fires the
-    // transition this hook cares about.)
-    expect(reset).not.toHaveBeenCalled();
-  });
-
-  test('does not fire reset while ready is false', async () => {
-    const reset = jest.fn();
-    const { rerender } = renderHook(
-      (props: { accountUserId: string | null; ready: boolean }) =>
-        useSignOutReset({ ...props, reset }),
-      { initialProps: { accountUserId: 'u-1', ready: false } }
-    );
-
-    rerender({ accountUserId: null, ready: false });
-    expect(reset).not.toHaveBeenCalled();
   });
 });
 

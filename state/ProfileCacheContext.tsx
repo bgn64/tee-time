@@ -38,6 +38,7 @@ import {
 import { useAccount } from '@/state/AccountContext';
 import { useRefreshGeneration } from '@/state/cloudSync';
 import { useGolfRound } from '@/state/GolfRoundContext';
+import { registerSignOutPurge } from '@/state/signOutRegistry';
 import { supabase } from '@/state/supabaseClient';
 import { ProfileSummary } from '@/types/social';
 
@@ -98,13 +99,14 @@ export function ProfileCacheProvider({ children }: PropsWithChildren) {
   const profileCacheRef = useRef(profileCache);
   profileCacheRef.current = profileCache;
 
-  // Sign-out: drop other-users' profiles so a different account
-  // starting clean doesn't render leftover names/colors.
+  // Sign-out purge: clear other-users' profiles so a different
+  // account starting clean doesn't render leftover names/colors.
+  // No AsyncStorage backing for this cache — purely in-memory.
   useEffect(() => {
-    if (!accountUserId) {
+    return registerSignOutPurge(() => {
       setProfileCache({});
-    }
-  }, [accountUserId]);
+    });
+  }, []);
 
   const ensureProfilesCached = useCallback(
     async (

@@ -1,28 +1,33 @@
 /**
  * Shared per-account cloud-sync plumbing factored out of the four
- * domain contexts (Account, Player, GolfRound, Social).
+ * domain contexts (Account, Player, GolfRound, Friends).
  *
- * These hooks consolidate three patterns that were each re-implemented
- * 2–4 times across the contexts in subtly-different shapes. Each hook
- * is small enough to be inlined back if a context's needs diverge, but
+ * These hooks consolidate two patterns that were each re-implemented
+ * across the contexts in subtly-different shapes. Each hook is small
+ * enough to be inlined back if a context's needs diverge, but
  * centralizing them here means a future tweak (e.g., adding telemetry
  * to every refresh path) lands once instead of N times.
  *
  * What's covered:
  *   · `useOneShotSyncOnSignIn` — sentinel-gated initial pull that
  *     runs exactly once per signed-in user and re-arms on sign-out.
- *   · `useSignOutReset` — fires `reset()` only on the explicit
- *     non-null → null transition of `accountUserId` (NOT on initial
- *     mount when no account is yet known).
  *   · `useRefreshGeneration` — race-safe latest-response-wins token
  *     pair for refresh functions that can be invoked concurrently.
  *
  * What's NOT covered (deliberate scope cap):
+ *   · Sign-out cleanup. That moved to `state/signOutRegistry.ts` —
+ *     hooked directly off the Supabase `SIGNED_OUT` auth event so
+ *     handlers fire synchronously (closing the crash window between
+ *     auth event and React commit). An earlier draft of this module
+ *     had `useSignOutReset` based on observing `accountUserId`
+ *     transitioning non-null → null; it was superseded by the
+ *     registry, which is strictly better (synchronous + can purge
+ *     AsyncStorage directly rather than waiting for persistence
+ *     effects to mirror).
  *   · The optimistic-write + writeQueue.enqueue-on-failure pattern
- *     duplicated across `cloudUpsertPlayer` / `cloudUpsertCourse` /
- *     `cloudUpsertRound`. That belongs in a separate follow-up; the
- *     rollback-snapshot handling has enough domain-specific shape to
- *     warrant its own extraction PR.
+ *     in cloudUpsertPlayer / cloudUpsertCourse / cloudUpsertRound.
+ *     Its rollback-snapshot handling has enough domain-specific
+ *     shape to warrant a separate extraction PR.
  */
 
 import { useCallback, useEffect, useRef } from 'react';
@@ -95,54 +100,6 @@ export function useOneShotSyncOnSignIn(opts: OneShotSyncOptions): void {
     return () => {
       cancelled = true;
     };
-  }, [accountUserId, ready]);
-}
-
-// =============================================================================
-// useSignOutReset
-// =============================================================================
-
-export type SignOutResetOptions = {
-  accountUserId: string | null;
-  ready: boolean;
-  /**
-   * Called when `accountUserId` transitions from non-null to null
-   * (the explicit sign-out event). NOT called on initial mount when
-   * `accountUserId` is already null — that's the signed-out start
-   * state, not a sign-out transition.
-   */
-  reset: () => void;
-};
-
-/**
- * Fire `reset()` only on the non-null → null transition of
- * `accountUserId`. Replaces the `prevAccountUserIdRef` + conditional
- * effect pattern in `PlayerContext` and `GolfRoundContext`.
- *
- * The `ready` gate is required: without it, an initial-mount tick
- * where `accountUserId` is null would record null into `prevRef` and
- * miss the subsequent sign-out transition if it happened in the same
- * render burst.
- *
- * `reset` is captured via a ref so it can close over the latest
- * `setAllPlayers` / `setCloudRounds` / etc. without re-firing this
- * effect on every render.
- */
-export function useSignOutReset(opts: SignOutResetOptions): void {
-  const prevAccountUserIdRef = useRef<string | null>(null);
-  const resetRef = useRef(opts.reset);
-  resetRef.current = opts.reset;
-
-  const { accountUserId, ready } = opts;
-
-  useEffect(() => {
-    if (!ready) return;
-    const prev = prevAccountUserIdRef.current;
-    const curr = accountUserId;
-    if (prev !== null && curr === null) {
-      resetRef.current();
-    }
-    prevAccountUserIdRef.current = curr;
   }, [accountUserId, ready]);
 }
 
