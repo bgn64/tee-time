@@ -27,9 +27,7 @@ import { useSocial } from '@/state/SocialContext';
 
 import {
   mockSupabaseCallLog,
-  mockSupabaseChannelSubscribeCount,
   mockSupabaseEmitAuthEvent,
-  mockSupabaseEmitChannel,
   mockSupabaseGetTable,
   mockSupabaseReset,
   mockSupabaseSeedRpc,
@@ -162,107 +160,6 @@ describe('SocialContext — hydrated latches', () => {
 
     expect(countFriendshipsSelects()).toBe(1);
   });
-
-  test('channel subscribed exactly once per accountUserId across cosmetic changes', async () => {
-    mockSupabaseSeedSession(aliceSession);
-    mockSupabaseSeedTable('profiles', [aliceProfile]);
-    mockSupabaseSeedTable('friendships', []);
-    mockSupabaseSeedTable('friend_requests', []);
-
-    const { result } = renderHookWithProviders(useSocialAndAccount);
-
-    await waitFor(() => {
-      expect(result.current.account.account?.handle).toBe('alice');
-      expect(result.current.social.hydrated).toBe(true);
-      expect(result.current.social.syncing).toBe(false);
-    });
-
-    expect(mockSupabaseChannelSubscribeCount('friends-and-requests')).toBe(1);
-
-    mockSupabaseSeedTable('profiles', [
-      { ...aliceProfile, avatar_color: '#deadbe' },
-    ]);
-
-    await act(async () => {
-      mockSupabaseEmitAuthEvent('TOKEN_REFRESHED', aliceSession);
-    });
-
-    await waitFor(() => {
-      expect(result.current.account.account?.avatarColor).toBe('#deadbe');
-    });
-
-    expect(mockSupabaseChannelSubscribeCount('friends-and-requests')).toBe(1);
-  });
-});
-
-describe('SocialContext — realtime handler uses current account fields', () => {
-  test('outgoing friend_requests INSERT picks up latest self handle / displayName / avatarColor', async () => {
-    mockSupabaseSeedSession(aliceSession);
-    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
-    mockSupabaseSeedTable('friendships', []);
-    mockSupabaseSeedTable('friend_requests', []);
-
-    const { result } = renderHookWithProviders(useSocialAndAccount);
-
-    await waitFor(() => {
-      expect(result.current.social.hydrated).toBe(true);
-      expect(result.current.account.account?.handle).toBe('alice');
-    });
-
-    // Simulate the avatar-color picker + display-name editor on the You
-    // tab: bump both fields in the profiles mock and emit TOKEN_REFRESHED.
-    // The new SocialContext must read these latest values via accountRef
-    // when constructing realtime-generated outgoing rows.
-    mockSupabaseSeedTable('profiles', [
-      {
-        ...aliceProfile,
-        display_name: 'Alice The Great',
-        avatar_color: '#feedf0',
-      },
-      bobProfile,
-    ]);
-
-    await act(async () => {
-      mockSupabaseEmitAuthEvent('TOKEN_REFRESHED', aliceSession);
-    });
-
-    await waitFor(() => {
-      expect(result.current.account.account?.displayName).toBe('Alice The Great');
-      expect(result.current.account.account?.avatarColor).toBe('#feedf0');
-    });
-
-    // Now fire a realtime INSERT representing Alice's sendFriendRequest
-    // to Bob arriving back over the wire.
-    await act(async () => {
-      mockSupabaseEmitChannel(
-        'friends-and-requests',
-        'friend_requests',
-        'INSERT',
-        {
-          new: {
-            id: 'req-1',
-            from_user_id: 'user-alice',
-            to_user_id: 'user-bob',
-            status: 'pending',
-            source_player_id: null,
-            created_at: '2025-02-01T00:00:00Z',
-          },
-        }
-      );
-    });
-
-    await waitFor(() => {
-      expect(result.current.social.outgoingRequests).toHaveLength(1);
-    });
-
-    const out = result.current.social.outgoingRequests[0];
-    expect(out.fromUserId).toBe('user-alice');
-    expect(out.fromHandle).toBe('alice');
-    expect(out.fromDisplayName).toBe('Alice The Great');
-    expect(out.fromAvatarColor).toBe('#feedf0');
-    expect(out.toUserId).toBe('user-bob');
-    expect(out.toHandle).toBe('bob');
-  });
 });
 
 describe('SocialContext — sign-out / sign-in cycle', () => {
@@ -350,64 +247,17 @@ describe('SocialContext — sign-out / sign-in cycle', () => {
   });
 });
 
-describe('SocialContext — accept path consumes seeded RPC + ref-backed allPlayers/addPlayer', () => {
-  // Smoke test that the refactor didn't break the accept flow, which
-  // exercises the live `allPlayers` / `addPlayer` closure (still
-  // available on the callback) AND happens to mutate roster state in
-  // ways the prior implementation re-subscribed on.
-  test('accepting a request from realtime-delivered friendship INSERT does not resubscribe channel', async () => {
-    mockSupabaseSeedSession(aliceSession);
-    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
-    mockSupabaseSeedTable('friendships', []);
-    mockSupabaseSeedTable('friend_requests', []);
-    mockSupabaseSeedRpc('accept_friend_request', { data: null, error: null });
-
-    const { result } = renderHookWithProviders(useSocialAndAccount);
-
-    await waitFor(() => expect(result.current.social.hydrated).toBe(true));
-
-    await waitFor(() => {
-      expect(result.current.account.account?.handle).toBe('alice');
-      expect(result.current.social.syncing).toBe(false);
-    });
-
-    expect(mockSupabaseChannelSubscribeCount('friends-and-requests')).toBe(1);
-
-    // Sender-side friendship INSERT (the realtime path that auto-creates
-    // a roster row). Prior implementation re-subscribed on every roster
-    // mutation; new implementation must keep the channel stable.
-    await act(async () => {
-      mockSupabaseEmitChannel(
-        'friends-and-requests',
-        'friendships',
-        'INSERT',
-        {
-          new: {
-            user_id: 'user-alice',
-            friend_user_id: 'user-bob',
-            created_at: '2025-02-01T00:00:00Z',
-          },
-        }
-      );
-    });
-
-    await waitFor(() => {
-      expect(result.current.social.friends).toContain('user-bob');
-    });
-
-    expect(mockSupabaseChannelSubscribeCount('friends-and-requests')).toBe(1);
-  });
-});
-
 // =============================================================================
-// Phase 1.4 — race between `acceptIncomingRequest` and the realtime
-// `friendships` INSERT handler. Both paths call `ensureRosterForFriend`;
-// the deterministic id (`player-${userId}`) collapses any race to a
-// single roster row, both client-side and cloud-side. This pins the
-// fix for the duplicate-roster bug.
+// Phase 1.4 (refresh-only era) — `acceptIncomingRequest` is the sole
+// roster-auto-create path now that the realtime `friendships` INSERT
+// handler is gone. The deterministic id (`player-${userId}`) + DB
+// partial-unique index (migration 018) still matter: a stale-id retry
+// from the offline write queue must collapse onto the same row, not
+// mint a duplicate. This test pins that contract for the surviving
+// path.
 // =============================================================================
 
-describe('SocialContext — Phase 1.4 race between accept + realtime', () => {
+describe('SocialContext — Phase 1.4 accept path creates exactly one roster row', () => {
   const aliceUserUuid = '11111111-1111-4111-8111-111111111111';
   const bobUserUuid = '22222222-2222-4222-8222-222222222222';
 
@@ -429,7 +279,7 @@ describe('SocialContext — Phase 1.4 race between accept + realtime', () => {
     created_at: '2025-01-01T00:00:00Z',
   };
 
-  test('concurrent accept + realtime friendship INSERT yields exactly one roster row', async () => {
+  test('acceptIncomingRequest yields exactly one roster row keyed on the friend', async () => {
     mockSupabaseSeedSession(aliceUuidSession);
     mockSupabaseSeedTable('profiles', [aliceUuidProfile, bobUuidProfile]);
     mockSupabaseSeedTable('friendships', []);
@@ -454,40 +304,18 @@ describe('SocialContext — Phase 1.4 race between accept + realtime', () => {
       expect(result.current.social.incomingRequests).toHaveLength(1);
     });
 
-    // Fire both paths essentially simultaneously inside the same act.
-    // `acceptIncomingRequest` is the receiver-side inline call.
-    // `mockSupabaseEmitChannel` simulates the realtime `friendships`
-    // INSERT that arrives on the sender side and would otherwise mint
-    // a second `player-${userId}-${Date.now()}` row in the buggy world.
     await act(async () => {
-      const p = result.current.social.acceptIncomingRequest('req-incoming-from-bob');
-      mockSupabaseEmitChannel(
-        'friends-and-requests',
-        'friendships',
-        'INSERT',
-        {
-          new: {
-            user_id: aliceUserUuid,
-            friend_user_id: bobUserUuid,
-            created_at: '2025-02-01T00:00:00Z',
-          },
-        }
-      );
-      await p;
+      await result.current.social.acceptIncomingRequest('req-incoming-from-bob');
     });
 
-    await waitFor(() => {
-      expect(result.current.social.friends).toContain(bobUserUuid);
-    });
-
-    // Allow the fire-and-forget cloud upsert from both paths to flush.
+    // Allow the fire-and-forget cloud upsert to flush.
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    // Cloud-side: with the new `onConflict: owner_user_id,linked_user_id`
-    // clause, both upserts collapse onto one row keyed on the friend.
+    // Cloud-side: the new `onConflict: owner_user_id,linked_user_id`
+    // clause means a stale-id retry can't produce a second row.
     const cloudBobRows = mockSupabaseGetTable('roster_players').filter(
       (r: { linked_user_id?: string | null }) => r.linked_user_id === bobUserUuid
     );

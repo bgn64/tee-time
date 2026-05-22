@@ -1140,13 +1140,14 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
    *     matches is discarded. Two overlapping refreshes therefore
    *     resolve as "latest wins".
    *   · The merge uses the functional `setCloudRounds(prev => ...)`
-   *     form so a realtime INSERT delivered during the await lands in
-   *     `prev` and is preserved. Pre-existing friend-owned rows missing
-   *     from the cloud response are still dropped as stale (friend
-   *     deleted their round); but rows added to `prev` AFTER the
-   *     refresh started (the `snapshotIds` set captured up-front) are
-   *     kept unconditionally — they couldn't have been included in the
-   *     server snapshot that produced the response.
+   *     form so a row inserted by a concurrent local user action
+   *     (e.g., a score tap committing during the await) lands in
+   *     `prev` and is preserved. Pre-existing friend-owned rows
+   *     missing from the cloud response are still dropped as stale
+   *     (friend deleted their round); but rows added to `prev` AFTER
+   *     the refresh started (the `snapshotIds` set captured up-front)
+   *     are kept unconditionally — they couldn't have been included
+   *     in the server snapshot that produced the response.
    */
   const refreshScorecards = useCallback(async (): Promise<{
     ok: boolean;
@@ -1189,9 +1190,9 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         //   · It's ours (owner or anonymous) — local-only history that
         //     belongs to us and will be pushed up below.
         //   · It appeared in `prev` AFTER the refresh started (a
-        //     concurrent realtime INSERT). Couldn't have been in the
-        //     server snapshot that produced this response; don't
-        //     clobber it.
+        //     concurrent local mutation — e.g., a score tap committing
+        //     during the await). Couldn't have been in the server
+        //     snapshot that produced this response; don't clobber it.
         // Anything else (a pre-existing friend-owned local row missing
         // from the cloud response) is stale — friend deleted it or RLS
         // no longer grants access. Drop.
@@ -1232,43 +1233,6 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     if (cloudRoundsSyncedAccountRef.current === accountUserId) return;
     void refreshScorecards();
   }, [accountUserId, hydrated, accountHydrated, refreshScorecards]);
-
-  // Realtime: scorecards table only. Inline participants ride along.
-  // Depend on accountUserId (not the whole account object) so cosmetic
-  // profile updates — like the avatar color picker on the You tab —
-  // don't tear down + resubscribe the channel.
-  useEffect(() => {
-    if (!accountUserId) return;
-
-    const channel = supabase
-      .channel('scorecards-stream')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'scorecards' },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            const oldId = (payload.old as { id?: string })?.id;
-            if (!oldId) return;
-            setCloudRounds((prev) => prev.filter((r) => r.id !== oldId));
-            return;
-          }
-          const row = payload.new as CloudScorecardRow;
-          const merged = cloudToLocalRound(row);
-          setCloudRounds((prev) => {
-            const i = prev.findIndex((r) => r.id === merged.id);
-            if (i === -1) return [merged, ...prev];
-            const next = prev.slice();
-            next[i] = merged;
-            return next;
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [accountUserId, cloudToLocalRound]);
 
   // Auto-promote a cloud in-progress round into `currentRound` on
   // fresh devices / clean installs. Without this, a user who started
