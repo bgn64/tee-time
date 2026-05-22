@@ -237,9 +237,36 @@ function makeBuilder(table: string): MockQueryBuilder {
           };
         }
       }
-      const next = rows.concat(toInsert);
+      // Generate ids for rows that don't have one — production tables
+      // like `friend_requests` use `uuid_generate_v4()` as the default,
+      // and `.insert(row).select().single()` callers expect the returned
+      // row to carry that server-generated id.
+      const stamped: Row[] = toInsert.map((r) => {
+        if (r.id != null) return r;
+        const generated =
+          typeof globalThis.crypto?.randomUUID === 'function'
+            ? globalThis.crypto.randomUUID()
+            : `mock-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        return { ...r, id: generated };
+      });
+      const next = rows.concat(stamped);
       state.tables.set(table, next);
-      return { data: toInsert, error: null };
+      // Honor .single() / .maybeSingle() chained off the insert (used
+      // by callers that need the server-generated id back for an
+      // optimistic local update).
+      if (returnSingle === 'single') {
+        if (stamped.length !== 1) {
+          return {
+            data: null,
+            error: { message: `expected one row, got ${stamped.length}`, code: 'PGRST116' },
+          };
+        }
+        return { data: stamped[0], error: null };
+      }
+      if (returnSingle === 'maybeSingle') {
+        return { data: stamped[0] ?? null, error: null };
+      }
+      return { data: stamped, error: null };
     }
 
     if (action === 'update') {
@@ -284,7 +311,14 @@ function makeBuilder(table: string): MockQueryBuilder {
 
   const builder: MockQueryBuilder = {
     select(_cols?: string) {
-      action = 'select';
+      // PostgREST semantics: `.select()` chained after a mutation
+      // (insert/update/upsert/delete) returns the affected rows in the
+      // response — it doesn't downgrade the operation to a plain
+      // select. Only treat .select() as the primary action when no
+      // mutation is in flight yet.
+      if (action === 'select') {
+        // No-op — already in select mode.
+      }
       return builder;
     },
     insert(rowOrRows: Row | Row[]) {

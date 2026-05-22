@@ -331,13 +331,42 @@ export function FriendsProvider({ children }: PropsWithChildren) {
       // Warm the profile cache with the target so downstream surfaces
       // (banner / search row) render the latest name/color immediately.
       void ensureProfilesCachedRef.current([target.userId], { force: true });
-      const { error } = await supabase.from('friend_requests').insert({
-        from_user_id: account.userId,
-        to_user_id: target.userId,
-        status: 'pending',
-        source_player_id: null,
+      // .select().single() returns the inserted row so we have the
+      // server-generated id/created_at for the optimistic local update
+      // below — without this round-trip, the row wouldn't appear in
+      // outgoingRequests until the next pull-to-refresh, even though
+      // the user just took the action on this device.
+      const { data, error } = await supabase
+        .from('friend_requests')
+        .insert({
+          from_user_id: account.userId,
+          to_user_id: target.userId,
+          status: 'pending',
+          source_player_id: null,
+        })
+        .select('id, from_user_id, to_user_id, status, source_player_id, created_at')
+        .single();
+      if (error || !data) {
+        console.warn('[friends] sendFriendRequest:', error);
+        return;
+      }
+      // Optimistic local update — under refresh-only sync there is no
+      // realtime push to feed the outgoing list. Without this, alice's
+      // own action wouldn't show on her own device until she pulled to
+      // refresh.
+      const row = data as CloudFriendRequestRow;
+      const meAccount = accountRef.current;
+      const fr: FriendRequest = {
+        ...rowToFriendRequest(row, target),
+        toHandle: target.handle,
+        fromHandle: meAccount?.handle ?? '',
+        fromDisplayName: meAccount?.displayName ?? '',
+        fromAvatarColor: meAccount?.avatarColor ?? '#888888',
+      };
+      setOutgoingRequests((prev) => {
+        if (prev.some((r) => r.id === fr.id)) return prev;
+        return [...prev, fr];
       });
-      if (error) console.warn('[friends] sendFriendRequest:', error);
     },
     [account]
   );
@@ -353,6 +382,18 @@ export function FriendsProvider({ children }: PropsWithChildren) {
         console.warn('[friends] accept_friend_request:', error);
         return null;
       }
+
+      // Optimistic local updates — under refresh-only sync there is no
+      // realtime push to feed the friends list or remove the request
+      // from the banner. Without these, the user's own accept action
+      // wouldn't reflect on their own device until pull-to-refresh.
+      // The next refresh will fetch the authoritative server state and
+      // converge: the accepted request will be filtered out (status !=
+      // pending) and the friendships row will already be in the result.
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
+      setFriends((prev) =>
+        prev.includes(req.fromUserId) ? prev : [...prev, req.fromUserId]
+      );
 
       // Auto-create a roster entry for the new friend so they show up
       // in the Friends list immediately. `ensureRosterForFriend` uses
@@ -390,7 +431,14 @@ export function FriendsProvider({ children }: PropsWithChildren) {
         .from('friend_requests')
         .update({ status: 'declined' })
         .eq('id', requestId);
-      if (error) console.warn('[friends] decline:', error);
+      if (error) {
+        console.warn('[friends] decline:', error);
+        return;
+      }
+      // Optimistic local update — drop the declined request from the
+      // banner immediately. Without this the user has to pull to
+      // refresh to see their own decline take effect.
+      setIncomingRequests((prev) => prev.filter((r) => r.id !== requestId));
     },
     [account]
   );

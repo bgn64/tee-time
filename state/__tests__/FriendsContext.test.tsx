@@ -335,6 +335,116 @@ describe('SocialContext — Phase 1.4 accept path creates exactly one roster row
 });
 
 // =============================================================================
+// Optimistic local updates under refresh-only sync. With realtime
+// channels removed, the user's own send/accept/decline actions on their
+// own device must reflect immediately — they cannot wait for the next
+// pull-to-refresh to confirm. The next refresh fetches the server-
+// authoritative state and converges.
+// =============================================================================
+
+describe('FriendsContext — optimistic local updates (refresh-only)', () => {
+  test('acceptIncomingRequest immediately removes the request and adds the new friend locally', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', []);
+    mockSupabaseSeedTable('friend_requests', [
+      {
+        id: 'req-from-bob',
+        from_user_id: 'user-bob',
+        to_user_id: 'user-alice',
+        status: 'pending',
+        source_player_id: null,
+        created_at: '2025-02-01T00:00:00Z',
+      },
+    ]);
+    mockSupabaseSeedRpc('accept_friend_request', { data: null, error: null });
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.incomingRequests).toHaveLength(1);
+      expect(result.current.social.friends).toEqual([]);
+    });
+
+    await act(async () => {
+      await result.current.social.acceptIncomingRequest('req-from-bob');
+    });
+
+    // The request must be gone from the banner AND bob must be in
+    // friends, BEFORE any subsequent refresh fires. This is the
+    // contract that closes the regression observed by the user where
+    // tapping Accept appeared to do nothing until pull-to-refresh.
+    expect(result.current.social.incomingRequests).toEqual([]);
+    expect(result.current.social.friends).toContain('user-bob');
+  });
+
+  test('declineIncomingRequest immediately removes the request locally', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', []);
+    mockSupabaseSeedTable('friend_requests', [
+      {
+        id: 'req-from-bob',
+        from_user_id: 'user-bob',
+        to_user_id: 'user-alice',
+        status: 'pending',
+        source_player_id: null,
+        created_at: '2025-02-01T00:00:00Z',
+      },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.incomingRequests).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.social.declineIncomingRequest('req-from-bob');
+    });
+
+    expect(result.current.social.incomingRequests).toEqual([]);
+    // Decline must NOT add the sender as a friend.
+    expect(result.current.social.friends).toEqual([]);
+  });
+
+  test('sendFriendRequest immediately appends the new outgoing request locally', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', []);
+    mockSupabaseSeedTable('friend_requests', []);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.account.account?.handle).toBe('alice');
+      expect(result.current.social.outgoingRequests).toEqual([]);
+    });
+
+    const bobTarget = {
+      userId: 'user-bob',
+      handle: 'bob',
+      displayName: 'Bob',
+      avatarColor: '#bbbbbb',
+    };
+
+    await act(async () => {
+      await result.current.social.sendFriendRequest(bobTarget);
+    });
+
+    expect(result.current.social.outgoingRequests).toHaveLength(1);
+    const out = result.current.social.outgoingRequests[0];
+    expect(out.toUserId).toBe('user-bob');
+    expect(out.toHandle).toBe('bob');
+    expect(out.fromUserId).toBe('user-alice');
+    expect(out.fromHandle).toBe('alice');
+    expect(out.status).toBe('pending');
+  });
+});
+
+// =============================================================================
 // Phase 2.3 — explicit `refreshFriendsAndRequests` re-runs the cloud
 // pull. Used by the Feed's pull-to-refresh as the missed-realtime-event
 // recovery path.
