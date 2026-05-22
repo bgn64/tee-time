@@ -4,8 +4,8 @@
  * Reached from the search results. On send, dispatches `sendFriendRequest`
  * and pops back to the Friends list.
  *
- * Loads the target profile from `useSocial().profileCache`. The cache is
- * populated by the search step that preceded us; if that cache miss
+ * Loads the target profile from `useProfileCache().profileCache`. The cache
+ * is populated by the search step that preceded us; if that cache miss
  * happens (e.g., deep-linked route), we fall back to a fresh fetch.
  */
 
@@ -13,8 +13,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { useFriends } from '@/state/FriendsContext';
 import { useScreenHeader } from '@/state/HeaderContext';
-import { useSocial } from '@/state/SocialContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 import { supabase } from '@/state/supabaseClient';
 import { useTheme } from '@/state/ThemeContext';
 import { ProfileSummary } from '@/types/social';
@@ -22,7 +23,8 @@ import { ProfileSummary } from '@/types/social';
 export default function ConfirmRequestScreen() {
   const { colors } = useTheme();
   const { targetUserId } = useLocalSearchParams<{ targetUserId: string }>();
-  const { profileCache, sendFriendRequest } = useSocial();
+  const { sendFriendRequest } = useFriends();
+  const { profileCache } = useProfileCache();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [target, setTarget] = useState<ProfileSummary | null>(

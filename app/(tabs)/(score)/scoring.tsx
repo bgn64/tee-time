@@ -42,7 +42,7 @@ import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
-import { useSocial } from '@/state/SocialContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 import { useTheme } from '@/state/ThemeContext';
 
 type Scorer = {
@@ -70,7 +70,7 @@ export default function ScoringScreen() {
   } = useGolfRound();
   const { getPlayer, allPlayers, defaultPlayerId } = usePlayers();
   const { account } = useAccount();
-  const { profileCache } = useSocial();
+  const { profileCache } = useProfileCache();
 
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);

@@ -27,11 +27,11 @@ import { AVATAR_COLORS } from '@/constants/avatarColors';
 import { formatScore } from '@/lib/scoring';
 import { firstName } from '@/lib/userIdentity';
 import { useAccount } from '@/state/AccountContext';
+import { useFriends } from '@/state/FriendsContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { useScreenRefresh } from '@/state/useScreenRefresh';
-import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 
 function formatAvg(avg: number): string {
@@ -51,7 +51,7 @@ export default function YouScreen() {
   const { completedRounds, refreshScorecards } = useGolfRound();
   const { defaultPlayerId, getPlayer, refreshRoster } = usePlayers();
   const { account, updateAvatarColor, refreshAccount } = useAccount();
-  const { friends, incomingRequests } = useSocial();
+  const { friends, incomingRequests } = useFriends();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({

@@ -20,12 +20,13 @@ import 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
 import { Toast } from '@/components/Toast';
 import { AccountProvider, useAccount } from '@/state/AccountContext';
+import { FriendsProvider, useFriends } from '@/state/FriendsContext';
 import { GolfRoundProvider, useGolfRound } from '@/state/GolfRoundContext';
 import { HeaderProvider } from '@/state/HeaderContext';
 import { LocationProvider } from '@/state/LocationContext';
 import { OnboardingProvider, useOnboarding } from '@/state/OnboardingContext';
 import { PlayerProvider, usePlayers } from '@/state/PlayerContext';
-import { SocialProvider, useSocial } from '@/state/SocialContext';
+import { ProfileCacheProvider } from '@/state/ProfileCacheContext';
 import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
 import { ToastProvider, useToast } from '@/state/ToastContext';
 import { useSplashGate } from '@/state/useSplashGate';
@@ -64,13 +65,15 @@ export default function RootLayout() {
           <AccountProvider>
             <PlayerProvider>
               <GolfRoundProvider>
-                <SocialProvider>
-                  <LocationProvider>
-                    <OnboardingProvider>
-                      <RootLayoutNav />
-                    </OnboardingProvider>
-                  </LocationProvider>
-                </SocialProvider>
+                <ProfileCacheProvider>
+                  <FriendsProvider>
+                    <LocationProvider>
+                      <OnboardingProvider>
+                        <RootLayoutNav />
+                      </OnboardingProvider>
+                    </LocationProvider>
+                  </FriendsProvider>
+                </ProfileCacheProvider>
               </GolfRoundProvider>
             </PlayerProvider>
           </AccountProvider>
@@ -86,7 +89,7 @@ function RootLayoutNav() {
   const { hydrated: playerHydrated } = usePlayers();
   const { hydrated: roundHydrated } = useGolfRound();
   const { hydrated: accountHydrated } = useAccount();
-  const { hydrated: socialHydrated } = useSocial();
+  const { hydrated: friendsHydrated } = useFriends();
   const { hydrated: onboardingHydrated, nextPrimer } = useOnboarding();
 
   // Register the global dead-letter handler ONCE, at the layout level, so
@@ -124,7 +127,7 @@ function RootLayoutNav() {
     player: playerHydrated,
     round: roundHydrated,
     account: accountHydrated,
-    social: socialHydrated,
+    friends: friendsHydrated,
     onboarding: onboardingHydrated,
   });
 

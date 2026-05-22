@@ -9,16 +9,16 @@
  * but no longer have any merge-to-friend flow or user-facing list (see
  * plan.md, Path 3a).
  *
- * Search calls `useSocial().searchHandle(q)` which queries the `profiles`
- * table for a case-insensitive prefix match on `handle`.
+ * Search calls `useFriends().searchHandle(q)` which queries the
+ * `profiles` table for a case-insensitive prefix match on `handle`.
  */
 
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { useFriends } from '@/state/FriendsContext';
 import { useScreenHeader } from '@/state/HeaderContext';
-import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 import { ProfileSummary } from '@/types/social';
 
@@ -26,7 +26,7 @@ const DEBOUNCE_MS = 200;
 
 export default function FriendSearchScreen() {
   const { colors } = useTheme();
-  const { searchHandle, friends, outgoingRequests } = useSocial();
+  const { searchHandle, friends, outgoingRequests } = useFriends();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [query, setQuery] = useState<string>('');

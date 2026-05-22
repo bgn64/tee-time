@@ -19,11 +19,12 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'r
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useAccount } from '@/state/AccountContext';
+import { useFriends } from '@/state/FriendsContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 import { useScreenRefresh } from '@/state/useScreenRefresh';
-import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Player, Round } from '@/types/golf';
 import { ProfileSummary } from '@/types/social';
@@ -42,7 +43,8 @@ export default function FriendsScreen() {
   const { allPlayers } = usePlayers();
   const { completedRounds } = useGolfRound();
   const { account } = useAccount();
-  const { friends, profileCache, refreshFriendsAndRequests, refreshProfiles } = useSocial();
+  const { friends, refreshFriendsAndRequests } = useFriends();
+  const { profileCache, refreshProfiles } = useProfileCache();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({

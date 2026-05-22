@@ -48,8 +48,8 @@ import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 import { useScreenRefresh } from '@/state/useScreenRefresh';
-import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -64,7 +64,7 @@ export default function RoundDetailScreen() {
   const { colors } = useTheme();
   const { account } = useAccount();
   const { allPlayers, defaultPlayerId } = usePlayers();
-  const { profileCache, refreshProfiles } = useSocial();
+  const { profileCache, refreshProfiles } = useProfileCache();
   const { completedRounds, deleteRound, commitScoreEdits, refreshScorecards } = useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 

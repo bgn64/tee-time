@@ -26,17 +26,19 @@ import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
 import { LiveRoundStrip } from '@/components/LiveRoundStrip';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useAccount } from '@/state/AccountContext';
+import { useFriends } from '@/state/FriendsContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 import { useScreenRefresh } from '@/state/useScreenRefresh';
-import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 
 export default function FeedScreen() {
   const { colors } = useTheme();
   const { account } = useAccount();
-  const { friends, profileCache, refreshFriendsAndRequests } = useSocial();
+  const { friends, refreshFriendsAndRequests } = useFriends();
+  const { profileCache } = useProfileCache();
   const { completedRounds, liveRounds, refreshScorecards } = useGolfRound();
   const { allPlayers } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);

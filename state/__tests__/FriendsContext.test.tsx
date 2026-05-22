@@ -23,7 +23,8 @@ jest.mock('@/state/supabaseClient');
 import { act, waitFor } from '@testing-library/react-native';
 
 import { useAccount } from '@/state/AccountContext';
-import { useSocial } from '@/state/SocialContext';
+import { useFriends } from '@/state/FriendsContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 
 import {
   mockSupabaseCallLog,
@@ -73,11 +74,19 @@ const carolProfile = {
   created_at: '2025-01-01T00:00:00Z',
 };
 
-// Renders both useSocial and useAccount in the same hook so tests can
-// inspect / drive both surfaces from a single `result.current`.
+// Renders useFriends, useProfileCache, and useAccount in the same hook
+// so tests that previously read `useSocial()` (which combined all three)
+// can inspect / drive all surfaces from a single `result.current`.
 function useSocialAndAccount() {
+  const friends = useFriends();
+  const profileCache = useProfileCache();
   return {
-    social: useSocial(),
+    // `social` is preserved as the result key so existing test
+    // assertions read result.current.social.friends / .profileCache /
+    // .refreshProfiles unchanged. The two contexts are merged here in
+    // a stable object — its identity churns on every render but the
+    // assertions only read fields, not check identity.
+    social: { ...friends, ...profileCache },
     account: useAccount(),
   };
 }

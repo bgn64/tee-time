@@ -33,7 +33,7 @@ import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
-import { useSocial } from '@/state/SocialContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Player } from '@/types/golf';
 
@@ -67,7 +67,7 @@ function PlayersScreen() {
   const { courses } = useGolfRound();
   const { allPlayers, recentPlayers, addPlayer, markRecent, defaultPlayerId, getPlayer } =
     usePlayers();
-  const { profileCache } = useSocial();
+  const { profileCache } = useProfileCache();
   const { account } = useAccount();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);

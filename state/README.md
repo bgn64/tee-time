@@ -8,16 +8,18 @@ Providers are mounted in `app/_layout.tsx`:
 
 ```tsx
 AppThemeProvider
-  HeaderProvider
-    AccountProvider
-      PlayerProvider
-        GolfRoundProvider
-          SocialProvider
-            LocationProvider
-              OnboardingProvider
+  ToastProvider
+    HeaderProvider
+      AccountProvider
+        PlayerProvider
+          GolfRoundProvider
+            ProfileCacheProvider
+              FriendsProvider
+                LocationProvider
+                  OnboardingProvider
 ```
 
-Do not reorder providers without checking hook dependencies between contexts.
+Do not reorder providers without checking hook dependencies between contexts. In particular: `ProfileCacheProvider` depends on `GolfRoundProvider` (it prewarms the cache from visible Round mention ids); `FriendsProvider` depends on `ProfileCacheProvider` (it writes via `ensureProfilesCached` on search / accept).
 
 ## Context overview
 
@@ -28,7 +30,8 @@ Do not reorder providers without checking hook dependencies between contexts.
 | Account | `AccountContext.tsx` | Supabase session, profile, invite-only OTP, sign-out, `refreshAccount` |
 | Player | `PlayerContext.tsx` | Local roster, cloud roster sync, `refreshRoster` |
 | Golf round | `GolfRoundContext.tsx` | Courses, current round, scorecard cloud sync, `refreshScorecards` |
-| Social | `SocialContext.tsx` | Friends, friend requests, profile cache, `refreshFriendsAndRequests`, `refreshProfiles` |
+| Profile cache | `ProfileCacheContext.tsx` | Lazy `profiles` cache, `ensureProfilesCached`, `refreshProfiles` |
+| Friends | `FriendsContext.tsx` | Friends, friend requests, search/send/accept/decline, `refreshFriendsAndRequests` |
 | Location | `LocationContext.tsx` | Foreground location permission and rangefinder GPS watch |
 | Onboarding | `OnboardingContext.tsx` | First-run account/location primer state |
 
@@ -36,9 +39,9 @@ Do not reorder providers without checking hook dependencies between contexts.
 
 Each provider exposes `hydrated: boolean`. **Hydration is a one-way latch** — once a provider's `hydrated` flips to `true`, it never flips back to `false`. The splash gate in `app/_layout.tsx` uses `useSplashGate(...)` from `state/useSplashGate.ts`; once all providers have hydrated once, the gate stays open for the rest of the session even if a provider's underlying state churns.
 
-Providers that do ongoing sync work expose a separate `syncing: boolean` (currently only `SocialContext`). Consumers that want "are we ready to render?" use `hydrated`; consumers that want "are we currently re-pulling from cloud?" use `syncing`.
+Providers that do ongoing sync work expose a separate `syncing: boolean` (currently only `FriendsContext`). Consumers that want "are we ready to render?" use `hydrated`; consumers that want "are we currently re-pulling from cloud?" use `syncing`.
 
-This split was originally added to fix a navigator-unmount cascade: the splash gate would return `null` on any provider's `hydrated === false`, and `SocialContext` was inadvertently flipping `hydrated` back on every account-object-reference change (cosmetic profile edits, hourly `TOKEN_REFRESHED`). The latch + `syncing` split decouples "are we ready to render?" from "are we re-pulling right now?" so transient sync work never tears down navigation. See the May 2026 refactor for the full root-cause analysis.
+This split was originally added to fix a navigator-unmount cascade: the splash gate would return `null` on any provider's `hydrated === false`, and `SocialContext` (the predecessor of `FriendsContext`) was inadvertently flipping `hydrated` back on every account-object-reference change (cosmetic profile edits, hourly `TOKEN_REFRESHED`). The latch + `syncing` split decouples "are we ready to render?" from "are we re-pulling right now?" so transient sync work never tears down navigation. See the May 2026 refactor for the full root-cause analysis.
 
 ## Persistence
 
@@ -82,23 +85,24 @@ If `needsProfile` is true, root layout routes to `/sign-in` so the handle/displa
 
 The app is **refresh-only** — no Postgres realtime subscription. Cross-device visibility (e.g., a friend completing a round on their phone) requires the viewer to pull-to-refresh (or manually press Refresh on desktop web). See the May 2026 migration to refresh-only for the rationale.
 
-## Social sync
+## Friend graph + profile cache
 
-`SocialContext` loads:
+`FriendsContext` loads:
 
 - `friendships`
 - `friend_requests`
-- `profiles` for friend/profile summaries (lazy cache populated by `ensureProfilesCached`)
 
-Friendships are symmetric rows in the database. The context keeps the current user's friend ids and request lists hydrated for banners, badges, and friend screens.
+`ProfileCacheContext` owns the lazy `profiles` cache and is consulted by `FriendsContext` for the search / send / accept flows. The two were split out of a combined `SocialContext` so the high-frequency cache mutations (every rendered participant triggers a prefetch) stop re-rendering low-frequency consumers like the incoming-request banner. See the May 2026 split.
+
+Friendships are symmetric rows in the database. `FriendsContext` keeps the current user's friend ids and request lists hydrated for banners, badges, and friend screens.
 
 The initial pull is keyed off `accountUserId` (the primitive) rather than the full `account` object so cosmetic profile updates (e.g., avatar color change) don't re-fire the sync gate. The `refreshFriendsAndRequests` callback reads current `account` fields via a ref so outgoing-request rows always reflect the latest self-profile data without making the callback identity churn on every cosmetic edit.
 
 Public refresh APIs:
 
-- `refreshFriendsAndRequests()` — re-pulls friendships + pending friend_requests. The merge is authoritative (overwrite) — for refresh-only, there are no concurrent realtime events to coordinate with.
-- `refreshProfiles(userIds)` — force-refreshes the matching `profileCache` entries so friends' display name / avatar color edits propagate without restarting the app. Returns the standard `{ ok, error }` envelope.
-- `ensureProfilesCached(userIds, { force? })` — lazy prefetch; short-circuits on already-cached ids unless `{ force: true }`.
+- `useFriends().refreshFriendsAndRequests()` — re-pulls friendships + pending friend_requests. The merge is authoritative (overwrite) — for refresh-only, there are no concurrent realtime events to coordinate with.
+- `useProfileCache().refreshProfiles(userIds)` — force-refreshes the matching `profileCache` entries so friends' display name / avatar color edits propagate without restarting the app. Returns the standard `{ ok, error }` envelope.
+- `useProfileCache().ensureProfilesCached(userIds, { force? })` — lazy prefetch; short-circuits on already-cached ids unless `{ force: true }`.
 
 ### Roster auto-create on friend accept
 
