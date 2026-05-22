@@ -31,6 +31,7 @@ import { useGolfRound } from '@/state/GolfRoundContext';
 
 import {
   mockSupabaseCallLog,
+  mockSupabaseEmitAuthEvent,
   mockSupabaseGetTable,
   mockSupabaseReset,
   mockSupabaseSeedSession,
@@ -728,5 +729,118 @@ describe('GolfRoundContext auto-promote in-progress cloud round', () => {
     });
 
     expect(result.current.golf.currentRound).toBeNull();
+  });
+});
+
+// =============================================================================
+// Pre-auth → post-auth migration. When a previously-signed-out user
+// signs in, any rounds they scored anonymously (ownerUserId ===
+// undefined) get stamped with the new ownerUserId, their participant
+// entry gets back-stamped with linkedUserId, and the rounds push to
+// cloud. Without this migration, anon rounds either vanish on the
+// next sign-out purge or remain unsynced forever.
+// =============================================================================
+
+describe('GolfRoundContext anon-rounds migration on sign-in', () => {
+  function seedCourseLocally(golf: ReturnType<typeof useGolfRound>) {
+    golf.addCourse({
+      id: 'course-test',
+      name: 'Test Course',
+      location: 'Nowhere, USA',
+      source: 'custom',
+      holes: [
+        { number: 1, par: 4 },
+        { number: 2, par: 3 },
+      ],
+    });
+  }
+
+  test('stamps ownerUserId + linkedUserId on anon rounds when the user signs in', async () => {
+    // Render with NO seeded session — pre-auth state.
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.golf.hydrated).toBe(true);
+      expect(result.current.account.account).toBeNull();
+    });
+
+    // Pre-auth: add a course, start a round, score some holes,
+    // complete. The round lives in cloudRounds with ownerUserId
+    // === undefined.
+    await act(async () => {
+      seedCourseLocally(result.current.golf);
+    });
+    await act(async () => {
+      // defaultPlayerId is 'user' in the default seed; pass it as
+      // the playerId so the participant's participantKey matches.
+      result.current.golf.startRound('course-test', ['user'], 'stroke');
+    });
+    const roundId = result.current.golf.currentRound!.id;
+    await act(async () => {
+      result.current.golf.setCustomHoleScore('user', 1, 4);
+    });
+    await act(async () => {
+      result.current.golf.completeCurrentRound();
+    });
+
+    // Sanity: the anon round is in cloudRounds without an owner.
+    const before = result.current.golf.completedRounds.find((r) => r.id === roundId);
+    expect(before).toBeDefined();
+    expect(before?.ownerUserId).toBeUndefined();
+
+    // Now sign in. AccountContext picks up the seeded session via
+    // SIGNED_IN auth event.
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+    await act(async () => {
+      mockSupabaseEmitAuthEvent('SIGNED_IN', aliceSession);
+      // Let refreshFromSession resolve + the migration effect fire.
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+    });
+
+    // Migration assertions:
+    //   1. ownerUserId stamped.
+    //   2. participants[].linkedUserId back-stamped for the owner.
+    //   3. cloud upsert fired (row exists in scorecards mock with
+    //      the new owner).
+    await waitFor(() => {
+      const after = result.current.golf.completedRounds.find((r) => r.id === roundId);
+      expect(after?.ownerUserId).toBe(aliceUserId);
+      const ownerParticipant = after?.participants.find(
+        (p) => p.participantKey === 'user'
+      );
+      expect(ownerParticipant?.linkedUserId).toBe(aliceUserId);
+    });
+
+    await waitFor(() => {
+      const cloudRow = mockSupabaseGetTable('scorecards').find(
+        (r: any) => r.id === roundId
+      );
+      expect(cloudRow).toBeDefined();
+      expect(cloudRow?.owner_user_id).toBe(aliceUserId);
+    });
+  });
+
+  test('skips migration when there are no anon rounds to migrate', async () => {
+    // Render signed in directly — no anon history.
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    // No completedRounds; no upserts fire. Just confirm the
+    // migration didn't synthesize anything.
+    expect(result.current.golf.completedRounds).toEqual([]);
   });
 });

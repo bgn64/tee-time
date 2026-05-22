@@ -35,6 +35,7 @@ import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { usePlayers } from '@/state/PlayerContext';
 import { registerSignOutPurge } from '@/state/signOutRegistry';
 import { supabase } from '@/state/supabaseClient';
+import { useToast } from '@/state/ToastContext';
 import { writeQueue } from '@/state/writeQueue';
 import {
   Course,
@@ -341,6 +342,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
   const { allPlayers: playerRoster, defaultPlayerId } = usePlayers();
   const { account, hydrated: accountHydrated } = useAccount();
+  const { show: toastShow } = useToast();
 
   // Stable primitive derived from account. Use this in effect deps when
   // the effect only cares about WHICH user is signed in — not cosmetic
@@ -1219,6 +1221,92 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       await refreshScorecards();
     },
   });
+
+  // Pre-auth → post-auth migration. When `accountUserId` transitions
+  // null → non-null (the user just signed in), any rounds the user
+  // played anonymously have `ownerUserId === undefined`. Without
+  // migration these rounds stay local-only forever — they can't
+  // sync to cloud (no owner), they won't appear on a second device,
+  // and a sign-out purge would wipe them entirely. Migration:
+  //
+  //   1. Stamp each anon round with the new ownerUserId so cloud
+  //      writes pass RLS.
+  //   2. Back-stamp the owner's participant entry with
+  //      linkedUserId = newUserId so participant-identity resolution
+  //      now finds the viewer's profile (and shows "You" in feed
+  //      cards, scorecard rows, etc.).
+  //   3. Push each migrated round to cloud via cloudUpsertRound.
+  //   4. Show a one-time welcome toast acknowledging the save.
+  //
+  // The matching participant is identified by participantKey ===
+  // defaultPlayerId (which during pre-auth play is 'user'). If the
+  // user changed defaultPlayerId before signing in, we still match
+  // on whatever the current value is — that's their declared
+  // "this is me" entry.
+  const prevAccountUserIdForMigrationRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hydrated || !accountHydrated) return;
+    const prev = prevAccountUserIdForMigrationRef.current;
+    const curr = accountUserId;
+    prevAccountUserIdForMigrationRef.current = curr;
+    if (prev !== null || curr === null) return;
+
+    // null -> non-null transition: this is a sign-in event.
+    const newUserId = curr;
+    const anonRounds = cloudRoundsRef.current.filter(
+      (r) => r.ownerUserId === undefined
+    );
+    if (anonRounds.length === 0) return;
+
+    const migrated: Round[] = anonRounds.map((r) => {
+      const participants = (r.participants ?? []).map((p) =>
+        p.participantKey === defaultPlayerId
+          ? { ...p, linkedUserId: newUserId }
+          : p
+      );
+      // Track mentionedUserIds for the feed "with you" line + future
+      // discovery features. Only add the new owner id if it wasn't
+      // already in the list (defensive — shouldn't be for anon rounds).
+      const mentioned = r.mentionedUserIds ?? [];
+      const mentionedUserIds = mentioned.includes(newUserId)
+        ? mentioned
+        : [...mentioned, newUserId];
+      return {
+        ...r,
+        ownerUserId: newUserId,
+        participants,
+        mentionedUserIds,
+      };
+    });
+
+    // Update local state first so the UI reflects the new ownership
+    // immediately, then fire-and-forget the cloud pushes. The
+    // writeQueue catches transient failures on each push; permanent
+    // failures dead-letter and roll back the optimistic local state.
+    const migratedIds = new Set(migrated.map((r) => r.id));
+    setCloudRounds((prev) =>
+      prev.map((r) => (migratedIds.has(r.id) ? migrated.find((m) => m.id === r.id)! : r))
+    );
+
+    let successCount = 0;
+    (async () => {
+      for (const r of migrated) {
+        try {
+          await cloudUpsertRound(r, { bumpLastScoreAt: false });
+          successCount += 1;
+        } catch (err) {
+          console.warn('[migration] failed to push anon round:', r.id, err);
+        }
+      }
+      if (successCount > 0) {
+        const label = successCount === 1 ? 'round' : 'rounds';
+        toastShow(
+          `Welcome — we saved your ${successCount} earlier ${label} to your account.`,
+          { autoHideMs: 6000 }
+        );
+      }
+    })();
+  }, [accountUserId, hydrated, accountHydrated, defaultPlayerId, cloudUpsertRound, toastShow]);
 
   // Auto-promote a cloud in-progress round into `currentRound` on
   // fresh devices / clean installs. Without this, a user who started
