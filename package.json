@@ -11,7 +11,6 @@
     "test:watch": "jest --selectProjects unit --watch",
     "test:db": "jest --selectProjects db --runInBand",
     "test:all": "jest",
-    "icons": "tsx scripts/generate-icons.ts",
     "ingest:opengolf": "tsx scripts/ingest-opengolf.ts",
     "seed:test-users": "tsx scripts/seed-test-users.ts"
   },
@@ -89,7 +88,6 @@
     "dotenv": "^17.4.2",
     "jest-expo": "~54.0.0",
     "react-test-renderer": "19.1.0",
-    "sharp": "^0.34.5",
     "supabase": "^2.98.2",
     "tsx": "^4.21.0",
     "typescript": "~5.9.2"

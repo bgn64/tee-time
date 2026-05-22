@@ -1,0 +1,36 @@
+name: Deploy migrations to staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: supabase db push (staging)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      PROJECT_ID: ${{ vars.PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link to staging project
+        run: supabase link --project-ref "$PROJECT_ID"
+
+      - name: Show pending migrations
+        run: supabase migration list --linked
+
+      - name: Push migrations
+        run: supabase db push --linked

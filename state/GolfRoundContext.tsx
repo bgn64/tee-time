@@ -55,8 +55,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 // endpoints:
 //   · /v1/courses/:id/tees   → { tees: TeeRow[] }
 //   · /v1/courses/:id/holes  → { holes: HoleRow[] }
-// See scripts/survey-opengolf-tees.ts and plan.md (Phase 1 findings)
-// for the schema notes that justify the shape and tolerances below.
+// See plan.md (Phase 1 findings) and the OpenGolfAPI docs for the
+// schema notes that justify the shape and tolerances below.
 
 function numOrUndef(v: unknown): number | undefined {
   if (v == null) return undefined;

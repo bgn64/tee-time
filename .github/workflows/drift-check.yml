@@ -1,0 +1,77 @@
+name: Production schema drift check
+
+# Detects dashboard SQL editor changes on production that aren't
+# represented in git. Runs weekly; opens an issue if drift is found.
+
+on:
+  schedule:
+    - cron: '0 14 * * 1'  # Mondays at 14:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  diff:
+    name: supabase db diff --linked (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      PROJECT_ID: ${{ vars.PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link to production project
+        run: supabase link --project-ref "$PROJECT_ID"
+
+      - name: Compute diff
+        id: diff
+        run: |
+          set +e
+          supabase db diff --linked --schema public > diff.sql 2> diff.err
+          rc=$?
+          set -e
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          if [ -s diff.sql ]; then
+            echo "has_drift=true" >> "$GITHUB_OUTPUT"
+            {
+              echo 'diff_body<<DIFF_EOF'
+              head -c 60000 diff.sql
+              echo
+              echo 'DIFF_EOF'
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "has_drift=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open issue on drift
+        if: steps.diff.outputs.has_drift == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const diff = `${{ steps.diff.outputs.diff_body }}`;
+            const body = [
+              'Drift detected between production and the committed migrations.',
+              '',
+              'Either reconcile by adding a migration that captures the dashboard change,',
+              'or revert the dashboard change. Schema edits should only happen via migrations.',
+              '',
+              '```sql',
+              diff,
+              '```',
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Production schema drift detected (${context.sha.slice(0,7)})`,
+              body,
+              labels: ['drift', 'supabase'],
+            });

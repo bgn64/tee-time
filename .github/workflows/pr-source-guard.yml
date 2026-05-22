@@ -1,0 +1,24 @@
+name: PR source guard
+
+# Enforces that PRs targeting `main` only come from the `staging` branch.
+# Mark this job as a required status check on the `main` branch protection
+# rule so it's impossible to merge a feature branch directly into prod.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  enforce-source:
+    name: PR into main must come from staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    steps:
+      - name: Check source branch
+        run: |
+          src="${{ github.head_ref }}"
+          if [ "$src" != "staging" ]; then
+            echo "::error::PRs into main must originate from the 'staging' branch. This PR is from '$src'."
+            exit 1
+          fi
+          echo "OK: PR source is 'staging'"
