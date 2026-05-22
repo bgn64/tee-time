@@ -14,13 +14,15 @@
 
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
+import { RefreshButton } from '@/components/RefreshButton';
 import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useScreenRefresh } from '@/state/useScreenRefresh';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Player, Round } from '@/types/golf';
@@ -40,13 +42,24 @@ export default function FriendsScreen() {
   const { allPlayers } = usePlayers();
   const { completedRounds } = useGolfRound();
   const { account } = useAccount();
-  const { friends, profileCache } = useSocial();
+  const { friends, profileCache, refreshFriendsAndRequests, refreshProfiles } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
     left: { kind: 'back', label: 'You', onPress: () => router.back() },
     right: { kind: 'profile' },
   });
+
+  // Pull-to-refresh re-pulls friends + requests AND force-refreshes the
+  // profileCache entries for the current friend list so display name /
+  // avatar color edits made by a friend on their device propagate
+  // here without restarting the app. friends[] is the input (stable
+  // identity from SocialContext); the empty case short-circuits inside
+  // refreshProfiles.
+  const { refreshing, onRefresh } = useScreenRefresh([
+    refreshFriendsAndRequests,
+    () => refreshProfiles(friends),
+  ]);
 
   // One row per friend userId. Never silently drop a friend — fall back
   // through roster → profileCache → placeholder so the list always reflects
@@ -91,7 +104,21 @@ export default function FriendsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }>
+        <RefreshButton
+          refreshing={refreshing}
+          onPress={onRefresh}
+          accessibilityLabel="Refresh friends"
+        />
         <Text style={styles.title}>Friends</Text>
 
         <IncomingRequestsBanner />

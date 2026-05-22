@@ -26,10 +26,11 @@
 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { HoleNavBar } from '@/components/HoleNavBar';
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
+import { RefreshButton } from '@/components/RefreshButton';
 import { ScoreEntryRow } from '@/components/ScoreEntryRow';
 import type { AvatarMember } from '@/components/TeamAvatarCluster';
 import { TeePickerSheet } from '@/components/TeePickerSheet';
@@ -47,6 +48,7 @@ import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useScreenRefresh } from '@/state/useScreenRefresh';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 
@@ -62,8 +64,8 @@ export default function RoundDetailScreen() {
   const { colors } = useTheme();
   const { account } = useAccount();
   const { allPlayers, defaultPlayerId } = usePlayers();
-  const { profileCache } = useSocial();
-  const { completedRounds, deleteRound, commitScoreEdits } = useGolfRound();
+  const { profileCache, refreshProfiles } = useSocial();
+  const { completedRounds, deleteRound, commitScoreEdits, refreshScorecards } = useGolfRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [editMode, setEditMode] = useState(false);
@@ -97,6 +99,22 @@ export default function RoundDetailScreen() {
   const myUserId = account?.userId;
   const isOwner = !!(round && myUserId && round.ownerUserId === myUserId);
   const isScramble = round?.scoringRule === 'scramble';
+
+  // Pull-to-refresh re-pulls scorecards AND force-refreshes profile
+  // cache entries for every linked participant in this round.
+  // mentionedUserIds + ownerUserId together cover every face rendered
+  // in the scorecard / header bands. Empty list = no-op call.
+  const round_mentionedIds = round?.mentionedUserIds ?? [];
+  const round_ownerId = round?.ownerUserId;
+  const refreshIdsKey = useMemo(() => {
+    const ids = new Set<string>(round_mentionedIds);
+    if (round_ownerId) ids.add(round_ownerId);
+    return [...ids];
+  }, [round_mentionedIds, round_ownerId]);
+  const { refreshing, onRefresh } = useScreenRefresh([
+    refreshScorecards,
+    () => refreshProfiles(refreshIdsKey),
+  ]);
 
   // Per-scorer list used by the edit-mode entry rows. For scramble that's
   // the set of teams; for stroke it's resolved-identity participant rows
@@ -331,7 +349,21 @@ export default function RoundDetailScreen() {
 
   return (
     <>
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }>
+      <RefreshButton
+        refreshing={refreshing}
+        onPress={onRefresh}
+        accessibilityLabel="Refresh round"
+      />
       <View style={styles.titleBlock}>
         <Text style={styles.title} numberOfLines={1}>
           {round.course.name}

@@ -20,8 +20,9 @@
 
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { RefreshButton } from '@/components/RefreshButton';
 import { AVATAR_COLORS } from '@/constants/avatarColors';
 import { formatScore } from '@/lib/scoring';
 import { firstName } from '@/lib/userIdentity';
@@ -29,6 +30,7 @@ import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useScreenRefresh } from '@/state/useScreenRefresh';
 import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 
@@ -46,9 +48,9 @@ function formatJoined(iso: string): string {
 
 export default function YouScreen() {
   const { colors } = useTheme();
-  const { completedRounds } = useGolfRound();
-  const { defaultPlayerId, getPlayer } = usePlayers();
-  const { account, updateAvatarColor } = useAccount();
+  const { completedRounds, refreshScorecards } = useGolfRound();
+  const { defaultPlayerId, getPlayer, refreshRoster } = usePlayers();
+  const { account, updateAvatarColor, refreshAccount } = useAccount();
   const { friends, incomingRequests } = useSocial();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -56,6 +58,17 @@ export default function YouScreen() {
     left: { kind: 'text', text: 'YOU' },
     right: { kind: 'profile' },
   });
+
+  // Pull-to-refresh re-pulls everything that drives this screen's
+  // surface: own profile (avatar / display name / handle), own rounds
+  // (stats strip), and roster (used for the participant lookup in the
+  // stats computation). Friends count + incoming-request badges aren't
+  // refreshed here — that's the Friends tab's responsibility.
+  const { refreshing, onRefresh } = useScreenRefresh([
+    refreshAccount,
+    refreshScorecards,
+    refreshRoster,
+  ]);
 
   const me = defaultPlayerId ? getPlayer(defaultPlayerId) : undefined;
   const displayName = account?.displayName ?? me?.nickname ?? 'You';
@@ -117,7 +130,21 @@ export default function YouScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+        />
+      }>
+      <RefreshButton
+        refreshing={refreshing}
+        onPress={onRefresh}
+        accessibilityLabel="Refresh profile"
+      />
       {!account ? (
         <View style={styles.signInBanner}>
           <Text style={styles.signInHead}>✦  SIGN IN TO UNLOCK</Text>
