@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Validate migrations + db tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # Boots Postgres + Auth + Storage + Realtime locally and applies
+      # every file under supabase/migrations/ from scratch. Fails on bad
+      # SQL or out-of-order migrations before any hosted DB sees them.
+      - name: Start local Supabase stack
+        run: supabase start
+
+      # Pull the local stack's URL + anon + service-role keys into the
+      # job env so npm run test:db can connect.
+      - name: Export Supabase env
+        run: |
+          API_URL=$(supabase status -o env | grep ^API_URL= | cut -d= -f2- | tr -d '"')
+          ANON_KEY=$(supabase status -o env | grep ^ANON_KEY= | cut -d= -f2- | tr -d '"')
+          SERVICE_ROLE_KEY=$(supabase status -o env | grep ^SERVICE_ROLE_KEY= | cut -d= -f2- | tr -d '"')
+          {
+            echo "SUPABASE_TEST_URL=$API_URL"
+            echo "SUPABASE_TEST_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_TEST_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Run db tests
+        run: npm run test:db
