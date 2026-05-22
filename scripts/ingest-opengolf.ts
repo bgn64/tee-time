@@ -10,7 +10,7 @@
  *   tsx scripts/ingest-opengolf.ts            # against remote env (vars below)
  *   tsx scripts/ingest-opengolf.ts --dry-run  # parse + print stats, no DB writes
  *
- * Required env (typically loaded from `.env.local` via dotenv):
+ * Required env (loaded from `.env.local` via dotenv):
  *
  *   SUPABASE_URL                 - your project URL
  *   SUPABASE_SERVICE_ROLE_KEY    - SERVICE ROLE key (bypasses RLS).
@@ -67,7 +67,6 @@ const dryRun = process.argv.includes('--dry-run');
 
 // ---------- env ----------
 dotenv.config({ path: '.env.local' });
-dotenv.config({ path: '.env' });
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;

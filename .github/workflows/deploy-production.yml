@@ -1,0 +1,54 @@
+name: Deploy migrations to production
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: supabase db push (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # The `production` environment requires manual approval (configured
+    # in repo Settings -> Environments). The workflow blocks here until a
+    # reviewer clicks Approve.
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      PROJECT_ID: ${{ vars.PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link to production project
+        run: supabase link --project-ref "$PROJECT_ID"
+
+      - name: Show pending migrations
+        run: supabase migration list --linked
+
+      # Pre-push backup. Attach as a workflow artifact so we have a
+      # restore point if a migration causes data loss. Retained 30d.
+      - name: Dump production database
+        run: |
+          mkdir -p backup
+          supabase db dump --linked --data-only -f backup/data.sql || true
+          supabase db dump --linked          -f backup/schema.sql
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-backup-${{ github.sha }}
+          path: backup/
+          retention-days: 30
+
+      - name: Push migrations
+        run: supabase db push --linked

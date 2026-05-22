@@ -24,8 +24,12 @@
  * cleans up everything else automatically. Catalog courses are owned by
  * nobody so they're untouched.
  *
- * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in `.env` /
- * `.env.local` (same envvars the demo-pros script reads).
+ * Requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in `.env.local`.
+ *
+ * Refuses to run against the production project: if SUPABASE_URL matches
+ * PRODUCTION_PROJECT_ID, the script exits immediately. Set
+ * PRODUCTION_PROJECT_ID in `.env.local` to enable that guard (it's a
+ * no-op if unset, but you should always set it).
  *
  * NOTE: these accounts are deliberately NOT marked `is_demo_seed = true`.
  * That flag triggers an auto-friend on every real user signup; we don't
@@ -39,12 +43,22 @@ import * as dotenv from 'dotenv';
 import { DEV_TEST_ACCOUNTS } from '../constants/devTestAccounts';
 
 dotenv.config({ path: '.env.local' });
-dotenv.config({ path: '.env' });
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.');
+  console.error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local.');
+  process.exit(1);
+}
+
+// Prod-URL guard: refuse to run against production. PRODUCTION_PROJECT_ID
+// is the project ref from the dashboard URL — Supabase URLs embed it as a
+// subdomain (e.g. https://<ref>.supabase.co), so substring match is safe.
+const PRODUCTION_PROJECT_ID = process.env.PRODUCTION_PROJECT_ID;
+if (PRODUCTION_PROJECT_ID && SUPABASE_URL.includes(PRODUCTION_PROJECT_ID)) {
+  console.error(
+    `Refusing to seed test users against production project (${PRODUCTION_PROJECT_ID}).`
+  );
   process.exit(1);
 }
 
