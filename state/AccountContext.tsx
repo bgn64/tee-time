@@ -23,13 +23,13 @@ import {
   useContext,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 
 import { Platform } from 'react-native';
 
 import { pickAvatarColor } from '@/constants/avatarColors';
+import { useRefreshGeneration } from '@/state/cloudSync';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { supabase } from '@/state/supabaseClient';
 import { Account } from '@/types/account';
@@ -133,22 +133,19 @@ export function AccountProvider({ children }: PropsWithChildren) {
   const [postRoundPromptDismissCount, setPostRoundPromptDismissCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
-  // Per-refresh generation counter. `refreshFromSession` increments
-  // this on entry; after each await it compares the captured value
-  // against `refreshGenRef.current` and discards stale responses
-  // without writing state. Guarantees latest-response-wins when two
-  // refreshes overlap (e.g., TOKEN_REFRESHED firing during a manual
-  // pull-to-refresh).
-  const refreshGenRef = useRef(0);
+  // Latest-response-wins token pair shared with all other refresh
+  // surfaces; see `state/cloudSync.ts`. Replaces the prior
+  // refreshGenRef + manual increment/compare pattern.
+  const refreshGen = useRefreshGeneration();
 
   const refreshFromSession = useCallback(async (): Promise<{
     ok: boolean;
     error?: string;
   }> => {
-    const myGen = ++refreshGenRef.current;
+    const myToken = refreshGen.begin();
 
     const { data: sessionData } = await supabase.auth.getSession();
-    if (refreshGenRef.current !== myGen) return { ok: true };
+    if (refreshGen.isStale(myToken)) return { ok: true };
     const session = sessionData.session;
     if (!session) {
       setAccount(null);
@@ -166,7 +163,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       .eq('user_id', userId)
       .maybeSingle();
 
-    if (refreshGenRef.current !== myGen) return { ok: true };
+    if (refreshGen.isStale(myToken)) return { ok: true };
 
     if (error) {
       console.warn('[account] failed to load profile:', error);
@@ -206,7 +203,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
     setPendingEmail(null);
     setPendingDisplayName(null);
     return { ok: true };
-  }, []);
+  }, [refreshGen]);
 
   /**
    * Public alias for `refreshFromSession` exposed on the context value.

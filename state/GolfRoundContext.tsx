@@ -28,6 +28,7 @@ import { recentCourses as seededRecentCourses } from '@/data/courses';
 import { newRoundId } from '@/lib/ids';
 import { replaceScore } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
+import { useOneShotSyncOnSignIn, useRefreshGeneration, useSignOutReset } from '@/state/cloudSync';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { usePlayers } from '@/state/PlayerContext';
 import { supabase } from '@/state/supabaseClient';
@@ -347,17 +348,10 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const coursesRef = useRef(courses);
   coursesRef.current = courses;
 
-  const cloudCoursesSyncedAccountRef = useRef<string | null>(null);
-  const cloudRoundsSyncedAccountRef = useRef<string | null>(null);
-
-  // Per-refresh generation counter. `refreshScorecards` increments this,
-  // captures the local value, and after the awaited select compares it
-  // against `refreshGenRef.current` — if a newer refresh has started in
-  // the meantime, the older response is discarded. Guarantees latest-
-  // response-wins for overlapping pull-to-refresh invocations.
-  const refreshGenRef = useRef(0);
-
-  const prevAccountUserIdRef = useRef<string | null>(null);
+  // Latest-response-wins token pair for `refreshScorecards`. The
+  // initial-pull sentinels are managed inside `useOneShotSyncOnSignIn`
+  // calls below (one for courses, one for scorecards).
+  const refreshGen = useRefreshGeneration();
 
   const playerRosterRef = useRef(playerRoster);
   playerRosterRef.current = playerRoster;
@@ -436,22 +430,19 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     saveJSON(STORAGE_KEYS.COMPLETED_ROUNDS, completedRounds);
   }, [completedRounds, hydrated]);
 
-  // Sign-out reset.
-  useEffect(() => {
-    if (!hydrated || !accountHydrated) return;
-    const prev = prevAccountUserIdRef.current;
-    const curr = accountUserId;
-    if (prev !== null && curr === null) {
+  // Sign-out reset. Sentinel re-arming is handled inside the
+  // `useOneShotSyncOnSignIn` calls below.
+  useSignOutReset({
+    accountUserId,
+    ready: hydrated && accountHydrated,
+    reset: () => {
       // Clear all locally-cached courses; both customs (account-specific)
       // and any catalog rows the previous user had interacted with.
       setCourses([]);
       setCloudRounds([]);
       setCurrentRound(null);
-      cloudCoursesSyncedAccountRef.current = null;
-      cloudRoundsSyncedAccountRef.current = null;
-    }
-    prevAccountUserIdRef.current = curr;
-  }, [accountUserId, accountHydrated, hydrated]);
+    },
+  });
 
   // Register write-queue rollback handlers exactly once. These run when
   // an enqueued mutation is dead-lettered (5 transient failures or any
@@ -660,18 +651,14 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   // searchCatalogCourses on demand. Keyed by account.userId (not the
   // whole account object) so cosmetic profile updates don't re-run the
   // sync gate.
-  useEffect(() => {
-    if (!hydrated || !accountHydrated) return;
-    if (!accountUserId) {
-      cloudCoursesSyncedAccountRef.current = null;
-      return;
-    }
-    if (cloudCoursesSyncedAccountRef.current === accountUserId) return;
-
-    let cancelled = false;
-    const ownerUserId = accountUserId;
-
-    const sync = async () => {
+  // One-time-per-account initial sync for customs. Keyed by
+  // accountUserId so cosmetic profile updates don't re-fire the
+  // sync gate. Catalog discovery happens via `searchCatalogCourses`
+  // on demand.
+  useOneShotSyncOnSignIn({
+    accountUserId,
+    ready: hydrated && accountHydrated,
+    sync: async (ownerUserId) => {
       const { data, error } = await supabase
         .from('courses')
         .select('*')
@@ -680,7 +667,6 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         console.warn('[courses] initial sync pull failed:', error);
         return;
       }
-      if (cancelled) return;
 
       const cloudRows = (data ?? []) as any[];
       const cloudById = new Map(cloudRows.map((r) => [r.id as string, r]));
@@ -708,7 +694,6 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         merged.push(cloudCourseRowToLocal(cloud));
       }
 
-      if (cancelled) return;
       setCourses(merged);
 
       const localOnlyCustom = localSnapshot.filter(
@@ -717,15 +702,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       for (const c of localOnlyCustom) {
         await cloudUpsertCourse(c);
       }
-
-      cloudCoursesSyncedAccountRef.current = ownerUserId;
-    };
-
-    sync();
-    return () => {
-      cancelled = true;
-    };
-  }, [accountUserId, hydrated, accountHydrated, cloudCourseRowToLocal, cloudUpsertCourse]);
+    },
+  });
 
   // Catalog search (server-side, no client-side preload).
   const searchCatalogCourses = useCallback(
@@ -1131,14 +1109,14 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   /**
    * Pull every visible scorecard from the cloud and reconcile with the
    * in-memory `cloudRounds` list. Used by both the initial-pull effect
-   * (gated by `cloudRoundsSyncedAccountRef`) and explicit pull-to-
-   * refresh (which bypasses that gate and always goes to the wire).
+   * (gated by `useOneShotSyncOnSignIn`) and explicit pull-to-refresh
+   * (which bypasses that gate and always goes to the wire).
    *
    * Race-safety:
-   *   · `refreshGenRef` is bumped at entry and re-checked after the
-   *     async select; an older response whose generation no longer
-   *     matches is discarded. Two overlapping refreshes therefore
-   *     resolve as "latest wins".
+   *   · `refreshGen` (shared `useRefreshGeneration` helper) issues a
+   *     token at entry and re-checks after the async select; an older
+   *     response whose token is now stale is discarded. Overlapping
+   *     refreshes therefore resolve as "latest wins".
    *   · The merge uses the functional `setCloudRounds(prev => ...)`
    *     form so a row inserted by a concurrent local user action
    *     (e.g., a score tap committing during the await) lands in
@@ -1155,7 +1133,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   }> => {
     if (!accountUserId) return { ok: true };
     const ownerUserId = accountUserId;
-    const myGen = ++refreshGenRef.current;
+    const myToken = refreshGen.begin();
     const snapshotIds = new Set(cloudRoundsRef.current.map((r) => r.id));
 
     const { data, error } = await supabase.from('scorecards').select('*');
@@ -1163,7 +1141,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       console.warn('[scorecards] refresh pull failed:', error);
       return { ok: false, error: error.message };
     }
-    if (refreshGenRef.current !== myGen) return { ok: true };
+    if (refreshGen.isStale(myToken)) return { ok: true };
 
     const rows = (data ?? []) as CloudScorecardRow[];
     const cloudById = new Map(rows.map((r) => [r.id, r]));
@@ -1216,23 +1194,20 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       await cloudUpsertRound(r, { bumpLastScoreAt: false });
     }
 
-    cloudRoundsSyncedAccountRef.current = ownerUserId;
     return { ok: true };
-  }, [accountUserId, cloudToLocalRound, cloudUpsertRound]);
+  }, [accountUserId, cloudToLocalRound, cloudUpsertRound, refreshGen]);
 
-  // Initial pull. Keyed by accountUserId so cosmetic profile updates
-  // don't re-trigger. The `cloudRoundsSyncedAccountRef` sentinel keeps
-  // this effect a one-shot per signed-in user — explicit refreshes via
-  // `refreshScorecards()` bypass the sentinel and always go to the wire.
-  useEffect(() => {
-    if (!hydrated || !accountHydrated) return;
-    if (!accountUserId) {
-      cloudRoundsSyncedAccountRef.current = null;
-      return;
-    }
-    if (cloudRoundsSyncedAccountRef.current === accountUserId) return;
-    void refreshScorecards();
-  }, [accountUserId, hydrated, accountHydrated, refreshScorecards]);
+  // Initial pull. Keyed by accountUserId (via useOneShotSyncOnSignIn)
+  // so cosmetic profile updates don't re-trigger. Explicit refreshes
+  // via `refreshScorecards()` bypass the sentinel and always go to
+  // the wire.
+  useOneShotSyncOnSignIn({
+    accountUserId,
+    ready: hydrated && accountHydrated,
+    sync: async () => {
+      await refreshScorecards();
+    },
+  });
 
   // Auto-promote a cloud in-progress round into `currentRound` on
   // fresh devices / clean installs. Without this, a user who started

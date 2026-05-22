@@ -35,6 +35,7 @@ import {
 } from 'react';
 
 import { useAccount } from '@/state/AccountContext';
+import { useRefreshGeneration } from '@/state/cloudSync';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { usePlayers } from '@/state/PlayerContext';
 import { supabase } from '@/state/supabaseClient';
@@ -240,12 +241,12 @@ export function SocialProvider({ children }: PropsWithChildren) {
   const ensureProfilesCachedRef = useRef(ensureProfilesCached);
   ensureProfilesCachedRef.current = ensureProfilesCached;
 
-  // Per-refresh generation counter. `refreshFriendsAndRequests` bumps
-  // this at entry; after the await it compares its captured value
-  // against `refreshGenRef.current` and discards stale responses.
-  // Guarantees latest-response-wins for overlapping refreshes (e.g.,
-  // pull-to-refresh fired twice in quick succession).
-  const refreshGenRef = useRef(0);
+  // Latest-response-wins token pair for `refreshFriendsAndRequests`.
+  // Kept separate from `profileRefreshGen` (below) so the two refresh
+  // paths don't serialize each other on overlapping pulls — they touch
+  // different pieces of local state and have independent latest-wins
+  // semantics.
+  const refreshGen = useRefreshGeneration();
 
   /**
    * Pull friendships + pending friend_requests from the cloud and write
@@ -265,7 +266,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
   }> => {
     if (!accountUserId) return { ok: true };
     const meId = accountUserId;
-    const myGen = ++refreshGenRef.current;
+    const myToken = refreshGen.begin();
 
     setSyncing(true);
     try {
@@ -275,7 +276,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
           .from('friend_requests')
           .select('id, from_user_id, to_user_id, status, source_player_id, created_at'),
       ]);
-      if (refreshGenRef.current !== myGen) return { ok: true };
+      if (refreshGen.isStale(myToken)) return { ok: true };
       if (friendshipsRes.error) {
         console.warn('[social] friendships pull:', friendshipsRes.error);
         return { ok: false, error: friendshipsRes.error.message };
@@ -298,7 +299,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
         ...requests.map((r) => r.to_user_id),
       ]);
       const profiles = await ensureProfilesCachedRef.current([...profileIds]);
-      if (refreshGenRef.current !== myGen) return { ok: true };
+      if (refreshGen.isStale(myToken)) return { ok: true };
 
       const meAccount = accountRef.current;
       const incoming: FriendRequest[] = [];
@@ -327,18 +328,15 @@ export function SocialProvider({ children }: PropsWithChildren) {
       // Only the latest refresh should flip syncing off; older
       // overlapping refreshes that lost the generation race shouldn't
       // un-flip the newer one's spinner.
-      if (refreshGenRef.current === myGen) {
+      if (!refreshGen.isStale(myToken)) {
         setSyncing(false);
       }
     }
-  }, [accountUserId]);
+  }, [accountUserId, refreshGen]);
 
-  // Per-refresh generation counter dedicated to `refreshProfiles`.
-  // Kept separate from `refreshGenRef` (which guards
-  // `refreshFriendsAndRequests`) so the two refresh paths don't
-  // serialize each other on overlapping pulls — they touch different
-  // pieces of local state and have independent latest-wins semantics.
-  const profileRefreshGenRef = useRef(0);
+  // Latest-response-wins token pair dedicated to `refreshProfiles`,
+  // independent of `refreshGen` (which guards refreshFriendsAndRequests).
+  const profileRefreshGen = useRefreshGeneration();
 
   /**
    * Force-refresh the given profile ids from the cloud and overwrite
@@ -346,8 +344,8 @@ export function SocialProvider({ children }: PropsWithChildren) {
    * this returns the standard `{ ok, error }` envelope so screens can
    * toast on failure (no silent swallow).
    *
-   * Race-safe: a per-refresh generation counter discards stale
-   * responses. The cache write is additive (existing entries for
+   * Race-safe via the shared `useRefreshGeneration`: stale responses
+   * are discarded. The cache write is additive (existing entries for
    * non-targeted ids are preserved) so an overlapping
    * refreshFriendsAndRequests can't clobber concurrently-fetched
    * profile rows.
@@ -359,13 +357,13 @@ export function SocialProvider({ children }: PropsWithChildren) {
       if (!accountUserId) return { ok: true };
       const targets = userIds.filter((id) => id.length > 0);
       if (targets.length === 0) return { ok: true };
-      const myGen = ++profileRefreshGenRef.current;
+      const myToken = profileRefreshGen.begin();
 
       const { data, error } = await supabase
         .from('profiles')
         .select('user_id, handle, display_name, avatar_color')
         .in('user_id', targets);
-      if (profileRefreshGenRef.current !== myGen) return { ok: true };
+      if (profileRefreshGen.isStale(myToken)) return { ok: true };
       if (error) {
         console.warn('[social] profile refresh failed:', error);
         return { ok: false, error: error.message };
@@ -377,7 +375,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
       setProfileCache((prev) => ({ ...prev, ...additions }));
       return { ok: true };
     },
-    [accountUserId]
+    [accountUserId, profileRefreshGen]
   );
 
   // Initial pull when `accountUserId` becomes non-null. Sign-out clears

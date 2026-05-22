@@ -37,6 +37,7 @@ import {
 
 import { defaultPlayers } from '@/data/players';
 import { useAccount } from '@/state/AccountContext';
+import { useOneShotSyncOnSignIn, useRefreshGeneration, useSignOutReset } from '@/state/cloudSync';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { supabase } from '@/state/supabaseClient';
 import { writeQueue } from '@/state/writeQueue';
@@ -157,19 +158,11 @@ export function PlayerProvider({ children }: PropsWithChildren) {
   const allPlayersRef = useRef(allPlayers);
   allPlayersRef.current = allPlayers;
 
-  const cloudSyncedAccountRef = useRef<string | null>(null);
-
-  // Per-refresh generation counter for `refreshRoster`. Bumped on
-  // entry; after the awaited select, stale responses are discarded so
-  // overlapping refreshes resolve as latest-response-wins. Independent
-  // of the initial-sync sentinel (`cloudSyncedAccountRef`) which gates
-  // the one-shot mount-time pull.
-  const refreshGenRef = useRef(0);
-
-  // Track the previous account so we can detect the sign-out transition
-  // (non-null -> null). Initial mount with account=null doesn't trigger a
-  // clear; only an actual sign-out does.
-  const prevAccountUserIdRef = useRef<string | null>(null);
+  // Latest-response-wins token pair for `refreshRoster`. Independent
+  // of the initial-sync sentinel managed by `useOneShotSyncOnSignIn`
+  // below — which gates the one-shot mount-time pull, while this
+  // covers overlapping explicit refreshes.
+  const refreshGen = useRefreshGeneration();
 
   // Local hydration
   useEffect(() => {
@@ -209,19 +202,17 @@ export function PlayerProvider({ children }: PropsWithChildren) {
   // wipe the local cloud-cached roster back to seed defaults. The
   // persistence effects above will then write the cleared state to
   // AsyncStorage. Theme and other purely local state stay intact (they
-  // live in their own contexts).
-  useEffect(() => {
-    if (!hydrated || !accountHydrated) return;
-    const prev = prevAccountUserIdRef.current;
-    const curr = accountUserId;
-    if (prev !== null && curr === null) {
+  // live in their own contexts). Sentinel re-arming is handled inside
+  // `useOneShotSyncOnSignIn` below.
+  useSignOutReset({
+    accountUserId,
+    ready: hydrated && accountHydrated,
+    reset: () => {
       setAllPlayers(defaultPlayers);
       setRecentIds(DEFAULT_RECENT_IDS);
       setDefaultPlayerId(DEFAULT_DEFAULT_ID);
-      cloudSyncedAccountRef.current = null;
-    }
-    prevAccountUserIdRef.current = curr;
-  }, [accountUserId, accountHydrated, hydrated]);
+    },
+  });
 
   // Register the rollback handler exactly once. Restores the pre-mutation
   // snapshot when a queued upsert is dead-lettered (5 transient failures
@@ -325,21 +316,14 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     [account]
   );
 
-  // One-time-per-account initial sync. Keyed by accountUserId so
-  // cosmetic profile updates (avatar color picker on You tab) don't
-  // re-run the sync gate.
-  useEffect(() => {
-    if (!hydrated || !accountHydrated) return;
-    if (!accountUserId) {
-      cloudSyncedAccountRef.current = null;
-      return;
-    }
-    if (cloudSyncedAccountRef.current === accountUserId) return;
-
-    let cancelled = false;
-    const ownerUserId = accountUserId;
-
-    const sync = async () => {
+  // One-time-per-account initial sync. Pulls cloud roster + merges
+  // with local + pushes any local-only rows up. Keyed by accountUserId
+  // (via useOneShotSyncOnSignIn) so cosmetic profile updates don't
+  // re-fire the sync gate.
+  useOneShotSyncOnSignIn({
+    accountUserId,
+    ready: hydrated && accountHydrated,
+    sync: async (ownerUserId) => {
       const { data: cloudRowsRaw, error } = await supabase
         .from('roster_players')
         .select('id, nickname, color, linked_user_id')
@@ -349,7 +333,6 @@ export function PlayerProvider({ children }: PropsWithChildren) {
         console.warn('[roster] initial sync pull failed:', error);
         return;
       }
-      if (cancelled) return;
 
       const cloudRows = (cloudRowsRaw ?? []) as CloudRosterRow[];
       const cloudById = new Map(cloudRows.map((r) => [r.id, r]));
@@ -375,7 +358,6 @@ export function PlayerProvider({ children }: PropsWithChildren) {
         merged.push(rowToPlayer(cloud));
       }
 
-      if (cancelled) return;
       setAllPlayers(merged);
 
       const localOnly = localSnapshot.filter((p) => !cloudById.has(p.id));
@@ -392,28 +374,22 @@ export function PlayerProvider({ children }: PropsWithChildren) {
         );
         if (pushError) console.warn('[roster] initial sync push failed:', pushError);
       }
-
-      cloudSyncedAccountRef.current = ownerUserId;
-    };
-
-    sync();
-    return () => {
-      cancelled = true;
-    };
-  }, [accountUserId, hydrated, accountHydrated]);
+    },
+  });
 
   /**
    * Re-pull the signed-in user's roster from the cloud and merge into
-   * local state. Bypasses the `cloudSyncedAccountRef` sentinel that
-   * gates the auto-pull effect — explicit refreshes always go to the
-   * wire. Merge semantics mirror the initial-pull effect (cloud rows
-   * win on id match; local-only rows are preserved). Cross-device
-   * deletes are NOT propagated by design (same limitation as
-   * GolfRoundContext.refreshScorecards for viewer-owned rows).
+   * local state. Bypasses the sentinel that gates the auto-pull
+   * effect (`useOneShotSyncOnSignIn`) — explicit refreshes always go
+   * to the wire. Merge semantics mirror the initial-pull effect
+   * (cloud rows win on id match; local-only rows are preserved).
+   * Cross-device deletes are NOT propagated by design (same
+   * limitation as GolfRoundContext.refreshScorecards for viewer-owned
+   * rows).
    *
-   * Race-safe via `refreshGenRef`: overlapping refreshes resolve as
-   * latest-response-wins. On failure local state is left untouched so
-   * the You-tab roster doesn't blink to empty.
+   * Race-safe via the shared `useRefreshGeneration`: overlapping
+   * refreshes resolve as latest-response-wins. On failure local state
+   * is left untouched so the You-tab roster doesn't blink to empty.
    */
   const refreshRoster = useCallback(async (): Promise<{
     ok: boolean;
@@ -421,7 +397,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
   }> => {
     if (!accountUserId) return { ok: true };
     const ownerUserId = accountUserId;
-    const myGen = ++refreshGenRef.current;
+    const myToken = refreshGen.begin();
 
     const { data: cloudRowsRaw, error } = await supabase
       .from('roster_players')
@@ -431,7 +407,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
       console.warn('[roster] refresh pull failed:', error);
       return { ok: false, error: error.message };
     }
-    if (refreshGenRef.current !== myGen) return { ok: true };
+    if (refreshGen.isStale(myToken)) return { ok: true };
 
     const cloudRows = (cloudRowsRaw ?? []) as CloudRosterRow[];
     const cloudById = new Map(cloudRows.map((r) => [r.id, r]));
@@ -466,7 +442,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     });
 
     return { ok: true };
-  }, [accountUserId]);
+  }, [accountUserId, refreshGen]);
 
   const addPlayer = useCallback(
     (player: Player) => {
