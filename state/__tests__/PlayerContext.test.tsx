@@ -360,3 +360,161 @@ describe('PlayerContext addPlayer — write queue integration', () => {
     warnSpy.mockRestore();
   });
 });
+
+describe('PlayerContext.refreshRoster', () => {
+  test('picks up roster edits made on another device', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('roster_players', [
+      {
+        owner_user_id: aliceUserId,
+        id: 'player-bob',
+        nickname: 'Bob',
+        color: '#111111',
+        linked_user_id: null,
+      },
+    ]);
+
+    const { result } = renderHookWithProviders(useAccountAndPlayers);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(
+        result.current.players.allPlayers.find((p) => p.id === 'player-bob')?.nickname
+      ).toBe('Bob');
+    });
+
+    // Simulate the same user editing the roster on another device:
+    // Bob's nickname changes, and a new row appears.
+    mockSupabaseSeedTable('roster_players', [
+      {
+        owner_user_id: aliceUserId,
+        id: 'player-bob',
+        nickname: 'Bobby',
+        color: '#222222',
+        linked_user_id: null,
+      },
+      {
+        owner_user_id: aliceUserId,
+        id: 'player-carol',
+        nickname: 'Carol',
+        color: '#333333',
+        linked_user_id: null,
+      },
+    ]);
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.players.refreshRoster();
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(
+      result.current.players.allPlayers.find((p) => p.id === 'player-bob')?.nickname
+    ).toBe('Bobby');
+    expect(
+      result.current.players.allPlayers.find((p) => p.id === 'player-carol')?.nickname
+    ).toBe('Carol');
+  });
+
+  test('preserves local-only rows that have not yet been pushed (no blink-to-empty)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('roster_players', [
+      {
+        owner_user_id: aliceUserId,
+        id: 'player-bob',
+        nickname: 'Bob',
+        color: null,
+        linked_user_id: null,
+      },
+    ]);
+
+    const { result } = renderHookWithProviders(useAccountAndPlayers);
+
+    await waitFor(() => {
+      expect(
+        result.current.players.allPlayers.find((p) => p.id === 'player-bob')
+      ).toBeDefined();
+    });
+
+    // Add a row locally that the cloud has never seen.
+    await act(async () => {
+      result.current.players.addPlayer({
+        id: 'player-local-only',
+        nickname: 'LocalOnly',
+        color: '#abcdef',
+      });
+    });
+
+    // Refresh: cloud doesn't include the new local-only row. Mirror
+    // initial-sync semantics — preserve it (the writeQueue handles
+    // pushing it on its own schedule).
+    await act(async () => {
+      await result.current.players.refreshRoster();
+    });
+
+    expect(
+      result.current.players.allPlayers.find((p) => p.id === 'player-local-only')
+    ).toBeDefined();
+    expect(
+      result.current.players.allPlayers.find((p) => p.id === 'player-bob')
+    ).toBeDefined();
+  });
+
+  test('returns {ok:true} as a no-op when signed out', async () => {
+    const { result } = renderHookWithProviders(useAccountAndPlayers);
+
+    await waitFor(() => {
+      expect(result.current.players.hydrated).toBe(true);
+    });
+    expect(result.current.account.account).toBeNull();
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.players.refreshRoster();
+    });
+
+    expect(outcome).toEqual({ ok: true });
+  });
+
+  test('returns {ok:false, error} on transient supabase error and leaves local state unchanged', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('roster_players', [
+      {
+        owner_user_id: aliceUserId,
+        id: 'player-bob',
+        nickname: 'Bob',
+        color: null,
+        linked_user_id: null,
+      },
+    ]);
+
+    const { result } = renderHookWithProviders(useAccountAndPlayers);
+
+    await waitFor(() => {
+      expect(
+        result.current.players.allPlayers.find((p) => p.id === 'player-bob')
+      ).toBeDefined();
+    });
+    const before = result.current.players.allPlayers;
+
+    mockSupabaseSetTableError('roster_players', {
+      message: 'service unavailable',
+      code: '503',
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.players.refreshRoster();
+    });
+
+    expect(outcome?.ok).toBe(false);
+    expect(outcome?.error).toBe('service unavailable');
+    expect(result.current.players.allPlayers).toBe(before);
+
+    warnSpy.mockRestore();
+  });
+});

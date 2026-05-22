@@ -23,6 +23,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -73,8 +74,22 @@ type AccountContextValue = {
    * when signed out.
    */
   updateAvatarColor: (color: string) => Promise<AuthResult>;
-  /** Patch profiles.display_name for the signed-in user. */
+  /**
+   * Patch profiles.display_name for the signed-in user. */
   updateDisplayName: (displayName: string) => Promise<AuthResult>;
+  /**
+   * Re-pull the signed-in user's profile row from the cloud on demand.
+   * Used by the You tab's pull-to-refresh so multi-device profile
+   * edits (avatar color / display name on another device) can be
+   * surfaced before the hourly TOKEN_REFRESHED fires.
+   *
+   * Resolves to `{ ok: true }` on success (including the no-op signed-
+   * out case and stale-generation discards) and `{ ok: false, error }`
+   * when the profile lookup returns a transient error. On failure the
+   * local `account` is left untouched so the You tab doesn't blink to
+   * a missing-profile state.
+   */
+  refreshAccount: () => Promise<{ ok: boolean; error?: string }>;
   postRoundPromptDismissCount: number;
   postRoundPromptSuppressed: boolean;
   markPostRoundPromptDismissed: () => void;
@@ -118,14 +133,28 @@ export function AccountProvider({ children }: PropsWithChildren) {
   const [postRoundPromptDismissCount, setPostRoundPromptDismissCount] = useState(0);
   const [hydrated, setHydrated] = useState(false);
 
-  const refreshFromSession = useCallback(async () => {
+  // Per-refresh generation counter. `refreshFromSession` increments
+  // this on entry; after each await it compares the captured value
+  // against `refreshGenRef.current` and discards stale responses
+  // without writing state. Guarantees latest-response-wins when two
+  // refreshes overlap (e.g., TOKEN_REFRESHED firing during a manual
+  // pull-to-refresh).
+  const refreshGenRef = useRef(0);
+
+  const refreshFromSession = useCallback(async (): Promise<{
+    ok: boolean;
+    error?: string;
+  }> => {
+    const myGen = ++refreshGenRef.current;
+
     const { data: sessionData } = await supabase.auth.getSession();
+    if (refreshGenRef.current !== myGen) return { ok: true };
     const session = sessionData.session;
     if (!session) {
       setAccount(null);
       setNeedsProfile(false);
       setPendingDisplayName(null);
-      return;
+      return { ok: true };
     }
 
     const userId = session.user.id;
@@ -137,11 +166,13 @@ export function AccountProvider({ children }: PropsWithChildren) {
       .eq('user_id', userId)
       .maybeSingle();
 
+    if (refreshGenRef.current !== myGen) return { ok: true };
+
     if (error) {
       console.warn('[account] failed to load profile:', error);
-      setAccount(null);
-      setNeedsProfile(false);
-      return;
+      // Preserve existing account state on transient failure — don't
+      // blink to signed-out just because the profile lookup hiccupped.
+      return { ok: false, error: error.message };
     }
 
     if (!profile) {
@@ -158,7 +189,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       setNeedsProfile(true);
       setPendingEmail(email);
       setPendingDisplayName(suggestedName || null);
-      return;
+      return { ok: true };
     }
 
     const nextAccount: Account = {
@@ -174,7 +205,19 @@ export function AccountProvider({ children }: PropsWithChildren) {
     setNeedsProfile(false);
     setPendingEmail(null);
     setPendingDisplayName(null);
+    return { ok: true };
   }, []);
+
+  /**
+   * Public alias for `refreshFromSession` exposed on the context value.
+   * Lets screens (the You tab's pull-to-refresh) re-pull the viewer's
+   * profile on demand without waiting for the hourly TOKEN_REFRESHED.
+   * Same `{ ok, error }` contract as the underlying call.
+   */
+  const refreshAccount = useCallback(
+    () => refreshFromSession(),
+    [refreshFromSession]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -394,6 +437,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       signInWithGoogle,
       updateAvatarColor,
       updateDisplayName,
+      refreshAccount,
       postRoundPromptDismissCount,
       postRoundPromptSuppressed:
         postRoundPromptDismissCount >= POST_ROUND_PROMPT_SUPPRESS_THRESHOLD,
@@ -413,6 +457,7 @@ export function AccountProvider({ children }: PropsWithChildren) {
       signInWithGoogle,
       updateAvatarColor,
       updateDisplayName,
+      refreshAccount,
       postRoundPromptDismissCount,
       markPostRoundPromptDismissed,
       hydrated,

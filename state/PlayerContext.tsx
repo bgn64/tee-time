@@ -76,6 +76,25 @@ type PlayerContextValue = {
    * exploding on 23505.
    */
   ensureRosterForFriend: (profile: ProfileSummary) => Player;
+  /**
+   * Re-pull the signed-in user's `roster_players` rows from the cloud
+   * and merge them into local state. Used by the You-tab pull-to-
+   * refresh so roster edits made on another device can be surfaced
+   * without restarting the app — without this, the initial-sync
+   * sentinel makes the roster a one-shot fetch per signed-in session.
+   *
+   * Race-safe: a per-refresh generation counter ensures only the
+   * latest response writes state. Merge is by-id (cloud wins for
+   * matching ids, local rows without a cloud counterpart are
+   * preserved as local-only entries — same semantics as the initial-
+   * pull effect).
+   *
+   * Resolves to `{ ok: true }` on success (including the no-op signed-
+   * out case and stale-generation discards) and `{ ok: false, error }`
+   * when the select returns a transient error. On failure local state
+   * is left untouched.
+   */
+  refreshRoster: () => Promise<{ ok: boolean; error?: string }>;
   hydrated: boolean;
 };
 
@@ -139,6 +158,13 @@ export function PlayerProvider({ children }: PropsWithChildren) {
   allPlayersRef.current = allPlayers;
 
   const cloudSyncedAccountRef = useRef<string | null>(null);
+
+  // Per-refresh generation counter for `refreshRoster`. Bumped on
+  // entry; after the awaited select, stale responses are discarded so
+  // overlapping refreshes resolve as latest-response-wins. Independent
+  // of the initial-sync sentinel (`cloudSyncedAccountRef`) which gates
+  // the one-shot mount-time pull.
+  const refreshGenRef = useRef(0);
 
   // Track the previous account so we can detect the sign-out transition
   // (non-null -> null). Initial mount with account=null doesn't trigger a
@@ -376,6 +402,72 @@ export function PlayerProvider({ children }: PropsWithChildren) {
     };
   }, [accountUserId, hydrated, accountHydrated]);
 
+  /**
+   * Re-pull the signed-in user's roster from the cloud and merge into
+   * local state. Bypasses the `cloudSyncedAccountRef` sentinel that
+   * gates the auto-pull effect — explicit refreshes always go to the
+   * wire. Merge semantics mirror the initial-pull effect (cloud rows
+   * win on id match; local-only rows are preserved). Cross-device
+   * deletes are NOT propagated by design (same limitation as
+   * GolfRoundContext.refreshScorecards for viewer-owned rows).
+   *
+   * Race-safe via `refreshGenRef`: overlapping refreshes resolve as
+   * latest-response-wins. On failure local state is left untouched so
+   * the You-tab roster doesn't blink to empty.
+   */
+  const refreshRoster = useCallback(async (): Promise<{
+    ok: boolean;
+    error?: string;
+  }> => {
+    if (!accountUserId) return { ok: true };
+    const ownerUserId = accountUserId;
+    const myGen = ++refreshGenRef.current;
+
+    const { data: cloudRowsRaw, error } = await supabase
+      .from('roster_players')
+      .select('id, nickname, color, linked_user_id')
+      .eq('owner_user_id', ownerUserId);
+    if (error) {
+      console.warn('[roster] refresh pull failed:', error);
+      return { ok: false, error: error.message };
+    }
+    if (refreshGenRef.current !== myGen) return { ok: true };
+
+    const cloudRows = (cloudRowsRaw ?? []) as CloudRosterRow[];
+    const cloudById = new Map(cloudRows.map((r) => [r.id, r]));
+
+    setAllPlayers((prev) => {
+      const merged: Player[] = [];
+      const seenIds = new Set<string>();
+      for (const local of prev) {
+        const cloud = cloudById.get(local.id);
+        if (cloud) {
+          // Cloud wins on the canonical fields; preserve any local-only
+          // decorations (displayName / handle resolved at link time)
+          // that the roster_players row doesn't carry.
+          merged.push({
+            ...rowToPlayer(cloud),
+            displayName: local.displayName,
+            handle: local.handle,
+          });
+          seenIds.add(cloud.id);
+        } else {
+          // Local-only row (added since last sync; not yet pushed, or
+          // pre-auth seed). Preserved — see method-level comment for
+          // the cross-device-delete caveat.
+          merged.push(local);
+        }
+      }
+      for (const cloud of cloudRows) {
+        if (seenIds.has(cloud.id)) continue;
+        merged.push(rowToPlayer(cloud));
+      }
+      return merged;
+    });
+
+    return { ok: true };
+  }, [accountUserId]);
+
   const addPlayer = useCallback(
     (player: Player) => {
       setAllPlayers((prev) => [...prev, player]);
@@ -574,6 +666,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
       linkPlayer,
       unlinkPlayer,
       ensureRosterForFriend,
+      refreshRoster,
       hydrated,
     }),
     [
@@ -586,6 +679,7 @@ export function PlayerProvider({ children }: PropsWithChildren) {
       linkPlayer,
       unlinkPlayer,
       ensureRosterForFriend,
+      refreshRoster,
       hydrated,
     ]
   );

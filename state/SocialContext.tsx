@@ -79,8 +79,31 @@ type SocialContextValue = {
    * Best-effort prefetch of profile rows into `profileCache`. Idempotent and
    * silent on failure. Surfaces so screens that render participant chips
    * for arbitrary linked user_ids can warm the cache up front.
+   *
+   * By default, already-cached ids are skipped (no network round-trip).
+   * Pass `{ force: true }` to bypass the cache and re-pull every id —
+   * used by pull-to-refresh paths so friends' profile edits (avatar
+   * color, display name) propagate without restarting the app.
    */
-  ensureProfilesCached: (userIds: string[]) => Promise<Record<string, ProfileSummary>>;
+  ensureProfilesCached: (
+    userIds: string[],
+    opts?: { force?: boolean }
+  ) => Promise<Record<string, ProfileSummary>>;
+
+  /**
+   * Re-pull the given profile ids from the cloud and overwrite the
+   * matching `profileCache` entries. Equivalent to calling
+   * `ensureProfilesCached(ids, { force: true })` but returns the
+   * standard refresh envelope so screens can toast on failure.
+   *
+   * No-op (resolves `{ ok: true }`) when signed out or when `userIds`
+   * is empty. Race-safe via the same per-refresh generation counter as
+   * `refreshFriendsAndRequests` — overlapping refreshes resolve as
+   * latest-response-wins; on failure the cache is left untouched.
+   */
+  refreshProfiles: (
+    userIds: string[]
+  ) => Promise<{ ok: boolean; error?: string }>;
 
   /**
    * Re-run the friendships + friend_requests cloud pull on demand.
@@ -189,13 +212,18 @@ export function SocialProvider({ children }: PropsWithChildren) {
   }, []);
 
   const ensureProfilesCached = useCallback(
-    async (userIds: string[]): Promise<Record<string, ProfileSummary>> => {
-      const missing = userIds.filter((id) => !profileCacheRef.current[id]);
-      if (missing.length === 0) return profileCacheRef.current;
+    async (
+      userIds: string[],
+      opts: { force?: boolean } = {}
+    ): Promise<Record<string, ProfileSummary>> => {
+      const targets = opts.force
+        ? userIds.filter((id) => id.length > 0)
+        : userIds.filter((id) => !profileCacheRef.current[id]);
+      if (targets.length === 0) return profileCacheRef.current;
       const { data, error } = await supabase
         .from('profiles')
         .select('user_id, handle, display_name, avatar_color')
-        .in('user_id', missing);
+        .in('user_id', targets);
       if (error) {
         console.warn('[social] profile lookup failed:', error);
         return profileCacheRef.current;
@@ -313,6 +341,53 @@ export function SocialProvider({ children }: PropsWithChildren) {
       }
     }
   }, [accountUserId]);
+
+  // Per-refresh generation counter dedicated to `refreshProfiles`.
+  // Kept separate from `refreshGenRef` (which guards
+  // `refreshFriendsAndRequests`) so the two refresh paths don't
+  // serialize each other on overlapping pulls — they touch different
+  // pieces of local state and have independent latest-wins semantics.
+  const profileRefreshGenRef = useRef(0);
+
+  /**
+   * Force-refresh the given profile ids from the cloud and overwrite
+   * matching `profileCache` entries. Unlike `ensureProfilesCached`,
+   * this returns the standard `{ ok, error }` envelope so screens can
+   * toast on failure (no silent swallow).
+   *
+   * Race-safe: a per-refresh generation counter discards stale
+   * responses. The cache write is additive (existing entries for
+   * non-targeted ids are preserved) so an overlapping
+   * refreshFriendsAndRequests can't clobber concurrently-fetched
+   * profile rows.
+   */
+  const refreshProfiles = useCallback(
+    async (
+      userIds: string[]
+    ): Promise<{ ok: boolean; error?: string }> => {
+      if (!accountUserId) return { ok: true };
+      const targets = userIds.filter((id) => id.length > 0);
+      if (targets.length === 0) return { ok: true };
+      const myGen = ++profileRefreshGenRef.current;
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, handle, display_name, avatar_color')
+        .in('user_id', targets);
+      if (profileRefreshGenRef.current !== myGen) return { ok: true };
+      if (error) {
+        console.warn('[social] profile refresh failed:', error);
+        return { ok: false, error: error.message };
+      }
+      const additions: Record<string, ProfileSummary> = {};
+      for (const row of (data ?? []) as CloudProfileRow[]) {
+        additions[row.user_id] = profileFromRow(row);
+      }
+      setProfileCache((prev) => ({ ...prev, ...additions }));
+      return { ok: true };
+    },
+    [accountUserId]
+  );
 
   // Initial pull when `accountUserId` becomes non-null. Sign-out clears
   // local state but does NOT lower `hydrated`. Keying off the stable
@@ -574,6 +649,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
       acceptIncomingRequest,
       declineIncomingRequest,
       ensureProfilesCached,
+      refreshProfiles,
       refreshFriendsAndRequests,
       hydrated,
       syncing,
@@ -588,6 +664,7 @@ export function SocialProvider({ children }: PropsWithChildren) {
       acceptIncomingRequest,
       declineIncomingRequest,
       ensureProfilesCached,
+      refreshProfiles,
       refreshFriendsAndRequests,
       hydrated,
       syncing,

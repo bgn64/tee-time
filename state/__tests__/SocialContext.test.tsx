@@ -687,3 +687,172 @@ describe('SocialContext.refreshFriendsAndRequests', () => {
     warnSpy.mockRestore();
   });
 });
+
+describe('SocialContext.refreshProfiles', () => {
+  test('overwrites profileCache entries with fresh cloud data (picks up display-name / avatar edits)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice' },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+    });
+
+    // Simulate Bob editing his profile from another device.
+    mockSupabaseSeedTable('profiles', [
+      aliceProfile,
+      { ...bobProfile, display_name: 'Robert', avatar_color: '#000000' },
+    ]);
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshProfiles(['user-bob']);
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Robert');
+    expect(result.current.social.profileCache['user-bob']?.avatarColor).toBe('#000000');
+  });
+
+  test('returns {ok:true} as a no-op when signed out', async () => {
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+    });
+    expect(result.current.account.account).toBeNull();
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshProfiles(['user-bob']);
+    });
+
+    expect(outcome).toEqual({ ok: true });
+  });
+
+  test('returns {ok:true} when called with an empty id list (skips the network round-trip)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+    });
+
+    const callsBefore = mockSupabaseCallLog().filter(
+      (c: { kind: string; args: any[] }) =>
+        c.kind === 'from.select' && c.args[0]?.table === 'profiles'
+    ).length;
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshProfiles([]);
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    // Empty input short-circuits before any select fires.
+    const callsAfter = mockSupabaseCallLog().filter(
+      (c: { kind: string; args: any[] }) =>
+        c.kind === 'from.select' && c.args[0]?.table === 'profiles'
+    ).length;
+    expect(callsAfter).toBe(callsBefore);
+  });
+
+  test('returns {ok:false, error} on transient supabase error and leaves profileCache unchanged', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice' },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+    });
+    const cacheBefore = result.current.social.profileCache;
+
+    mockSupabaseSetTableError('profiles', {
+      message: 'service unavailable',
+      code: '503',
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshProfiles(['user-bob']);
+    });
+
+    expect(outcome?.ok).toBe(false);
+    expect(outcome?.error).toBe('service unavailable');
+    // Cache preserved on failure — no blink to "missing profile" state.
+    expect(result.current.social.profileCache).toBe(cacheBefore);
+
+    warnSpy.mockRestore();
+  });
+});
+
+describe('SocialContext.ensureProfilesCached force option', () => {
+  test('without force: short-circuits when ids are already cached', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice' },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+    });
+
+    // Edit Bob's profile on the server but DON'T pass force — cached
+    // entry should remain stale.
+    mockSupabaseSeedTable('profiles', [
+      aliceProfile,
+      { ...bobProfile, display_name: 'Robert' },
+    ]);
+
+    await act(async () => {
+      await result.current.social.ensureProfilesCached(['user-bob']);
+    });
+
+    expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+  });
+
+  test('with {force:true}: re-pulls already-cached ids and overwrites the cache', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice' },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+    });
+
+    mockSupabaseSeedTable('profiles', [
+      aliceProfile,
+      { ...bobProfile, display_name: 'Robert' },
+    ]);
+
+    await act(async () => {
+      await result.current.social.ensureProfilesCached(['user-bob'], { force: true });
+    });
+
+    expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Robert');
+  });
+});
