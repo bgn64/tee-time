@@ -137,8 +137,8 @@ async function ensureProfile(
 }
 
 async function ensureFriendship(
-  a: { userId: string; handle: string; color: string },
-  b: { userId: string; handle: string; color: string }
+  a: { userId: string; handle: string; displayName: string; color: string },
+  b: { userId: string; handle: string; displayName: string; color: string }
 ): Promise<void> {
   // Symmetric pair. `upsert` works because (user_id, friend_user_id) is
   // the primary key.
@@ -152,20 +152,24 @@ async function ensureFriendship(
 
   // Mirror the v7 roster entries so each user sees the other as a linked
   // FRIEND player in their roster. id is composite of friend's userId so
-  // re-runs are idempotent.
+  // re-runs are idempotent. Use displayName (e.g. "Bob") rather than the
+  // lowercase handle for the nickname so the seeded rows match what the
+  // app's `ensureRosterForFriend` writes when a friendship is created
+  // through the accept flow at runtime — otherwise some friends would
+  // render lowercase and others capitalized in the Friends list.
   await admin.from('roster_players').upsert(
     [
       {
         owner_user_id: a.userId,
         id: `friend-${b.userId}`,
-        nickname: b.handle,
+        nickname: b.displayName,
         color: b.color,
         linked_user_id: b.userId,
       },
       {
         owner_user_id: b.userId,
         id: `friend-${a.userId}`,
-        nickname: a.handle,
+        nickname: a.displayName,
         color: a.color,
         linked_user_id: a.userId,
       },
@@ -248,6 +252,7 @@ async function main(): Promise<void> {
   type SeededRow = {
     userId: string;
     handle: string;
+    displayName: string;
     color: string;
   };
   const seeded: SeededRow[] = [];
@@ -259,7 +264,12 @@ async function main(): Promise<void> {
       acc.displayName,
       acc.avatarColor
     );
-    seeded.push({ userId, handle: acc.handle, color: acc.avatarColor });
+    seeded.push({
+      userId,
+      handle: acc.handle,
+      displayName: acc.displayName,
+      color: acc.avatarColor,
+    });
     console.log(
       `  · ${acc.handle.padEnd(8)} userId=${userId.slice(0, 8)}…  ` +
         `user:${created ? 'CREATED' : 'kept'}  profile:${profCreated ? 'CREATED' : 'kept'}`
