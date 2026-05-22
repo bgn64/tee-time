@@ -255,6 +255,19 @@ export function PlayerProvider({ children }: PropsWithChildren) {
   const cloudUpsertPlayer = useCallback(
     async (player: Player) => {
       if (!account) return;
+      // The default seed `{ id: 'user' }` is a local-only UI placeholder
+      // that the sign-in side effect (below) attaches the viewer's
+      // identity (linked_user_id = account.userId) to so the scoring
+      // screen renders their avatar color correctly. The cloud does
+      // NOT need this row — the viewer's profile (in `profiles`) is
+      // the source of truth for their identity, and scorecard
+      // participant entries reference `linkedUserId` directly. Pushing
+      // it would also conflict with the unique constraint on
+      // (owner_user_id, linked_user_id) if the user later manually
+      // adds another linked roster row for themselves. Skip the cloud
+      // write but keep the local mutation (which has already happened
+      // via setAllPlayers in the caller).
+      if (player.id === 'user') return;
       const linkedUserId = safeLinkedUserId(player.userId);
       const payload = {
         owner_user_id: account.userId,
