@@ -103,19 +103,23 @@ function RootLayoutNav() {
   toastShowRef.current = toastShow;
 
   useEffect(() => {
-    writeQueue.setDeadLetterHandler(() => {
-      toastShowRef.current(
-        "Couldn't sync your last change. Tap to retry.",
-        {
-          action: {
-            label: 'Retry',
-            onPress: () => {
-              void writeQueue.flush();
-            },
+    writeQueue.setDeadLetterHandler((entry) => {
+      // In dev builds, surface the actual table + error in the toast so
+      // we can debug sync regressions without digging through the
+      // console. In production, keep the friendly message to avoid
+      // leaking implementation details to end users.
+      const message = __DEV__
+        ? `Sync failed: ${entry.table}.${entry.op} (${entry.lastError?.code ?? '?'}) — ${entry.lastError?.message ?? 'unknown'}`
+        : "Couldn't sync your last change. Tap to retry.";
+      toastShowRef.current(message, {
+        action: {
+          label: 'Retry',
+          onPress: () => {
+            void writeQueue.flush();
           },
-          autoHideMs: 8000,
-        }
-      );
+        },
+        autoHideMs: __DEV__ ? 12000 : 8000,
+      });
     });
     return () => {
       writeQueue.setDeadLetterHandler(null);
