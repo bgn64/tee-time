@@ -42,7 +42,7 @@ import {
 import { firstName } from '@/lib/userIdentity';
 import { useAccount } from '@/state/AccountContext';
 import { usePlayers } from '@/state/PlayerContext';
-import { useSocial } from '@/state/SocialContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Hole, Round, RoundParticipant, RoundScore, Tee } from '@/types/golf';
 
@@ -124,7 +124,7 @@ export function ReadOnlyScorecard({
   const { colors } = useTheme();
   const { allPlayers, defaultPlayerId } = usePlayers();
   const { account } = useAccount();
-  const { profileCache } = useSocial();
+  const { profileCache } = useProfileCache();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const isScramble = round.scoringRule === 'scramble';

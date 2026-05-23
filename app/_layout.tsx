@@ -20,12 +20,13 @@ import 'react-native-reanimated';
 import { AppHeader } from '@/components/AppHeader';
 import { Toast } from '@/components/Toast';
 import { AccountProvider, useAccount } from '@/state/AccountContext';
+import { FriendsProvider, useFriends } from '@/state/FriendsContext';
 import { GolfRoundProvider, useGolfRound } from '@/state/GolfRoundContext';
 import { HeaderProvider } from '@/state/HeaderContext';
 import { LocationProvider } from '@/state/LocationContext';
 import { OnboardingProvider, useOnboarding } from '@/state/OnboardingContext';
 import { PlayerProvider, usePlayers } from '@/state/PlayerContext';
-import { SocialProvider, useSocial } from '@/state/SocialContext';
+import { ProfileCacheProvider } from '@/state/ProfileCacheContext';
 import { AppThemeProvider, useTheme } from '@/state/ThemeContext';
 import { ToastProvider, useToast } from '@/state/ToastContext';
 import { useSplashGate } from '@/state/useSplashGate';
@@ -64,13 +65,15 @@ export default function RootLayout() {
           <AccountProvider>
             <PlayerProvider>
               <GolfRoundProvider>
-                <SocialProvider>
-                  <LocationProvider>
-                    <OnboardingProvider>
-                      <RootLayoutNav />
-                    </OnboardingProvider>
-                  </LocationProvider>
-                </SocialProvider>
+                <ProfileCacheProvider>
+                  <FriendsProvider>
+                    <LocationProvider>
+                      <OnboardingProvider>
+                        <RootLayoutNav />
+                      </OnboardingProvider>
+                    </LocationProvider>
+                  </FriendsProvider>
+                </ProfileCacheProvider>
               </GolfRoundProvider>
             </PlayerProvider>
           </AccountProvider>
@@ -86,7 +89,7 @@ function RootLayoutNav() {
   const { hydrated: playerHydrated } = usePlayers();
   const { hydrated: roundHydrated } = useGolfRound();
   const { hydrated: accountHydrated } = useAccount();
-  const { hydrated: socialHydrated } = useSocial();
+  const { hydrated: friendsHydrated } = useFriends();
   const { hydrated: onboardingHydrated, nextPrimer } = useOnboarding();
 
   // Register the global dead-letter handler ONCE, at the layout level, so
@@ -100,19 +103,23 @@ function RootLayoutNav() {
   toastShowRef.current = toastShow;
 
   useEffect(() => {
-    writeQueue.setDeadLetterHandler(() => {
-      toastShowRef.current(
-        "Couldn't sync your last change. Tap to retry.",
-        {
-          action: {
-            label: 'Retry',
-            onPress: () => {
-              void writeQueue.flush();
-            },
+    writeQueue.setDeadLetterHandler((entry) => {
+      // In dev builds, surface the actual table + error in the toast so
+      // we can debug sync regressions without digging through the
+      // console. In production, keep the friendly message to avoid
+      // leaking implementation details to end users.
+      const message = __DEV__
+        ? `Sync failed: ${entry.table}.${entry.op} (${entry.lastError?.code ?? '?'}) — ${entry.lastError?.message ?? 'unknown'}`
+        : "Couldn't sync your last change. Tap to retry.";
+      toastShowRef.current(message, {
+        action: {
+          label: 'Retry',
+          onPress: () => {
+            void writeQueue.flush();
           },
-          autoHideMs: 8000,
-        }
-      );
+        },
+        autoHideMs: __DEV__ ? 12000 : 8000,
+      });
     });
     return () => {
       writeQueue.setDeadLetterHandler(null);
@@ -124,7 +131,7 @@ function RootLayoutNav() {
     player: playerHydrated,
     round: roundHydrated,
     account: accountHydrated,
-    social: socialHydrated,
+    friends: friendsHydrated,
     onboarding: onboardingHydrated,
   });
 

@@ -5,7 +5,7 @@
  * received, with inline Confirm / Decline actions per row. Renders
  * nothing when the list is empty.
  *
- * Reads its data and dispatchers directly from `useSocial()` so any
+ * Reads its data and dispatchers directly from `useFriends()` so any
  * caller can drop it in without prop wiring. Used today by the Feed tab
  * (pinned above the round list) and the friends list inside the You
  * tab; designed so a future "activity" surface can render the same
@@ -15,7 +15,7 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useSocial } from '@/state/SocialContext';
+import { useFriends } from '@/state/FriendsContext';
 import { useTheme } from '@/state/ThemeContext';
 
 type Props = {
@@ -29,7 +29,7 @@ type Props = {
 
 export function IncomingRequestsBanner({ style }: Props) {
   const { colors } = useTheme();
-  const { incomingRequests, acceptIncomingRequest, declineIncomingRequest } = useSocial();
+  const { incomingRequests, acceptIncomingRequest, declineIncomingRequest } = useFriends();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   if (incomingRequests.length === 0) return null;

@@ -52,6 +52,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AppState } from 'react-native';
 
+import { registerSignOutPurge } from '@/state/signOutRegistry';
 import { supabase as defaultSupabase } from '@/state/supabaseClient';
 
 // =============================================================================
@@ -307,6 +308,27 @@ export class WriteQueue {
     if (this.appStateSubscription) {
       this.appStateSubscription.remove();
       this.appStateSubscription = null;
+    }
+  }
+
+  /**
+   * Drop every pending entry + dead-letter and purge the persisted
+   * payload from AsyncStorage. Used by the sign-out purge so a
+   * previous user's queued writes can't replay against the next
+   * user's session (RLS would 403 them, but the queue would still
+   * carry that user's metadata).
+   *
+   * Synchronous in terms of memory state; the AsyncStorage delete
+   * resolves on its own promise (returned for callers that want to
+   * await before unwinding the auth event).
+   */
+  async clear(): Promise<void> {
+    this.queue = [];
+    this.deadLetterList = [];
+    try {
+      await AsyncStorage.removeItem(this.storageKey);
+    } catch (e) {
+      console.warn('[writeQueue] failed to clear:', e);
     }
   }
 
@@ -630,6 +652,15 @@ export class WriteQueue {
  */
 export const writeQueue: WriteQueue = new WriteQueue();
 writeQueue.setSupabaseClient(defaultSupabase);
+
+// Self-register the sign-out purge handler at module load. The
+// alternative (registering inside a provider's useEffect) would only
+// work in the full app tree; tests that mount a subset of contexts
+// would silently skip the writeQueue purge and leak entries across
+// impersonation flows.
+registerSignOutPurge(async () => {
+  await writeQueue.clear();
+});
 
 /** Public helper for explicit manual recovery (UI debug buttons, tests). */
 export async function flushWriteQueue(): Promise<FlushResult> {

@@ -1,6 +1,6 @@
 /**
  * Seed reusable dev test accounts (alice / bob / carol / dave) plus a
- * full friendship mesh between them. Pairs with the `DevAccountPicker`
+ * friendship mesh between most pairs. Pairs with the `DevAccountPicker`
  * component on the sign-in screen so you can spin up several browser
  * profiles and one-click-login as different users side-by-side.
  *
@@ -15,9 +15,15 @@
  *        magic-link step.
  *      · Ensures a `profiles` row exists (handle, display_name,
  *        avatar_color).
- *   2. Inserts every symmetric friendship pair (alice↔bob, alice↔carol,
- *      …) and corresponding roster rows on both sides — same shape used
- *      by the supabase test fixtures' `befriend` helper.
+ *   2. Inserts the symmetric friendship mesh:
+ *      · Most pairs (alice↔bob, alice↔carol, bob↔carol, bob↔dave,
+ *        carol↔dave) are full friends with corresponding mirror
+ *        roster rows on both sides.
+ *      · **alice ↮ dave is intentionally NOT friends** so you can
+ *        exercise the friend-request flow end-to-end (search by
+ *        @handle → send → accept) without manually unfriending first.
+ *        Any pre-existing friendship + pending request between this
+ *        pair is removed so re-runs converge.
  *
  * --reset mode deletes the auth.users for every test email first; the
  * cascade on `profiles -> friendships / roster_players / scorecards`
@@ -131,8 +137,8 @@ async function ensureProfile(
 }
 
 async function ensureFriendship(
-  a: { userId: string; handle: string; color: string },
-  b: { userId: string; handle: string; color: string }
+  a: { userId: string; handle: string; displayName: string; color: string },
+  b: { userId: string; handle: string; displayName: string; color: string }
 ): Promise<void> {
   // Symmetric pair. `upsert` works because (user_id, friend_user_id) is
   // the primary key.
@@ -146,26 +152,74 @@ async function ensureFriendship(
 
   // Mirror the v7 roster entries so each user sees the other as a linked
   // FRIEND player in their roster. id is composite of friend's userId so
-  // re-runs are idempotent.
+  // re-runs are idempotent. Use displayName (e.g. "Bob") rather than the
+  // lowercase handle for the nickname so the seeded rows match what the
+  // app's `ensureRosterForFriend` writes when a friendship is created
+  // through the accept flow at runtime — otherwise some friends would
+  // render lowercase and others capitalized in the Friends list.
   await admin.from('roster_players').upsert(
     [
       {
         owner_user_id: a.userId,
         id: `friend-${b.userId}`,
-        nickname: b.handle,
+        nickname: b.displayName,
         color: b.color,
         linked_user_id: b.userId,
       },
       {
         owner_user_id: b.userId,
         id: `friend-${a.userId}`,
-        nickname: a.handle,
+        nickname: a.displayName,
         color: a.color,
         linked_user_id: a.userId,
       },
     ],
     { onConflict: 'owner_user_id,id' }
   );
+}
+
+/**
+ * Inverse of `ensureFriendship`: drop the symmetric friendship + mirror
+ * roster rows + any pending friend_requests between the pair. Used to
+ * keep designated non-friend pairs converged across re-runs of this
+ * script, even if a previous run (or the app under test) created them.
+ */
+async function ensureNotFriends(
+  a: { userId: string; handle: string },
+  b: { userId: string; handle: string }
+): Promise<void> {
+  // Drop both symmetric friendships rows.
+  await admin
+    .from('friendships')
+    .delete()
+    .or(
+      `and(user_id.eq.${a.userId},friend_user_id.eq.${b.userId}),` +
+        `and(user_id.eq.${b.userId},friend_user_id.eq.${a.userId})`
+    );
+
+  // Drop the mirror roster rows the seed planted (id = `friend-${userId}`).
+  // App-created rows (id = `player-${userId}`) are also linked to the
+  // same user; drop those too so the pair is fully unfriended.
+  await admin
+    .from('roster_players')
+    .delete()
+    .eq('owner_user_id', a.userId)
+    .eq('linked_user_id', b.userId);
+  await admin
+    .from('roster_players')
+    .delete()
+    .eq('owner_user_id', b.userId)
+    .eq('linked_user_id', a.userId);
+
+  // Drop any pending friend_requests between the pair so the next test
+  // run starts from a clean slate (no request to accept/decline).
+  await admin
+    .from('friend_requests')
+    .delete()
+    .or(
+      `and(from_user_id.eq.${a.userId},to_user_id.eq.${b.userId}),` +
+        `and(from_user_id.eq.${b.userId},to_user_id.eq.${a.userId})`
+    );
 }
 
 async function nukeAllTestUsers(): Promise<number> {
@@ -198,6 +252,7 @@ async function main(): Promise<void> {
   type SeededRow = {
     userId: string;
     handle: string;
+    displayName: string;
     color: string;
   };
   const seeded: SeededRow[] = [];
@@ -209,20 +264,52 @@ async function main(): Promise<void> {
       acc.displayName,
       acc.avatarColor
     );
-    seeded.push({ userId, handle: acc.handle, color: acc.avatarColor });
+    seeded.push({
+      userId,
+      handle: acc.handle,
+      displayName: acc.displayName,
+      color: acc.avatarColor,
+    });
     console.log(
       `  · ${acc.handle.padEnd(8)} userId=${userId.slice(0, 8)}…  ` +
         `user:${created ? 'CREATED' : 'kept'}  profile:${profCreated ? 'CREATED' : 'kept'}`
     );
   }
 
-  // 2. friendship mesh
+  // 2. friendship mesh — full pairwise EXCEPT a single non-friend
+  // pair so the friend-request flow is testable end-to-end out of the
+  // box. Pick alice ↔ dave to leave unfriended: alice is the obvious
+  // "primary tester" account, and dave is the lowest-traffic of the
+  // others (carol gets used for mutual-friend scenarios).
+  const NON_FRIEND_PAIR: ReadonlySet<string> = new Set(['alice/dave', 'dave/alice']);
+
   console.log('\nFriendship mesh:');
+  let skippedCount = 0;
   for (let i = 0; i < seeded.length; i++) {
     for (let j = i + 1; j < seeded.length; j++) {
-      await ensureFriendship(seeded[i], seeded[j]);
-      console.log(`  · ${seeded[i].handle} ↔ ${seeded[j].handle}`);
+      const a = seeded[i];
+      const b = seeded[j];
+      const pairKey = `${a.handle}/${b.handle}`;
+      if (NON_FRIEND_PAIR.has(pairKey)) {
+        // Idempotent: if a previous run (older version of this script,
+        // or a manual app action during testing) created this pair as
+        // friends, drop it so the desired non-friend state holds.
+        await ensureNotFriends(a, b);
+        console.log(`  · ${a.handle} ↮ ${b.handle}  (kept unfriended for friend-request testing)`);
+        skippedCount++;
+        continue;
+      }
+      await ensureFriendship(a, b);
+      console.log(`  · ${a.handle} ↔ ${b.handle}`);
     }
+  }
+  if (skippedCount > 0) {
+    console.log(
+      `\n  ${skippedCount} pair(s) intentionally left unfriended so you can ` +
+        `exercise the friend-request flow without manually unfriending first. ` +
+        `Sign in as alice in one browser profile, dave in another, and search ` +
+        `the other's @handle to send a request.`
+    );
   }
 
   console.log('\nDone. Open the app in dev mode and tap a face in the DevAccountPicker.');

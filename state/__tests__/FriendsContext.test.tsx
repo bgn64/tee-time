@@ -23,13 +23,12 @@ jest.mock('@/state/supabaseClient');
 import { act, waitFor } from '@testing-library/react-native';
 
 import { useAccount } from '@/state/AccountContext';
-import { useSocial } from '@/state/SocialContext';
+import { useFriends } from '@/state/FriendsContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 
 import {
   mockSupabaseCallLog,
-  mockSupabaseChannelSubscribeCount,
   mockSupabaseEmitAuthEvent,
-  mockSupabaseEmitChannel,
   mockSupabaseGetTable,
   mockSupabaseReset,
   mockSupabaseSeedRpc,
@@ -75,11 +74,19 @@ const carolProfile = {
   created_at: '2025-01-01T00:00:00Z',
 };
 
-// Renders both useSocial and useAccount in the same hook so tests can
-// inspect / drive both surfaces from a single `result.current`.
+// Renders useFriends, useProfileCache, and useAccount in the same hook
+// so tests that previously read `useSocial()` (which combined all three)
+// can inspect / drive all surfaces from a single `result.current`.
 function useSocialAndAccount() {
+  const friends = useFriends();
+  const profileCache = useProfileCache();
   return {
-    social: useSocial(),
+    // `social` is preserved as the result key so existing test
+    // assertions read result.current.social.friends / .profileCache /
+    // .refreshProfiles unchanged. The two contexts are merged here in
+    // a stable object — its identity churns on every render but the
+    // assertions only read fields, not check identity.
+    social: { ...friends, ...profileCache },
     account: useAccount(),
   };
 }
@@ -161,107 +168,6 @@ describe('SocialContext — hydrated latches', () => {
     });
 
     expect(countFriendshipsSelects()).toBe(1);
-  });
-
-  test('channel subscribed exactly once per accountUserId across cosmetic changes', async () => {
-    mockSupabaseSeedSession(aliceSession);
-    mockSupabaseSeedTable('profiles', [aliceProfile]);
-    mockSupabaseSeedTable('friendships', []);
-    mockSupabaseSeedTable('friend_requests', []);
-
-    const { result } = renderHookWithProviders(useSocialAndAccount);
-
-    await waitFor(() => {
-      expect(result.current.account.account?.handle).toBe('alice');
-      expect(result.current.social.hydrated).toBe(true);
-      expect(result.current.social.syncing).toBe(false);
-    });
-
-    expect(mockSupabaseChannelSubscribeCount('friends-and-requests')).toBe(1);
-
-    mockSupabaseSeedTable('profiles', [
-      { ...aliceProfile, avatar_color: '#deadbe' },
-    ]);
-
-    await act(async () => {
-      mockSupabaseEmitAuthEvent('TOKEN_REFRESHED', aliceSession);
-    });
-
-    await waitFor(() => {
-      expect(result.current.account.account?.avatarColor).toBe('#deadbe');
-    });
-
-    expect(mockSupabaseChannelSubscribeCount('friends-and-requests')).toBe(1);
-  });
-});
-
-describe('SocialContext — realtime handler uses current account fields', () => {
-  test('outgoing friend_requests INSERT picks up latest self handle / displayName / avatarColor', async () => {
-    mockSupabaseSeedSession(aliceSession);
-    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
-    mockSupabaseSeedTable('friendships', []);
-    mockSupabaseSeedTable('friend_requests', []);
-
-    const { result } = renderHookWithProviders(useSocialAndAccount);
-
-    await waitFor(() => {
-      expect(result.current.social.hydrated).toBe(true);
-      expect(result.current.account.account?.handle).toBe('alice');
-    });
-
-    // Simulate the avatar-color picker + display-name editor on the You
-    // tab: bump both fields in the profiles mock and emit TOKEN_REFRESHED.
-    // The new SocialContext must read these latest values via accountRef
-    // when constructing realtime-generated outgoing rows.
-    mockSupabaseSeedTable('profiles', [
-      {
-        ...aliceProfile,
-        display_name: 'Alice The Great',
-        avatar_color: '#feedf0',
-      },
-      bobProfile,
-    ]);
-
-    await act(async () => {
-      mockSupabaseEmitAuthEvent('TOKEN_REFRESHED', aliceSession);
-    });
-
-    await waitFor(() => {
-      expect(result.current.account.account?.displayName).toBe('Alice The Great');
-      expect(result.current.account.account?.avatarColor).toBe('#feedf0');
-    });
-
-    // Now fire a realtime INSERT representing Alice's sendFriendRequest
-    // to Bob arriving back over the wire.
-    await act(async () => {
-      mockSupabaseEmitChannel(
-        'friends-and-requests',
-        'friend_requests',
-        'INSERT',
-        {
-          new: {
-            id: 'req-1',
-            from_user_id: 'user-alice',
-            to_user_id: 'user-bob',
-            status: 'pending',
-            source_player_id: null,
-            created_at: '2025-02-01T00:00:00Z',
-          },
-        }
-      );
-    });
-
-    await waitFor(() => {
-      expect(result.current.social.outgoingRequests).toHaveLength(1);
-    });
-
-    const out = result.current.social.outgoingRequests[0];
-    expect(out.fromUserId).toBe('user-alice');
-    expect(out.fromHandle).toBe('alice');
-    expect(out.fromDisplayName).toBe('Alice The Great');
-    expect(out.fromAvatarColor).toBe('#feedf0');
-    expect(out.toUserId).toBe('user-bob');
-    expect(out.toHandle).toBe('bob');
   });
 });
 
@@ -350,64 +256,17 @@ describe('SocialContext — sign-out / sign-in cycle', () => {
   });
 });
 
-describe('SocialContext — accept path consumes seeded RPC + ref-backed allPlayers/addPlayer', () => {
-  // Smoke test that the refactor didn't break the accept flow, which
-  // exercises the live `allPlayers` / `addPlayer` closure (still
-  // available on the callback) AND happens to mutate roster state in
-  // ways the prior implementation re-subscribed on.
-  test('accepting a request from realtime-delivered friendship INSERT does not resubscribe channel', async () => {
-    mockSupabaseSeedSession(aliceSession);
-    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
-    mockSupabaseSeedTable('friendships', []);
-    mockSupabaseSeedTable('friend_requests', []);
-    mockSupabaseSeedRpc('accept_friend_request', { data: null, error: null });
-
-    const { result } = renderHookWithProviders(useSocialAndAccount);
-
-    await waitFor(() => expect(result.current.social.hydrated).toBe(true));
-
-    await waitFor(() => {
-      expect(result.current.account.account?.handle).toBe('alice');
-      expect(result.current.social.syncing).toBe(false);
-    });
-
-    expect(mockSupabaseChannelSubscribeCount('friends-and-requests')).toBe(1);
-
-    // Sender-side friendship INSERT (the realtime path that auto-creates
-    // a roster row). Prior implementation re-subscribed on every roster
-    // mutation; new implementation must keep the channel stable.
-    await act(async () => {
-      mockSupabaseEmitChannel(
-        'friends-and-requests',
-        'friendships',
-        'INSERT',
-        {
-          new: {
-            user_id: 'user-alice',
-            friend_user_id: 'user-bob',
-            created_at: '2025-02-01T00:00:00Z',
-          },
-        }
-      );
-    });
-
-    await waitFor(() => {
-      expect(result.current.social.friends).toContain('user-bob');
-    });
-
-    expect(mockSupabaseChannelSubscribeCount('friends-and-requests')).toBe(1);
-  });
-});
-
 // =============================================================================
-// Phase 1.4 — race between `acceptIncomingRequest` and the realtime
-// `friendships` INSERT handler. Both paths call `ensureRosterForFriend`;
-// the deterministic id (`player-${userId}`) collapses any race to a
-// single roster row, both client-side and cloud-side. This pins the
-// fix for the duplicate-roster bug.
+// Phase 1.4 (refresh-only era) — `acceptIncomingRequest` is the sole
+// roster-auto-create path now that the realtime `friendships` INSERT
+// handler is gone. The deterministic id (`player-${userId}`) + DB
+// partial-unique index (migration 018) still matter: a stale-id retry
+// from the offline write queue must collapse onto the same row, not
+// mint a duplicate. This test pins that contract for the surviving
+// path.
 // =============================================================================
 
-describe('SocialContext — Phase 1.4 race between accept + realtime', () => {
+describe('SocialContext — Phase 1.4 accept path creates exactly one roster row', () => {
   const aliceUserUuid = '11111111-1111-4111-8111-111111111111';
   const bobUserUuid = '22222222-2222-4222-8222-222222222222';
 
@@ -429,7 +288,7 @@ describe('SocialContext — Phase 1.4 race between accept + realtime', () => {
     created_at: '2025-01-01T00:00:00Z',
   };
 
-  test('concurrent accept + realtime friendship INSERT yields exactly one roster row', async () => {
+  test('acceptIncomingRequest yields exactly one roster row keyed on the friend', async () => {
     mockSupabaseSeedSession(aliceUuidSession);
     mockSupabaseSeedTable('profiles', [aliceUuidProfile, bobUuidProfile]);
     mockSupabaseSeedTable('friendships', []);
@@ -454,46 +313,134 @@ describe('SocialContext — Phase 1.4 race between accept + realtime', () => {
       expect(result.current.social.incomingRequests).toHaveLength(1);
     });
 
-    // Fire both paths essentially simultaneously inside the same act.
-    // `acceptIncomingRequest` is the receiver-side inline call.
-    // `mockSupabaseEmitChannel` simulates the realtime `friendships`
-    // INSERT that arrives on the sender side and would otherwise mint
-    // a second `player-${userId}-${Date.now()}` row in the buggy world.
     await act(async () => {
-      const p = result.current.social.acceptIncomingRequest('req-incoming-from-bob');
-      mockSupabaseEmitChannel(
-        'friends-and-requests',
-        'friendships',
-        'INSERT',
-        {
-          new: {
-            user_id: aliceUserUuid,
-            friend_user_id: bobUserUuid,
-            created_at: '2025-02-01T00:00:00Z',
-          },
-        }
-      );
-      await p;
+      await result.current.social.acceptIncomingRequest('req-incoming-from-bob');
     });
 
-    await waitFor(() => {
-      expect(result.current.social.friends).toContain(bobUserUuid);
-    });
-
-    // Allow the fire-and-forget cloud upsert from both paths to flush.
+    // Allow the fire-and-forget cloud upsert to flush.
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
 
-    // Cloud-side: with the new `onConflict: owner_user_id,linked_user_id`
-    // clause, both upserts collapse onto one row keyed on the friend.
+    // Cloud-side: the new `onConflict: owner_user_id,linked_user_id`
+    // clause means a stale-id retry can't produce a second row.
     const cloudBobRows = mockSupabaseGetTable('roster_players').filter(
       (r: { linked_user_id?: string | null }) => r.linked_user_id === bobUserUuid
     );
     expect(cloudBobRows).toHaveLength(1);
     expect(cloudBobRows[0].id).toBe(`player-${bobUserUuid}`);
     expect(cloudBobRows[0].owner_user_id).toBe(aliceUserUuid);
+  });
+});
+
+// =============================================================================
+// Optimistic local updates under refresh-only sync. With realtime
+// channels removed, the user's own send/accept/decline actions on their
+// own device must reflect immediately — they cannot wait for the next
+// pull-to-refresh to confirm. The next refresh fetches the server-
+// authoritative state and converges.
+// =============================================================================
+
+describe('FriendsContext — optimistic local updates (refresh-only)', () => {
+  test('acceptIncomingRequest immediately removes the request and adds the new friend locally', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', []);
+    mockSupabaseSeedTable('friend_requests', [
+      {
+        id: 'req-from-bob',
+        from_user_id: 'user-bob',
+        to_user_id: 'user-alice',
+        status: 'pending',
+        source_player_id: null,
+        created_at: '2025-02-01T00:00:00Z',
+      },
+    ]);
+    mockSupabaseSeedRpc('accept_friend_request', { data: null, error: null });
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.incomingRequests).toHaveLength(1);
+      expect(result.current.social.friends).toEqual([]);
+    });
+
+    await act(async () => {
+      await result.current.social.acceptIncomingRequest('req-from-bob');
+    });
+
+    // The request must be gone from the banner AND bob must be in
+    // friends, BEFORE any subsequent refresh fires. This is the
+    // contract that closes the regression observed by the user where
+    // tapping Accept appeared to do nothing until pull-to-refresh.
+    expect(result.current.social.incomingRequests).toEqual([]);
+    expect(result.current.social.friends).toContain('user-bob');
+  });
+
+  test('declineIncomingRequest immediately removes the request locally', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', []);
+    mockSupabaseSeedTable('friend_requests', [
+      {
+        id: 'req-from-bob',
+        from_user_id: 'user-bob',
+        to_user_id: 'user-alice',
+        status: 'pending',
+        source_player_id: null,
+        created_at: '2025-02-01T00:00:00Z',
+      },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.incomingRequests).toHaveLength(1);
+    });
+
+    await act(async () => {
+      await result.current.social.declineIncomingRequest('req-from-bob');
+    });
+
+    expect(result.current.social.incomingRequests).toEqual([]);
+    // Decline must NOT add the sender as a friend.
+    expect(result.current.social.friends).toEqual([]);
+  });
+
+  test('sendFriendRequest immediately appends the new outgoing request locally', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', []);
+    mockSupabaseSeedTable('friend_requests', []);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.account.account?.handle).toBe('alice');
+      expect(result.current.social.outgoingRequests).toEqual([]);
+    });
+
+    const bobTarget = {
+      userId: 'user-bob',
+      handle: 'bob',
+      displayName: 'Bob',
+      avatarColor: '#bbbbbb',
+    };
+
+    await act(async () => {
+      await result.current.social.sendFriendRequest(bobTarget);
+    });
+
+    expect(result.current.social.outgoingRequests).toHaveLength(1);
+    const out = result.current.social.outgoingRequests[0];
+    expect(out.toUserId).toBe('user-bob');
+    expect(out.toHandle).toBe('bob');
+    expect(out.fromUserId).toBe('user-alice');
+    expect(out.fromHandle).toBe('alice');
+    expect(out.status).toBe('pending');
   });
 });
 
@@ -685,5 +632,174 @@ describe('SocialContext.refreshFriendsAndRequests', () => {
     expect(result.current.social.syncing).toBe(false);
 
     warnSpy.mockRestore();
+  });
+});
+
+describe('SocialContext.refreshProfiles', () => {
+  test('overwrites profileCache entries with fresh cloud data (picks up display-name / avatar edits)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice' },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+    });
+
+    // Simulate Bob editing his profile from another device.
+    mockSupabaseSeedTable('profiles', [
+      aliceProfile,
+      { ...bobProfile, display_name: 'Robert', avatar_color: '#000000' },
+    ]);
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshProfiles(['user-bob']);
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Robert');
+    expect(result.current.social.profileCache['user-bob']?.avatarColor).toBe('#000000');
+  });
+
+  test('returns {ok:true} as a no-op when signed out', async () => {
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+    });
+    expect(result.current.account.account).toBeNull();
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshProfiles(['user-bob']);
+    });
+
+    expect(outcome).toEqual({ ok: true });
+  });
+
+  test('returns {ok:true} when called with an empty id list (skips the network round-trip)', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+    });
+
+    const callsBefore = mockSupabaseCallLog().filter(
+      (c: { kind: string; args: any[] }) =>
+        c.kind === 'from.select' && c.args[0]?.table === 'profiles'
+    ).length;
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshProfiles([]);
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    // Empty input short-circuits before any select fires.
+    const callsAfter = mockSupabaseCallLog().filter(
+      (c: { kind: string; args: any[] }) =>
+        c.kind === 'from.select' && c.args[0]?.table === 'profiles'
+    ).length;
+    expect(callsAfter).toBe(callsBefore);
+  });
+
+  test('returns {ok:false, error} on transient supabase error and leaves profileCache unchanged', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice' },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.hydrated).toBe(true);
+      expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+    });
+    const cacheBefore = result.current.social.profileCache;
+
+    mockSupabaseSetTableError('profiles', {
+      message: 'service unavailable',
+      code: '503',
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.social.refreshProfiles(['user-bob']);
+    });
+
+    expect(outcome?.ok).toBe(false);
+    expect(outcome?.error).toBe('service unavailable');
+    // Cache preserved on failure — no blink to "missing profile" state.
+    expect(result.current.social.profileCache).toBe(cacheBefore);
+
+    warnSpy.mockRestore();
+  });
+});
+
+describe('SocialContext.ensureProfilesCached force option', () => {
+  test('without force: short-circuits when ids are already cached', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice' },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+    });
+
+    // Edit Bob's profile on the server but DON'T pass force — cached
+    // entry should remain stale.
+    mockSupabaseSeedTable('profiles', [
+      aliceProfile,
+      { ...bobProfile, display_name: 'Robert' },
+    ]);
+
+    await act(async () => {
+      await result.current.social.ensureProfilesCached(['user-bob']);
+    });
+
+    expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+  });
+
+  test('with {force:true}: re-pulls already-cached ids and overwrites the cache', async () => {
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile, bobProfile]);
+    mockSupabaseSeedTable('friendships', [
+      { user_id: 'user-alice', friend_user_id: 'user-bob' },
+      { user_id: 'user-bob', friend_user_id: 'user-alice' },
+    ]);
+
+    const { result } = renderHookWithProviders(useSocialAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Bob');
+    });
+
+    mockSupabaseSeedTable('profiles', [
+      aliceProfile,
+      { ...bobProfile, display_name: 'Robert' },
+    ]);
+
+    await act(async () => {
+      await result.current.social.ensureProfilesCached(['user-bob'], { force: true });
+    });
+
+    expect(result.current.social.profileCache['user-bob']?.displayName).toBe('Robert');
   });
 });

@@ -14,14 +14,17 @@
 
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
+import { RefreshButton } from '@/components/RefreshButton';
 import { useAccount } from '@/state/AccountContext';
+import { useFriends } from '@/state/FriendsContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
-import { useSocial } from '@/state/SocialContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
+import { useScreenRefresh } from '@/state/useScreenRefresh';
 import { useTheme } from '@/state/ThemeContext';
 import { Player, Round } from '@/types/golf';
 import { ProfileSummary } from '@/types/social';
@@ -40,13 +43,25 @@ export default function FriendsScreen() {
   const { allPlayers } = usePlayers();
   const { completedRounds } = useGolfRound();
   const { account } = useAccount();
-  const { friends, profileCache } = useSocial();
+  const { friends, refreshFriendsAndRequests } = useFriends();
+  const { profileCache, refreshProfiles } = useProfileCache();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
     left: { kind: 'back', label: 'You', onPress: () => router.back() },
     right: { kind: 'profile' },
   });
+
+  // Pull-to-refresh re-pulls friends + requests AND force-refreshes the
+  // profileCache entries for the current friend list so display name /
+  // avatar color edits made by a friend on their device propagate
+  // here without restarting the app. friends[] is the input (stable
+  // identity from SocialContext); the empty case short-circuits inside
+  // refreshProfiles.
+  const { refreshing, onRefresh } = useScreenRefresh([
+    refreshFriendsAndRequests,
+    () => refreshProfiles(friends),
+  ]);
 
   // One row per friend userId. Never silently drop a friend — fall back
   // through roster → profileCache → placeholder so the list always reflects
@@ -91,7 +106,21 @@ export default function FriendsScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }>
+        <RefreshButton
+          refreshing={refreshing}
+          onPress={onRefresh}
+          accessibilityLabel="Refresh friends"
+        />
         <Text style={styles.title}>Friends</Text>
 
         <IncomingRequestsBanner />
@@ -127,6 +156,23 @@ export default function FriendsScreen() {
             {friendRows.map((row) => {
               if (row.kind === 'roster') {
                 const { player, roundsTogether: n } = row;
+                // Prefer the live profile cache for fields that
+                // represent the friend's own current state (avatar
+                // color, handle). The roster snapshot was captured
+                // at link / seed time and goes stale the moment the
+                // friend edits their profile on their own device.
+                // The `nickname` is intentionally NOT replaced —
+                // it's the local-editable label the owner can
+                // customize per-friend (matches the Player.nickname
+                // contract in types/golf.ts and mirrors how
+                // `resolveParticipantIdentity` in
+                // lib/participantIdentity.ts decides between live
+                // profile and roster fallback for every other
+                // surface in the app).
+                const liveProfile = profileCache[row.userId];
+                const avatarColor =
+                  liveProfile?.avatarColor ?? player.color ?? colors.primary;
+                const handle = liveProfile?.handle ?? player.handle;
                 return (
                   <Pressable
                     key={row.userId}
@@ -140,7 +186,7 @@ export default function FriendsScreen() {
                     <View
                       style={[
                         styles.avatar,
-                        { backgroundColor: player.color || colors.primary },
+                        { backgroundColor: avatarColor },
                       ]}>
                       <Text style={styles.avatarText}>{player.nickname[0]?.toUpperCase()}</Text>
                     </View>
@@ -149,7 +195,7 @@ export default function FriendsScreen() {
                         {player.nickname}
                       </Text>
                       <Text style={[styles.rosterMeta, styles.rosterMetaFriend]}>
-                        @{player.handle}
+                        @{handle}
                         {n > 0
                           ? ` · ${n} ${n === 1 ? 'round' : 'rounds'} together`
                           : ' · 0 rounds together yet'}

@@ -46,9 +46,16 @@ app.
 
 `npm run seed:test-users` (or `npm run seed:test-users -- --reset`)
 
-Seeds reusable test accounts (alice / bob / carol / dave) plus a full
-friendship mesh between them. Pairs with the `DevAccountPicker`
+Seeds reusable test accounts (alice / bob / carol / dave) plus a
+friendship mesh between most pairs. Pairs with the `DevAccountPicker`
 component on the sign-in screen for one-click multi-account testing.
+
+The mesh is full pairwise **except alice ↮ dave**, which is left
+unfriended on purpose so you can exercise the friend-request flow
+(search by `@handle` → send → pull-to-refresh on the other side →
+accept) without manually unfriending first. Re-runs converge: if a
+previous app session friended that pair, the next seed run drops it
+along with any pending request between them.
 
 Flags:
 

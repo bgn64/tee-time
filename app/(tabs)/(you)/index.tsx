@@ -20,16 +20,19 @@
 
 import { router } from 'expo-router';
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { RefreshButton } from '@/components/RefreshButton';
 import { AVATAR_COLORS } from '@/constants/avatarColors';
+import { computePersonalStats } from '@/lib/personalStats';
 import { formatScore } from '@/lib/scoring';
 import { firstName } from '@/lib/userIdentity';
 import { useAccount } from '@/state/AccountContext';
+import { useFriends } from '@/state/FriendsContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
-import { useSocial } from '@/state/SocialContext';
+import { useScreenRefresh } from '@/state/useScreenRefresh';
 import { useTheme } from '@/state/ThemeContext';
 
 function formatAvg(avg: number): string {
@@ -46,10 +49,10 @@ function formatJoined(iso: string): string {
 
 export default function YouScreen() {
   const { colors } = useTheme();
-  const { completedRounds } = useGolfRound();
-  const { defaultPlayerId, getPlayer } = usePlayers();
-  const { account, updateAvatarColor } = useAccount();
-  const { friends, incomingRequests } = useSocial();
+  const { completedRounds, refreshScorecards } = useGolfRound();
+  const { defaultPlayerId, getPlayer, refreshRoster } = usePlayers();
+  const { account, updateAvatarColor, refreshAccount } = useAccount();
+  const { friends, incomingRequests } = useFriends();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -57,48 +60,36 @@ export default function YouScreen() {
     right: { kind: 'profile' },
   });
 
+  // Pull-to-refresh re-pulls everything that drives this screen's
+  // surface: own profile (avatar / display name / handle), own rounds
+  // (stats strip), and roster (used for the participant lookup in the
+  // stats computation). Friends count + incoming-request badges aren't
+  // refreshed here — that's the Friends tab's responsibility.
+  const { refreshing, onRefresh } = useScreenRefresh([
+    refreshAccount,
+    refreshScorecards,
+    refreshRoster,
+  ]);
+
   const me = defaultPlayerId ? getPlayer(defaultPlayerId) : undefined;
   const displayName = account?.displayName ?? me?.nickname ?? 'You';
   const avatarColor = account?.avatarColor ?? me?.color ?? colors.primary;
   const avatarLetter = (firstName(displayName) || displayName)[0]?.toUpperCase() ?? 'Y';
 
   // Stats: only stroke rounds where the viewer participated. Scramble
-  // is collaborative — no individual credit.
-  const myUserId = account?.userId;
-  const stats = useMemo(() => {
-    const perRound: number[] = [];
-    for (const round of completedRounds) {
-      if (round.scoringRule !== 'stroke') continue;
-      // Identify the viewer's participantKey within this round.
-      let scorerId: string | undefined;
-      if (myUserId) {
-        const p = round.participants?.find((q) => q.linkedUserId === myUserId);
-        scorerId = p?.participantKey;
-      } else if (defaultPlayerId) {
-        scorerId = defaultPlayerId;
-      }
-      if (!scorerId) continue;
-      if (!round.playerIds.includes(scorerId)) continue;
-      let total = 0;
-      let scored = 0;
-      for (const score of round.scores) {
-        if (score.scorerId !== scorerId) continue;
-        const hole = round.course.holes.find((h) => h.number === score.holeNumber);
-        if (hole) {
-          total += score.strokes - hole.par;
-          scored++;
-        }
-      }
-      if (scored > 0) perRound.push(total);
-    }
-    if (perRound.length === 0) return { rounds: 0, avg: null as number | null, best: null as number | null };
-    const sum = perRound.reduce((a, b) => a + b, 0);
-    return {
-      rounds: perRound.length,
-      avg: sum / perRound.length,
-      best: Math.min(...perRound),
-    };
-  }, [completedRounds, defaultPlayerId, myUserId]);
+  // is collaborative — no individual credit. The signed-out fallback
+  // is strict-anon-only to defend against stale cross-account cache
+  // leakage; see `lib/personalStats.ts` for the full rule table.
+  const myUserId = account?.userId ?? null;
+  const stats = useMemo(
+    () =>
+      computePersonalStats({
+        completedRounds,
+        myUserId,
+        defaultPlayerId,
+      }),
+    [completedRounds, myUserId, defaultPlayerId]
+  );
 
   const friendsSubtitle = !account
     ? 'Sign in to find friends'
@@ -117,7 +108,21 @@ export default function YouScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={onRefresh}
+          tintColor={colors.primary}
+        />
+      }>
+      <RefreshButton
+        refreshing={refreshing}
+        onPress={onRefresh}
+        accessibilityLabel="Refresh profile"
+      />
       {!account ? (
         <View style={styles.signInBanner}>
           <Text style={styles.signInHead}>✦  SIGN IN TO UNLOCK</Text>

@@ -28,7 +28,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
-import { useSocial } from '@/state/SocialContext';
+import { useFriends } from '@/state/FriendsContext';
+import { useProfileCache } from '@/state/ProfileCacheContext';
 import { useTheme } from '@/state/ThemeContext';
 import { Round } from '@/types/golf';
 
@@ -53,7 +54,8 @@ export function PlayerProfileScreen({ id, backLabel }: Props) {
   const { colors } = useTheme();
   const { getPlayer, defaultPlayerId } = usePlayers();
   const { completedRounds } = useGolfRound();
-  const { friends, profileCache } = useSocial();
+  const { friends } = useFriends();
+  const { profileCache } = useProfileCache();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   useScreenHeader({
@@ -64,7 +66,7 @@ export function PlayerProfileScreen({ id, backLabel }: Props) {
   const player = id ? getPlayer(id) : undefined;
   // Fallback: deep links coming from the friends list now use `userId` as
   // `id` when no local Player row exists yet. Resolve via the profileCache
-  // populated by SocialContext during initial pull / handle search.
+  // populated by ProfileCacheContext during initial pull / handle search.
   const profileFromCache = id && !player ? profileCache[id] : undefined;
 
   const rounds = useMemo(() => {

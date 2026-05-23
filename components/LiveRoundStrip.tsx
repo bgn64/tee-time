@@ -4,17 +4,24 @@
  *
  * Renders one `LiveRoundCard` per round in the supplied `rounds` array
  * (already filtered + sorted by `GolfRoundContext.liveRounds`). The
- * pulsing "LIVE NOW" header signals freshness; the strip returns null
- * when no rounds are present so the empty state costs zero pixels.
+ * strip returns null when no rounds are present so the empty state
+ * costs zero pixels.
  *
  * Cards are deliberately ~1/3 the height of a completed-round card and
  * fixed-width to encourage horizontal scrolling once several friends
  * are simultaneously playing.
+ *
+ * Naming + visual semantics: the strip used to badge itself "LIVE NOW"
+ * with a pulsing red dot. Under refresh-only sync (no realtime push),
+ * that wording over-promised — a friend could finish 9 holes between
+ * the viewer's last pull-to-refresh and now. The header reads "IN
+ * PROGRESS" so the label matches what the data actually represents
+ * (rounds the viewer's friends started but haven't completed), with
+ * the accent color toned down from urgent-red to the calmer primary.
+ * Manual pull-to-refresh on the Feed re-pulls the underlying data.
  */
-import { useEffect, useMemo, useRef } from 'react';
+import { useMemo } from 'react';
 import {
-  Animated,
-  Easing,
   ScrollView,
   StyleSheet,
   Text,
@@ -38,7 +45,6 @@ type Props = {
 };
 
 const DEFAULT_AVATAR = '#7cb342';
-const LIVE_RED = '#d24a3a';
 
 export function LiveRoundStrip({ rounds, profileCache }: Props) {
   const { colors } = useTheme();
@@ -49,8 +55,7 @@ export function LiveRoundStrip({ rounds, profileCache }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <PulseDot />
-        <Text style={styles.headerLabel}>LIVE NOW</Text>
+        <Text style={styles.headerLabel}>IN PROGRESS</Text>
         <Text style={styles.headerCount}>
           {rounds.length === 1 ? '1 friend' : `${rounds.length} friends`}
         </Text>
@@ -201,57 +206,6 @@ function PipBar({
   );
 }
 
-function PulseDot() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const scale = useRef(new Animated.Value(1)).current;
-  const opacity = useRef(new Animated.Value(0.6)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.parallel([
-        Animated.sequence([
-          Animated.timing(scale, {
-            toValue: 2.4,
-            duration: 1400,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(scale, {
-            toValue: 1,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-        Animated.sequence([
-          Animated.timing(opacity, {
-            toValue: 0,
-            duration: 1400,
-            easing: Easing.out(Easing.ease),
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 0.6,
-            duration: 0,
-            useNativeDriver: true,
-          }),
-        ]),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [scale, opacity]);
-
-  return (
-    <View style={styles.dotWrap}>
-      <Animated.View
-        style={[styles.dotPulse, { transform: [{ scale }], opacity }]}
-      />
-      <View style={styles.dotCore} />
-    </View>
-  );
-}
-
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
@@ -267,7 +221,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     headerLabel: {
       fontSize: 10.5,
       fontWeight: '800',
-      color: LIVE_RED,
+      color: colors.textMuted,
       letterSpacing: 1.5,
     },
     headerCount: {
@@ -275,25 +229,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 10.5,
       color: colors.textMuted,
       fontWeight: '600',
-    },
-    dotWrap: {
-      width: 10,
-      height: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    dotPulse: {
-      position: 'absolute',
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: LIVE_RED,
-    },
-    dotCore: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      backgroundColor: LIVE_RED,
     },
 
     scrollContent: {

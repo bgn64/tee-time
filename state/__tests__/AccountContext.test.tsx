@@ -166,3 +166,82 @@ describe('AccountContext.refreshFromSession', () => {
     expect(result.current.needsProfile).toBe(false);
   });
 });
+
+describe('AccountContext.refreshAccount', () => {
+  test('returns {ok:true} on success and picks up profile edits from another device', async () => {
+    const { result } = renderHookWithProviders(() => useAccount(), {
+      session: makeSession(),
+      profiles: [baseProfile],
+    });
+
+    await waitFor(() => {
+      expect(result.current.account?.displayName).toBe('Alice');
+    });
+
+    // Simulate the same user editing their profile on another device.
+    mockSupabaseSeedTable('profiles', [
+      { ...baseProfile, display_name: 'Alice (renamed elsewhere)' },
+    ]);
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.refreshAccount();
+    });
+    await flushMicrotasks();
+
+    expect(outcome).toEqual({ ok: true });
+    expect(result.current.account?.displayName).toBe('Alice (renamed elsewhere)');
+  });
+
+  test('returns {ok:true} as a no-op when signed out', async () => {
+    const { result } = renderHookWithProviders(() => useAccount());
+
+    await waitFor(() => {
+      expect(result.current.hydrated).toBe(true);
+    });
+    expect(result.current.account).toBeNull();
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.refreshAccount();
+    });
+
+    expect(outcome).toEqual({ ok: true });
+    expect(result.current.account).toBeNull();
+  });
+
+  test('returns {ok:false, error} on transient profile lookup failure and preserves local account', async () => {
+    const { result } = renderHookWithProviders(() => useAccount(), {
+      session: makeSession(),
+      profiles: [baseProfile],
+    });
+
+    await waitFor(() => {
+      expect(result.current.account?.displayName).toBe('Alice');
+    });
+    const before = result.current.account;
+
+    // Inject a one-shot transient error on the profile lookup.
+    const { mockSupabaseSetTableError } = require('@/state/supabaseClient');
+    mockSupabaseSetTableError('profiles', {
+      message: 'token expired',
+      code: '401',
+    });
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    let outcome: { ok: boolean; error?: string } | undefined;
+    await act(async () => {
+      outcome = await result.current.refreshAccount();
+    });
+    await flushMicrotasks();
+
+    expect(outcome?.ok).toBe(false);
+    expect(outcome?.error).toBe('token expired');
+    // Critical: the previously-loaded account is NOT cleared on a
+    // transient error. A pull-to-refresh that hits a 5xx must not
+    // sign the user out.
+    expect(result.current.account).toBe(before);
+
+    warnSpy.mockRestore();
+  });
+});

@@ -9,16 +9,16 @@
  * but no longer have any merge-to-friend flow or user-facing list (see
  * plan.md, Path 3a).
  *
- * Search calls `useSocial().searchHandle(q)` which queries the `profiles`
- * table for a case-insensitive prefix match on `handle`.
+ * Search calls `useFriends().searchHandle(q)` which queries the
+ * `profiles` table for a case-insensitive prefix match on `handle`.
  */
 
 import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { useFriends } from '@/state/FriendsContext';
 import { useScreenHeader } from '@/state/HeaderContext';
-import { useSocial } from '@/state/SocialContext';
 import { useTheme } from '@/state/ThemeContext';
 import { ProfileSummary } from '@/types/social';
 
@@ -26,7 +26,12 @@ const DEBOUNCE_MS = 200;
 
 export default function FriendSearchScreen() {
   const { colors } = useTheme();
-  const { searchHandle, friends, outgoingRequests } = useSocial();
+  const {
+    searchHandle,
+    friends,
+    outgoingRequests,
+    refreshFriendsAndRequests,
+  } = useFriends();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [query, setQuery] = useState<string>('');
@@ -37,6 +42,20 @@ export default function FriendSearchScreen() {
     left: { kind: 'back', label: 'Friends', onPress: () => router.back() },
     right: { kind: 'profile' },
   });
+
+  // Reconcile local friends + requests state on mount. Without this,
+  // a user who navigates here after the other side declined / accepted
+  // their previous request would still see the stale optimistic
+  // outgoingRequests entry from `sendFriendRequest`, which then
+  // (incorrectly) filters the target out of the search results below.
+  // Refresh-only sync has no way to know about cross-device state
+  // changes without an explicit pull — this mount is a good moment to
+  // initiate one quietly. The search screen has no pull-to-refresh
+  // affordance of its own; users would otherwise have to back out to
+  // the Friends list, refresh there, and come back.
+  useEffect(() => {
+    void refreshFriendsAndRequests();
+  }, [refreshFriendsAndRequests]);
 
   const friendsSet = useMemo(() => new Set(friends), [friends]);
   const pendingTargets = useMemo(
@@ -104,10 +123,35 @@ export default function FriendSearchScreen() {
             {searching ? (
               <Text style={styles.empty}>Searching…</Text>
             ) : visible.length === 0 ? (
-              <Text style={styles.empty}>
-                No matches. Double-check the handle spelling — or maybe they don't have an account
-                yet.
-              </Text>
+              results.length === 0 ? (
+                <Text style={styles.empty}>
+                  No matches. Double-check the handle spelling — or maybe they don't have an
+                  account yet.
+                </Text>
+              ) : (
+                // Search did return profiles, but every match was
+                // filtered out as "already a friend" or "request
+                // already pending". Spell out which so the user isn't
+                // staring at an empty list wondering why someone they
+                // KNOW exists isn't showing up.
+                <Text style={styles.empty}>
+                  {(() => {
+                    const allAreFriends = results.every((d) => friendsSet.has(d.userId));
+                    const allArePending = results.every((d) => pendingTargets.has(d.userId));
+                    if (allAreFriends) {
+                      return results.length === 1
+                        ? "You're already friends."
+                        : "You're already friends with everyone matching that.";
+                    }
+                    if (allArePending) {
+                      return results.length === 1
+                        ? "You've already sent a request — it's still pending. They'll show up once they respond."
+                        : "You've already sent requests — they're still pending. They'll show up once they respond.";
+                    }
+                    return 'Already friends or request pending.';
+                  })()}
+                </Text>
+              )
             ) : (
               visible.map((entry) => (
                 <Pressable

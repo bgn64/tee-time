@@ -24,13 +24,18 @@
 
 import { createContext, PropsWithChildren, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 import { recentCourses as seededRecentCourses } from '@/data/courses';
 import { newRoundId } from '@/lib/ids';
 import { replaceScore } from '@/lib/scoring';
 import { useAccount } from '@/state/AccountContext';
+import { useOneShotSyncOnSignIn, useRefreshGeneration } from '@/state/cloudSync';
 import { loadJSON, saveJSON, STORAGE_KEYS } from '@/state/persistence';
 import { usePlayers } from '@/state/PlayerContext';
+import { registerSignOutPurge } from '@/state/signOutRegistry';
 import { supabase } from '@/state/supabaseClient';
+import { useToast } from '@/state/ToastContext';
 import { writeQueue } from '@/state/writeQueue';
 import {
   Course,
@@ -337,6 +342,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
   const { allPlayers: playerRoster, defaultPlayerId } = usePlayers();
   const { account, hydrated: accountHydrated } = useAccount();
+  const { show: toastShow } = useToast();
 
   // Stable primitive derived from account. Use this in effect deps when
   // the effect only cares about WHICH user is signed in — not cosmetic
@@ -347,17 +353,10 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const coursesRef = useRef(courses);
   coursesRef.current = courses;
 
-  const cloudCoursesSyncedAccountRef = useRef<string | null>(null);
-  const cloudRoundsSyncedAccountRef = useRef<string | null>(null);
-
-  // Per-refresh generation counter. `refreshScorecards` increments this,
-  // captures the local value, and after the awaited select compares it
-  // against `refreshGenRef.current` — if a newer refresh has started in
-  // the meantime, the older response is discarded. Guarantees latest-
-  // response-wins for overlapping pull-to-refresh invocations.
-  const refreshGenRef = useRef(0);
-
-  const prevAccountUserIdRef = useRef<string | null>(null);
+  // Latest-response-wins token pair for `refreshScorecards`. The
+  // initial-pull sentinels are managed inside `useOneShotSyncOnSignIn`
+  // calls below (one for courses, one for scorecards).
+  const refreshGen = useRefreshGeneration();
 
   const playerRosterRef = useRef(playerRoster);
   playerRosterRef.current = playerRoster;
@@ -436,22 +435,27 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
     saveJSON(STORAGE_KEYS.COMPLETED_ROUNDS, completedRounds);
   }, [completedRounds, hydrated]);
 
-  // Sign-out reset.
+  // Sign-out purge: synchronously wipe in-memory courses + rounds +
+  // currentRound AND remove the AsyncStorage keys, so the previous
+  // user's history can't leak into the next sign-in even if the app
+  // crashes mid-sign-out. Triggered directly by AccountContext's
+  // SIGNED_OUT event via the registry.
   useEffect(() => {
-    if (!hydrated || !accountHydrated) return;
-    const prev = prevAccountUserIdRef.current;
-    const curr = accountUserId;
-    if (prev !== null && curr === null) {
-      // Clear all locally-cached courses; both customs (account-specific)
-      // and any catalog rows the previous user had interacted with.
+    return registerSignOutPurge(async () => {
+      // Clear all locally-cached courses; both customs (account-
+      // specific) and any catalog rows the previous user had
+      // interacted with (recently-picked catalog courses give away
+      // which courses the previous user played).
       setCourses([]);
       setCloudRounds([]);
       setCurrentRound(null);
-      cloudCoursesSyncedAccountRef.current = null;
-      cloudRoundsSyncedAccountRef.current = null;
-    }
-    prevAccountUserIdRef.current = curr;
-  }, [accountUserId, accountHydrated, hydrated]);
+      await Promise.all([
+        AsyncStorage.removeItem(STORAGE_KEYS.COURSES),
+        AsyncStorage.removeItem(STORAGE_KEYS.COMPLETED_ROUNDS),
+        AsyncStorage.removeItem(STORAGE_KEYS.CURRENT_ROUND),
+      ]);
+    });
+  }, []);
 
   // Register write-queue rollback handlers exactly once. These run when
   // an enqueued mutation is dead-lettered (5 transient failures or any
@@ -660,18 +664,14 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   // searchCatalogCourses on demand. Keyed by account.userId (not the
   // whole account object) so cosmetic profile updates don't re-run the
   // sync gate.
-  useEffect(() => {
-    if (!hydrated || !accountHydrated) return;
-    if (!accountUserId) {
-      cloudCoursesSyncedAccountRef.current = null;
-      return;
-    }
-    if (cloudCoursesSyncedAccountRef.current === accountUserId) return;
-
-    let cancelled = false;
-    const ownerUserId = accountUserId;
-
-    const sync = async () => {
+  // One-time-per-account initial sync for customs. Keyed by
+  // accountUserId so cosmetic profile updates don't re-fire the
+  // sync gate. Catalog discovery happens via `searchCatalogCourses`
+  // on demand.
+  useOneShotSyncOnSignIn({
+    accountUserId,
+    ready: hydrated && accountHydrated,
+    sync: async (ownerUserId) => {
       const { data, error } = await supabase
         .from('courses')
         .select('*')
@@ -680,7 +680,6 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         console.warn('[courses] initial sync pull failed:', error);
         return;
       }
-      if (cancelled) return;
 
       const cloudRows = (data ?? []) as any[];
       const cloudById = new Map(cloudRows.map((r) => [r.id as string, r]));
@@ -708,7 +707,6 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         merged.push(cloudCourseRowToLocal(cloud));
       }
 
-      if (cancelled) return;
       setCourses(merged);
 
       const localOnlyCustom = localSnapshot.filter(
@@ -717,15 +715,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       for (const c of localOnlyCustom) {
         await cloudUpsertCourse(c);
       }
-
-      cloudCoursesSyncedAccountRef.current = ownerUserId;
-    };
-
-    sync();
-    return () => {
-      cancelled = true;
-    };
-  }, [accountUserId, hydrated, accountHydrated, cloudCourseRowToLocal, cloudUpsertCourse]);
+    },
+  });
 
   // Catalog search (server-side, no client-side preload).
   const searchCatalogCourses = useCallback(
@@ -1131,22 +1122,23 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   /**
    * Pull every visible scorecard from the cloud and reconcile with the
    * in-memory `cloudRounds` list. Used by both the initial-pull effect
-   * (gated by `cloudRoundsSyncedAccountRef`) and explicit pull-to-
-   * refresh (which bypasses that gate and always goes to the wire).
+   * (gated by `useOneShotSyncOnSignIn`) and explicit pull-to-refresh
+   * (which bypasses that gate and always goes to the wire).
    *
    * Race-safety:
-   *   · `refreshGenRef` is bumped at entry and re-checked after the
-   *     async select; an older response whose generation no longer
-   *     matches is discarded. Two overlapping refreshes therefore
-   *     resolve as "latest wins".
+   *   · `refreshGen` (shared `useRefreshGeneration` helper) issues a
+   *     token at entry and re-checks after the async select; an older
+   *     response whose token is now stale is discarded. Overlapping
+   *     refreshes therefore resolve as "latest wins".
    *   · The merge uses the functional `setCloudRounds(prev => ...)`
-   *     form so a realtime INSERT delivered during the await lands in
-   *     `prev` and is preserved. Pre-existing friend-owned rows missing
-   *     from the cloud response are still dropped as stale (friend
-   *     deleted their round); but rows added to `prev` AFTER the
-   *     refresh started (the `snapshotIds` set captured up-front) are
-   *     kept unconditionally — they couldn't have been included in the
-   *     server snapshot that produced the response.
+   *     form so a row inserted by a concurrent local user action
+   *     (e.g., a score tap committing during the await) lands in
+   *     `prev` and is preserved. Pre-existing friend-owned rows
+   *     missing from the cloud response are still dropped as stale
+   *     (friend deleted their round); but rows added to `prev` AFTER
+   *     the refresh started (the `snapshotIds` set captured up-front)
+   *     are kept unconditionally — they couldn't have been included
+   *     in the server snapshot that produced the response.
    */
   const refreshScorecards = useCallback(async (): Promise<{
     ok: boolean;
@@ -1154,7 +1146,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   }> => {
     if (!accountUserId) return { ok: true };
     const ownerUserId = accountUserId;
-    const myGen = ++refreshGenRef.current;
+    const myToken = refreshGen.begin();
     const snapshotIds = new Set(cloudRoundsRef.current.map((r) => r.id));
 
     const { data, error } = await supabase.from('scorecards').select('*');
@@ -1162,7 +1154,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       console.warn('[scorecards] refresh pull failed:', error);
       return { ok: false, error: error.message };
     }
-    if (refreshGenRef.current !== myGen) return { ok: true };
+    if (refreshGen.isStale(myToken)) return { ok: true };
 
     const rows = (data ?? []) as CloudScorecardRow[];
     const cloudById = new Map(rows.map((r) => [r.id, r]));
@@ -1189,9 +1181,9 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         //   · It's ours (owner or anonymous) — local-only history that
         //     belongs to us and will be pushed up below.
         //   · It appeared in `prev` AFTER the refresh started (a
-        //     concurrent realtime INSERT). Couldn't have been in the
-        //     server snapshot that produced this response; don't
-        //     clobber it.
+        //     concurrent local mutation — e.g., a score tap committing
+        //     during the await). Couldn't have been in the server
+        //     snapshot that produced this response; don't clobber it.
         // Anything else (a pre-existing friend-owned local row missing
         // from the cloud response) is stale — friend deleted it or RLS
         // no longer grants access. Drop.
@@ -1215,60 +1207,106 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       await cloudUpsertRound(r, { bumpLastScoreAt: false });
     }
 
-    cloudRoundsSyncedAccountRef.current = ownerUserId;
     return { ok: true };
-  }, [accountUserId, cloudToLocalRound, cloudUpsertRound]);
+  }, [accountUserId, cloudToLocalRound, cloudUpsertRound, refreshGen]);
 
-  // Initial pull. Keyed by accountUserId so cosmetic profile updates
-  // don't re-trigger. The `cloudRoundsSyncedAccountRef` sentinel keeps
-  // this effect a one-shot per signed-in user — explicit refreshes via
-  // `refreshScorecards()` bypass the sentinel and always go to the wire.
+  // Initial pull. Keyed by accountUserId (via useOneShotSyncOnSignIn)
+  // so cosmetic profile updates don't re-trigger. Explicit refreshes
+  // via `refreshScorecards()` bypass the sentinel and always go to
+  // the wire.
+  useOneShotSyncOnSignIn({
+    accountUserId,
+    ready: hydrated && accountHydrated,
+    sync: async () => {
+      await refreshScorecards();
+    },
+  });
+
+  // Pre-auth → post-auth migration. When `accountUserId` transitions
+  // null → non-null (the user just signed in), any rounds the user
+  // played anonymously have `ownerUserId === undefined`. Without
+  // migration these rounds stay local-only forever — they can't
+  // sync to cloud (no owner), they won't appear on a second device,
+  // and a sign-out purge would wipe them entirely. Migration:
+  //
+  //   1. Stamp each anon round with the new ownerUserId so cloud
+  //      writes pass RLS.
+  //   2. Back-stamp the owner's participant entry with
+  //      linkedUserId = newUserId so participant-identity resolution
+  //      now finds the viewer's profile (and shows "You" in feed
+  //      cards, scorecard rows, etc.).
+  //   3. Push each migrated round to cloud via cloudUpsertRound.
+  //   4. Show a one-time welcome toast acknowledging the save.
+  //
+  // The matching participant is identified by participantKey ===
+  // defaultPlayerId (which during pre-auth play is 'user'). If the
+  // user changed defaultPlayerId before signing in, we still match
+  // on whatever the current value is — that's their declared
+  // "this is me" entry.
+  const prevAccountUserIdForMigrationRef = useRef<string | null>(null);
   useEffect(() => {
     if (!hydrated || !accountHydrated) return;
-    if (!accountUserId) {
-      cloudRoundsSyncedAccountRef.current = null;
-      return;
-    }
-    if (cloudRoundsSyncedAccountRef.current === accountUserId) return;
-    void refreshScorecards();
-  }, [accountUserId, hydrated, accountHydrated, refreshScorecards]);
+    const prev = prevAccountUserIdForMigrationRef.current;
+    const curr = accountUserId;
+    prevAccountUserIdForMigrationRef.current = curr;
+    if (prev !== null || curr === null) return;
 
-  // Realtime: scorecards table only. Inline participants ride along.
-  // Depend on accountUserId (not the whole account object) so cosmetic
-  // profile updates — like the avatar color picker on the You tab —
-  // don't tear down + resubscribe the channel.
-  useEffect(() => {
-    if (!accountUserId) return;
+    // null -> non-null transition: this is a sign-in event.
+    const newUserId = curr;
+    const anonRounds = cloudRoundsRef.current.filter(
+      (r) => r.ownerUserId === undefined
+    );
+    if (anonRounds.length === 0) return;
 
-    const channel = supabase
-      .channel('scorecards-stream')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'scorecards' },
-        (payload) => {
-          if (payload.eventType === 'DELETE') {
-            const oldId = (payload.old as { id?: string })?.id;
-            if (!oldId) return;
-            setCloudRounds((prev) => prev.filter((r) => r.id !== oldId));
-            return;
-          }
-          const row = payload.new as CloudScorecardRow;
-          const merged = cloudToLocalRound(row);
-          setCloudRounds((prev) => {
-            const i = prev.findIndex((r) => r.id === merged.id);
-            if (i === -1) return [merged, ...prev];
-            const next = prev.slice();
-            next[i] = merged;
-            return next;
-          });
+    const migrated: Round[] = anonRounds.map((r) => {
+      const participants = (r.participants ?? []).map((p) =>
+        p.participantKey === defaultPlayerId
+          ? { ...p, linkedUserId: newUserId }
+          : p
+      );
+      // Track mentionedUserIds for the feed "with you" line + future
+      // discovery features. Only add the new owner id if it wasn't
+      // already in the list (defensive — shouldn't be for anon rounds).
+      const mentioned = r.mentionedUserIds ?? [];
+      const mentionedUserIds = mentioned.includes(newUserId)
+        ? mentioned
+        : [...mentioned, newUserId];
+      return {
+        ...r,
+        ownerUserId: newUserId,
+        participants,
+        mentionedUserIds,
+      };
+    });
+
+    // Update local state first so the UI reflects the new ownership
+    // immediately, then fire-and-forget the cloud pushes. The
+    // writeQueue catches transient failures on each push; permanent
+    // failures dead-letter and roll back the optimistic local state.
+    const migratedIds = new Set(migrated.map((r) => r.id));
+    setCloudRounds((prev) =>
+      prev.map((r) => (migratedIds.has(r.id) ? migrated.find((m) => m.id === r.id)! : r))
+    );
+
+    let successCount = 0;
+    (async () => {
+      for (const r of migrated) {
+        try {
+          await cloudUpsertRound(r, { bumpLastScoreAt: false });
+          successCount += 1;
+        } catch (err) {
+          console.warn('[migration] failed to push anon round:', r.id, err);
         }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [accountUserId, cloudToLocalRound]);
+      }
+      if (successCount > 0) {
+        const label = successCount === 1 ? 'round' : 'rounds';
+        toastShow(
+          `Welcome — we saved your ${successCount} earlier ${label} to your account.`,
+          { autoHideMs: 6000 }
+        );
+      }
+    })();
+  }, [accountUserId, hydrated, accountHydrated, defaultPlayerId, cloudUpsertRound, toastShow]);
 
   // Auto-promote a cloud in-progress round into `currentRound` on
   // fresh devices / clean installs. Without this, a user who started

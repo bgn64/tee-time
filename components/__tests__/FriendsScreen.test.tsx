@@ -111,4 +111,69 @@ describe('FriendsScreen', () => {
     await flushPullCycles();
     expect(screen.queryByText('Loading…')).toBeNull();
   });
+
+  test('roster row prefers profileCache avatar color over the stale roster snapshot', async () => {
+    // Scenario: friend changed their avatar color on their device.
+    // The viewer's roster snapshot still has the old color (the
+    // roster is local-editable, intentionally not auto-overwritten),
+    // but `refreshProfiles` has pulled the new color into
+    // profileCache. The Friends list rendering must prefer the live
+    // profile value so the cross-device propagation contract
+    // (Phase 5 of the manual smoke flow) actually shows the update.
+    const SEED_OLD_COLOR = '#aabbcc'; // what the roster row carries
+    const PROFILE_NEW_COLOR = '#ff00ff'; // what the friend currently has
+    const { UNSAFE_root } = renderWithProviders(<FriendsScreen />, {
+      session: ME_SESSION,
+      profiles: [
+        ME_PROFILE,
+        {
+          user_id: 'u1',
+          handle: 'alice',
+          display_name: 'Alice',
+          avatar_color: PROFILE_NEW_COLOR,
+        },
+      ],
+      friendships: [{ user_id: ME_USER_ID, friend_user_id: 'u1' }],
+      rosterPlayers: [
+        {
+          owner_user_id: ME_USER_ID,
+          id: 'player-u1',
+          nickname: 'Alice',
+          color: SEED_OLD_COLOR,
+          linked_user_id: 'u1',
+        },
+      ],
+    });
+
+    // Wait for FriendsContext.refreshFriendsAndRequests to complete —
+    // it fans out into ensureProfilesCached for every friend id,
+    // which is what populates profileCache with the new color.
+    expect(await screen.findByText('Alice')).toBeTruthy();
+    await flushPullCycles();
+
+    // Walk the rendered tree and collect every backgroundColor style
+    // we find on any element. Assert the new color is in the set and
+    // the stale snapshot color is not. (Direct testID would be
+    // cleaner but the avatar View doesn't have one.)
+    const backgrounds = new Set<string>();
+    const visit = (node: any): void => {
+      if (!node || typeof node !== 'object') return;
+      const style = node.props?.style;
+      const styles = Array.isArray(style) ? style : style ? [style] : [];
+      for (const s of styles) {
+        if (s && typeof s === 'object' && 'backgroundColor' in s) {
+          backgrounds.add(s.backgroundColor);
+        }
+      }
+      const children = node.children;
+      if (Array.isArray(children)) {
+        for (const c of children) visit(c);
+      } else if (children) {
+        visit(children);
+      }
+    };
+    visit(UNSAFE_root);
+    expect(backgrounds.has(PROFILE_NEW_COLOR)).toBe(true);
+    expect(backgrounds.has(SEED_OLD_COLOR)).toBe(false);
+  });
 });

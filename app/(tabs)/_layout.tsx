@@ -22,7 +22,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { router, Tabs, useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useSocial } from '@/state/SocialContext';
+import { useFriends } from '@/state/FriendsContext';
 import { useTheme } from '@/state/ThemeContext';
 
 function TabBarIcon(props: {
@@ -79,7 +79,7 @@ export function makeTabRetapListener(
 
 export default function TabLayout() {
   const { colors } = useTheme();
-  const { incomingRequests } = useSocial();
+  const { incomingRequests } = useFriends();
   const insets = useSafeAreaInsets();
   const segments = useSegments() as readonly string[];
 

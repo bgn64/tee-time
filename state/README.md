@@ -1,6 +1,6 @@
 # State and persistence
 
-`state/` contains React Context providers for app-wide state, persistence, Supabase auth, sync, realtime subscriptions, onboarding, and location.
+`state/` contains React Context providers for app-wide state, persistence, Supabase auth + per-account cloud sync, offline write queueing, onboarding, and location.
 
 ## Provider order
 
@@ -8,16 +8,18 @@ Providers are mounted in `app/_layout.tsx`:
 
 ```tsx
 AppThemeProvider
-  HeaderProvider
-    AccountProvider
-      PlayerProvider
-        GolfRoundProvider
-          SocialProvider
-            LocationProvider
-              OnboardingProvider
+  ToastProvider
+    HeaderProvider
+      AccountProvider
+        PlayerProvider
+          GolfRoundProvider
+            ProfileCacheProvider
+              FriendsProvider
+                LocationProvider
+                  OnboardingProvider
 ```
 
-Do not reorder providers without checking hook dependencies between contexts.
+Do not reorder providers without checking hook dependencies between contexts. In particular: `ProfileCacheProvider` depends on `GolfRoundProvider` (it prewarms the cache from visible Round mention ids); `FriendsProvider` depends on `ProfileCacheProvider` (it writes via `ensureProfilesCached` on search / accept).
 
 ## Context overview
 
@@ -25,10 +27,11 @@ Do not reorder providers without checking hook dependencies between contexts.
 |---|---|---|
 | Theme | `ThemeContext.tsx` | Active color palette and theme persistence |
 | Header | `HeaderContext.tsx` | Persistent root header slots |
-| Account | `AccountContext.tsx` | Supabase session, profile, invite-only OTP, sign-out |
-| Player | `PlayerContext.tsx` | Local roster and player sync |
-| Golf round | `GolfRoundContext.tsx` | Courses, current round, scorecards, realtime scorecard sync |
-| Social | `SocialContext.tsx` | Friends, friend requests, profile cache, realtime social updates |
+| Account | `AccountContext.tsx` | Supabase session, profile, invite-only OTP, sign-out, `refreshAccount` |
+| Player | `PlayerContext.tsx` | Local roster, cloud roster sync, `refreshRoster` |
+| Golf round | `GolfRoundContext.tsx` | Courses, current round, scorecard cloud sync, `refreshScorecards` |
+| Profile cache | `ProfileCacheContext.tsx` | Lazy `profiles` cache, `ensureProfilesCached`, `refreshProfiles` |
+| Friends | `FriendsContext.tsx` | Friends, friend requests, search/send/accept/decline, `refreshFriendsAndRequests` |
 | Location | `LocationContext.tsx` | Foreground location permission and rangefinder GPS watch |
 | Onboarding | `OnboardingContext.tsx` | First-run account/location primer state |
 
@@ -36,9 +39,9 @@ Do not reorder providers without checking hook dependencies between contexts.
 
 Each provider exposes `hydrated: boolean`. **Hydration is a one-way latch** — once a provider's `hydrated` flips to `true`, it never flips back to `false`. The splash gate in `app/_layout.tsx` uses `useSplashGate(...)` from `state/useSplashGate.ts`; once all providers have hydrated once, the gate stays open for the rest of the session even if a provider's underlying state churns.
 
-Providers that do ongoing sync work expose a separate `syncing: boolean` (currently only `SocialContext`). Consumers that want "are we ready to render?" use `hydrated`; consumers that want "are we currently re-pulling from cloud?" use `syncing`.
+Providers that do ongoing sync work expose a separate `syncing: boolean` (currently only `FriendsContext`). Consumers that want "are we ready to render?" use `hydrated`; consumers that want "are we currently re-pulling from cloud?" use `syncing`.
 
-This split exists because the splash gate previously returned `null` on any provider's `hydrated === false`, and `SocialContext` was inadvertently flipping `hydrated` back on every account-object-reference change. That caused the navigator to remount and reset to its initial route during routine session activity (token refresh, avatar color tweak, etc.) — see the May 2026 refactor for the full root-cause analysis.
+This split was originally added to fix a navigator-unmount cascade: the splash gate would return `null` on any provider's `hydrated === false`, and `SocialContext` (the predecessor of `FriendsContext`) was inadvertently flipping `hydrated` back on every account-object-reference change (cosmetic profile edits, hourly `TOKEN_REFRESHED`). The latch + `syncing` split decouples "are we ready to render?" from "are we re-pulling right now?" so transient sync work never tears down navigation. See the May 2026 refactor for the full root-cause analysis.
 
 ## Persistence
 
@@ -67,7 +70,7 @@ Release behavior:
 - A Supabase session without a `profiles` row sets `needsProfile = true`.
 - `completeProfile` inserts a profile row and refreshes account state.
 
-`refreshFromSession` uses a `shallowEqualAccount` check and a functional `setAccount` updater so identical-payload session refreshes (e.g., `TOKEN_REFRESHED` every hour) preserve the `account` object reference. This dampens cascade re-renders across consumers.
+`refreshFromSession` uses a `shallowEqualAccount` check and a functional `setAccount` updater so identical-payload session refreshes (e.g., `TOKEN_REFRESHED` every hour) preserve the `account` object reference. This dampens cascade re-renders across consumers. It is also exposed publicly as `refreshAccount` (called by the You-tab pull-to-refresh) and returns the standard `{ ok, error }` envelope; a per-refresh generation counter discards stale responses under overlapping pulls. Transient errors during refresh preserve the existing `account` — a pull-to-refresh that hits a 5xx must not log the user out.
 
 If `needsProfile` is true, root layout routes to `/sign-in` so the handle/display-name step can run.
 
@@ -75,31 +78,62 @@ If `needsProfile` is true, root layout routes to `/sign-in` so the handle/displa
 
 `GolfRoundContext` owns scorecard persistence.
 
-- Completed and live scorecards are stored in Supabase `scorecards`.
-- Realtime listens to `scorecards` changes and merges rows into local state.
+- Completed and in-progress scorecards are stored in Supabase `scorecards`.
 - Owner-owned local rounds can be pushed to cloud after sign-in.
 - Friend-visible scorecards are provided by RLS, not by client-side filtering alone.
-- `refreshScorecards()` re-runs the initial cloud pull on demand (wired to pull-to-refresh on Feed). Race-safe: a per-refresh generation counter ensures only the latest in-flight response writes state, and the merge is by-id so a concurrent realtime INSERT can't be clobbered.
+- `refreshScorecards()` runs the cloud pull. It powers both the initial mount-time sync (gated by a per-account sentinel) and explicit pull-to-refresh on every cloud-backed screen (bypasses the sentinel). Race-safe: a per-refresh generation counter ensures only the latest in-flight response writes state, and the merge uses `setCloudRounds(prev => ...)` so a row inserted by a concurrent local mutation (e.g., a score tap committing during refresh) lands in `prev` and is preserved via the `snapshotIds` race-protection guard.
 
-## Social sync
+The app is **refresh-only** — no Postgres realtime subscription. Cross-device visibility (e.g., a friend completing a round on their phone) requires the viewer to pull-to-refresh (or manually press Refresh on desktop web). See the May 2026 migration to refresh-only for the rationale.
 
-`SocialContext` loads and listens to:
+## Friend graph + profile cache
+
+`FriendsContext` loads:
 
 - `friendships`
 - `friend_requests`
-- `profiles` for friend/profile summaries
 
-Friendships are symmetric rows in the database. The context keeps the current user's friend ids and request lists hydrated for banners, badges, and friend screens.
+`ProfileCacheContext` owns the lazy `profiles` cache and is consulted by `FriendsContext` for the search / send / accept flows. The two were split out of a combined `SocialContext` so the high-frequency cache mutations (every rendered participant triggers a prefetch) stop re-rendering low-frequency consumers like the incoming-request banner. See the May 2026 split.
 
-The initial pull is keyed off `accountUserId` (the primitive) rather than the full `account` object so cosmetic profile updates (e.g., avatar color change) don't tear down the realtime channel and re-pull. The handler reads current `account` fields via a ref so outgoing-request rows always reflect the latest self-profile data.
+Friendships are symmetric rows in the database. `FriendsContext` keeps the current user's friend ids and request lists hydrated for banners, badges, and friend screens.
 
-`refreshFriendsAndRequests()` re-runs the initial pull on demand. The merge for friends/requests is authoritative (overwrite) — realtime events that arrive during the refresh gap are idempotent re-applications.
+The initial pull is keyed off `accountUserId` (the primitive) rather than the full `account` object so cosmetic profile updates (e.g., avatar color change) don't re-fire the sync gate. The `refreshFriendsAndRequests` callback reads current `account` fields via a ref so outgoing-request rows always reflect the latest self-profile data without making the callback identity churn on every cosmetic edit.
+
+Public refresh APIs:
+
+- `useFriends().refreshFriendsAndRequests()` — re-pulls friendships + pending friend_requests. The merge is authoritative (overwrite) — for refresh-only, there are no concurrent realtime events to coordinate with.
+- `useProfileCache().refreshProfiles(userIds)` — force-refreshes the matching `profileCache` entries so friends' display name / avatar color edits propagate without restarting the app. Returns the standard `{ ok, error }` envelope.
+- `useProfileCache().ensureProfilesCached(userIds, { force? })` — lazy prefetch; short-circuits on already-cached ids unless `{ force: true }`.
 
 ### Roster auto-create on friend accept
 
-`PlayerContext.ensureRosterForFriend(profile)` is a single idempotent helper that creates-or-updates a roster row for a linked friend. It uses a deterministic id `player-${userId}` so concurrent call sites (accepter inline path + sender realtime path) can never produce duplicate rows. Cloud-side, a partial-unique index on `roster_players (owner_user_id, linked_user_id) WHERE linked_user_id IS NOT NULL` enforces the same invariant — see migration `018_roster_unique_linked_user.sql`.
+`PlayerContext.ensureRosterForFriend(profile)` is an idempotent helper that creates-or-updates a roster row for a linked friend. It uses a deterministic id `player-${userId}` so a stale-id retry from the offline write queue cannot mint a duplicate row. Cloud-side, a partial-unique index on `roster_players (owner_user_id, linked_user_id) WHERE linked_user_id IS NOT NULL` enforces the same invariant — see migration `018_roster_unique_linked_user.sql`.
+
+Receiver-side (accepter): `acceptIncomingRequest` calls `ensureRosterForFriend` + `refreshScorecards` immediately after the RPC succeeds so the new friend and any backfilled rounds appear without a second action.
+
+Sender-side: the sender device sees the new friendship only on their next pull-to-refresh. There is no push notification today.
 
 The `FriendsScreen` (`app/(tabs)/(you)/friends/index.tsx`) never silently hides a friend: rows are rendered from local roster → `profileCache` → placeholder, in that order. The "No friends yet" empty state is keyed off `friends.length === 0`, never the rendered row count.
+
+## Refresh affordances
+
+Every cloud-backed screen exposes a pull-to-refresh gesture (mobile) plus a pinned Refresh button (desktop web — `RefreshControl` has no mouse gesture). Both call `useScreenRefresh([fn1, fn2, ...])` from `state/useScreenRefresh.ts`, which:
+
+- Runs every supplied refresh fn in parallel.
+- Short-circuits if a refresh is already in flight.
+- Collapses any failure into a single combined toast ("Couldn't refresh. Check your connection and try again.").
+- Flips `refreshing` back false in a `finally` so a throw can't strand the spinner.
+
+The `<RefreshButton />` component (`components/RefreshButton.tsx`) is the single source of truth for the desktop-web button look + ActivityIndicator/icon swap. It renders nothing on native.
+
+Per-screen refresh composition:
+
+| Screen | Refresh sources |
+|---|---|
+| Feed | `refreshScorecards`, `refreshFriendsAndRequests` |
+| Rounds list | `refreshScorecards` |
+| Round detail | `refreshScorecards`, `refreshProfiles(round.mentionedUserIds + ownerUserId)` |
+| Friends list | `refreshFriendsAndRequests`, `refreshProfiles(friends)` |
+| You tab | `refreshAccount`, `refreshScorecards`, `refreshRoster` |
 
 ## Offline write queue
 

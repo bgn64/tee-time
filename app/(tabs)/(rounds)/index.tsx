@@ -26,8 +26,9 @@
 
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { RefreshButton } from '@/components/RefreshButton';
 import {
   DEFAULT_ROUNDS_FILTERS,
   RoundsFilterSheet,
@@ -53,6 +54,7 @@ import { useAccount } from '@/state/AccountContext';
 import { useGolfRound } from '@/state/GolfRoundContext';
 import { useScreenHeader } from '@/state/HeaderContext';
 import { usePlayers } from '@/state/PlayerContext';
+import { useScreenRefresh } from '@/state/useScreenRefresh';
 import { useTheme } from '@/state/ThemeContext';
 import { Round } from '@/types/golf';
 
@@ -114,7 +116,7 @@ function dateCutoff(d: RoundsFilters['date']): Date | null {
 
 export default function RoundsListScreen() {
   const { colors } = useTheme();
-  const { completedRounds } = useGolfRound();
+  const { completedRounds, refreshScorecards } = useGolfRound();
   const { account } = useAccount();
   const { getPlayer } = usePlayers();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -129,6 +131,8 @@ export default function RoundsListScreen() {
     left: { kind: 'text', text: 'ROUNDS' },
     right: { kind: 'profile' },
   });
+
+  const { refreshing, onRefresh } = useScreenRefresh([refreshScorecards]);
 
   // "Mine" = rounds I scored.
   const minedRounds = useMemo(() => {
@@ -253,7 +257,19 @@ export default function RoundsListScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled">
+        keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }>
+        <RefreshButton
+          refreshing={refreshing}
+          onPress={onRefresh}
+          accessibilityLabel="Refresh rounds"
+        />
         <View style={styles.searchBox}>
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput

@@ -1,6 +1,23 @@
 # Tee Time — implementation status & follow-ups
 
-> **v9 (People → You reshape, current).** The dedicated People tab has
+> **v10 (Refresh-only sync, current).** The two Postgres realtime
+> channels (`scorecards-stream`, `friends-and-requests`) have been
+> removed. Cross-device data freshness now flows exclusively through
+> pull-to-refresh (mobile gesture) and a pinned desktop-web Refresh
+> button on every cloud-backed screen. New public refresh APIs:
+> `useAccount().refreshAccount`, `useSocial().refreshProfiles`,
+> `usePlayers().refreshRoster` (plus the existing `refreshScorecards`
+> and `refreshFriendsAndRequests`), composed via the shared
+> `useScreenRefresh` hook. The "LIVE NOW" strip is renamed to
+> "IN PROGRESS" and no longer animates a pulsing dot. Items below
+> referencing realtime — chiefly #11 (live in-progress visibility),
+> #19 (push notifications via realtime fan-out), #21 (likes /
+> realtime sub), #28 (pull-to-refresh cosmetic), and #30 (realtime
+> survives backgrounding poorly) — are superseded; either solved by
+> the refresh-only model directly (#28, #30) or restated as future
+> opt-in escape hatches (#11, #19, #21).
+>
+> **v9 (People → You reshape).** The dedicated People tab has
 > been dissolved into the existing You tab. Bottom bar drops from five
 > tabs to four (Feed · Rounds · Score · You). The friends list, search,
 > confirm-request, and per-friend detail now live under the renamed
@@ -52,8 +69,9 @@ multi-user product. Highlights:
 - **Profile**: One-time handle picker on first sign-in. Avatar color
   generated and stable.
 - **Cloud sync**: Roster, custom courses, completed rounds, and per-round
-  claim entries all sync per-account via Supabase. Realtime subscriptions
-  keep multiple devices in lockstep.
+  claim entries all sync per-account via Supabase. Cross-device freshness
+  is **refresh-driven** (pull-to-refresh on mobile, pinned Refresh button
+  on desktop web) — see v10 note above.
 - **Friend graph**: Search by `@handle`, send friend request, accept RPC,
   symmetric friendships, auto-link of source roster row on accept.
 - **Feed tab**: Chronological view of friends' completed rounds; tap-through

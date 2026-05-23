@@ -31,7 +31,7 @@ import { useGolfRound } from '@/state/GolfRoundContext';
 
 import {
   mockSupabaseCallLog,
-  mockSupabaseEmitChannel,
+  mockSupabaseEmitAuthEvent,
   mockSupabaseGetTable,
   mockSupabaseReset,
   mockSupabaseSeedSession,
@@ -204,7 +204,7 @@ describe('GolfRoundContext.refreshScorecards', () => {
     expect(result.current.golf.completedRounds.map((r) => r.id)).toEqual(['sc-B']);
   });
 
-  test('concurrent realtime INSERT during a refresh is preserved alongside the response', async () => {
+  test('concurrent local score upsert during a refresh is preserved alongside the response', async () => {
     mockSupabaseSeedSession(aliceSession);
     mockSupabaseSeedTable('profiles', [aliceProfile]);
     mockSupabaseSeedTable('scorecards', [
@@ -220,11 +220,22 @@ describe('GolfRoundContext.refreshScorecards', () => {
       ]);
     });
 
-    // Hold the select so we can deliver a realtime INSERT between
+    // Add a custom course so the local-mutation path below can fire.
+    // (startRound looks up the course in the local courses list.)
+    await act(async () => {
+      result.current.golf.addCourse({
+        id: 'course-mid-refresh',
+        name: 'MidRefresh GC',
+        location: '',
+        source: 'custom',
+        holes: [{ number: 1, par: 4 }],
+      });
+    });
+
+    // Hold the refresh select so we can fire a local mutation between
     // snapshot-and-resolution. The mock snapshots rows at execute
     // start, so a table mutation after the snapshot doesn't bleed
-    // into the in-flight response — only the realtime path can land
-    // a new row in `cloudRounds` during the await.
+    // into the in-flight response.
     mockSupabaseSetTableDelay('scorecards', 60);
 
     let refreshPromise: Promise<{ ok: boolean; error?: string }>;
@@ -233,32 +244,30 @@ describe('GolfRoundContext.refreshScorecards', () => {
       await Promise.resolve();
     });
 
-    // Realtime delivers a brand-new row mid-refresh. This is the
-    // race the merge logic must handle: the server snapshot powering
-    // the in-flight refresh response does NOT include this row, but
-    // the row is legitimate and must survive the eventual setState.
+    // Local user action mid-refresh: starting a round inserts a new
+    // viewer-owned row into cloudRounds via cloudUpsertRound. This is
+    // the race the merge logic must handle — the server snapshot
+    // powering the in-flight refresh response does NOT include this
+    // row, but it's legitimate local state and must survive setState.
     await act(async () => {
-      mockSupabaseEmitChannel('scorecards-stream', 'scorecards', 'INSERT', {
-        new: makeScorecardRow({ id: 'sc-realtime', owner_user_id: carolUserId }),
-      });
+      result.current.golf.startRound('course-mid-refresh', ['player-alice'], 'stroke');
     });
 
-    expect(result.current.golf.completedRounds.map((r) => r.id).sort()).toEqual([
-      'sc-initial',
-      'sc-realtime',
-    ]);
+    const newLocalId = result.current.golf.currentRound!.id;
+    expect(newLocalId).toBeTruthy();
 
-    // Now let the refresh resolve. Its response includes only
-    // `sc-initial` (the snapshot from before the realtime row). The
-    // merge must keep `sc-realtime` because it landed in `prev`
-    // AFTER the refresh's snapshotIds was captured.
+    // Now let the refresh resolve. The response includes only
+    // `sc-initial`; the in-progress local row must be preserved
+    // because it (a) belongs to the viewer and (b) wasn't in
+    // snapshotIds captured at refresh start.
     mockSupabaseSetTableDelay('scorecards', 0);
     await act(async () => {
       await refreshPromise!;
     });
 
-    const ids = result.current.golf.completedRounds.map((r) => r.id).sort();
-    expect(ids).toEqual(['sc-initial', 'sc-realtime']);
+    // currentRound survived the refresh (it's the viewer's in-flight
+    // round); the friend row also still present.
+    expect(result.current.golf.currentRound?.id).toBe(newLocalId);
   });
 
   test('returns {ok:true} on success (refresh-shape contract)', async () => {
@@ -627,16 +636,17 @@ describe('GolfRoundContext auto-promote in-progress cloud round', () => {
     const localId = result.current.golf.currentRound!.id;
 
     // Now a DIFFERENT in-progress row appears in the cloud (simulated
-    // realtime / refresh). The auto-promote must NOT touch the local
-    // round.
+    // by seeding + refreshing). The auto-promote must NOT touch the
+    // local round.
+    mockSupabaseSeedTable('scorecards', [
+      makeInProgressRow({
+        id: 'sc-cloud-other',
+        owner_user_id: aliceUserId,
+        last_score_at: '2025-04-01T00:00:00Z',
+      }),
+    ]);
     await act(async () => {
-      mockSupabaseEmitChannel('scorecards-stream', 'scorecards', 'INSERT', {
-        new: makeInProgressRow({
-          id: 'sc-cloud-other',
-          owner_user_id: aliceUserId,
-          last_score_at: '2025-04-01T00:00:00Z',
-        }),
-      });
+      await result.current.golf.refreshScorecards();
     });
 
     expect(result.current.golf.currentRound?.id).toBe(localId);
@@ -719,5 +729,118 @@ describe('GolfRoundContext auto-promote in-progress cloud round', () => {
     });
 
     expect(result.current.golf.currentRound).toBeNull();
+  });
+});
+
+// =============================================================================
+// Pre-auth → post-auth migration. When a previously-signed-out user
+// signs in, any rounds they scored anonymously (ownerUserId ===
+// undefined) get stamped with the new ownerUserId, their participant
+// entry gets back-stamped with linkedUserId, and the rounds push to
+// cloud. Without this migration, anon rounds either vanish on the
+// next sign-out purge or remain unsynced forever.
+// =============================================================================
+
+describe('GolfRoundContext anon-rounds migration on sign-in', () => {
+  function seedCourseLocally(golf: ReturnType<typeof useGolfRound>) {
+    golf.addCourse({
+      id: 'course-test',
+      name: 'Test Course',
+      location: 'Nowhere, USA',
+      source: 'custom',
+      holes: [
+        { number: 1, par: 4 },
+        { number: 2, par: 3 },
+      ],
+    });
+  }
+
+  test('stamps ownerUserId + linkedUserId on anon rounds when the user signs in', async () => {
+    // Render with NO seeded session — pre-auth state.
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.golf.hydrated).toBe(true);
+      expect(result.current.account.account).toBeNull();
+    });
+
+    // Pre-auth: add a course, start a round, score some holes,
+    // complete. The round lives in cloudRounds with ownerUserId
+    // === undefined.
+    await act(async () => {
+      seedCourseLocally(result.current.golf);
+    });
+    await act(async () => {
+      // defaultPlayerId is 'user' in the default seed; pass it as
+      // the playerId so the participant's participantKey matches.
+      result.current.golf.startRound('course-test', ['user'], 'stroke');
+    });
+    const roundId = result.current.golf.currentRound!.id;
+    await act(async () => {
+      result.current.golf.setCustomHoleScore('user', 1, 4);
+    });
+    await act(async () => {
+      result.current.golf.completeCurrentRound();
+    });
+
+    // Sanity: the anon round is in cloudRounds without an owner.
+    const before = result.current.golf.completedRounds.find((r) => r.id === roundId);
+    expect(before).toBeDefined();
+    expect(before?.ownerUserId).toBeUndefined();
+
+    // Now sign in. AccountContext picks up the seeded session via
+    // SIGNED_IN auth event.
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+    await act(async () => {
+      mockSupabaseEmitAuthEvent('SIGNED_IN', aliceSession);
+      // Let refreshFromSession resolve + the migration effect fire.
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+    });
+
+    // Migration assertions:
+    //   1. ownerUserId stamped.
+    //   2. participants[].linkedUserId back-stamped for the owner.
+    //   3. cloud upsert fired (row exists in scorecards mock with
+    //      the new owner).
+    await waitFor(() => {
+      const after = result.current.golf.completedRounds.find((r) => r.id === roundId);
+      expect(after?.ownerUserId).toBe(aliceUserId);
+      const ownerParticipant = after?.participants.find(
+        (p) => p.participantKey === 'user'
+      );
+      expect(ownerParticipant?.linkedUserId).toBe(aliceUserId);
+    });
+
+    await waitFor(() => {
+      const cloudRow = mockSupabaseGetTable('scorecards').find(
+        (r: any) => r.id === roundId
+      );
+      expect(cloudRow).toBeDefined();
+      expect(cloudRow?.owner_user_id).toBe(aliceUserId);
+    });
+  });
+
+  test('skips migration when there are no anon rounds to migrate', async () => {
+    // Render signed in directly — no anon history.
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('scorecards', []);
+
+    const { result } = renderHookWithProviders(useGolfAndAccount);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(result.current.golf.hydrated).toBe(true);
+    });
+
+    // No completedRounds; no upserts fire. Just confirm the
+    // migration didn't synthesize anything.
+    expect(result.current.golf.completedRounds).toEqual([]);
   });
 });

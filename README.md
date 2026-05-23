@@ -146,13 +146,14 @@ Staging smoke test from the Vercel `staging` preview URL:
 
 ### Navigation & sync regression checks
 
-Added after the May 2026 navigation/sync refactor — verifies the two reported tester bugs and their cousins stay fixed:
+Added after the May 2026 navigation/sync refactor and updated after the move to refresh-only sync:
 
-8. **No bounce-to-Score on friend-request accept.** With an in-progress round, go to You tab → Friends → tap Confirm on an incoming friend request. The Friends screen must remain visible; `currentRound` must be preserved. Covers Bug 1 and its token-refresh / avatar-color cousins.
-9. **Mutual friend visibility without restart.** From device A, send a friend request to user B. From device B, accept it. Without restarting either app, both A and B should see each other in their Friends list (not just the feed). Covers Bug 2 and the sender-side realtime miss.
+8. **No bounce-to-Score on friend-request accept.** With an in-progress round, go to You tab → Friends → tap Confirm on an incoming friend request. The Friends screen must remain visible; `currentRound` must be preserved. Covers the navigator-unmount cascade bug and its token-refresh / avatar-color cousins.
+9. **Mutual friend visibility after refresh.** From device A, send a friend request to user B. From device B, accept it. On device B, the new friend appears immediately (the accept path also fires `refreshScorecards` + `ensureRosterForFriend` synchronously). On device A, the new friendship appears after the user pulls-to-refresh on the Friends list or Feed (or presses Refresh on desktop web). Under refresh-only sync there is no automatic propagation to the sender device — this is intentional.
 10. **You tab re-tap pops to root.** Drill into You → Friends; tap the You tab icon; should land on the You profile screen. (Repeat for the Rounds tab → round detail → Rounds tab icon.) Score tab is intentionally unchanged.
-11. **Pull-to-refresh actually re-pulls.** From the Feed, pull down to refresh. While the spinner is up, delete a row from the staging Supabase admin dashboard; the row should disappear from the feed (proves the refresh is now a real cloud re-pull, not a 600ms cosmetic spinner).
+11. **Pull-to-refresh actually re-pulls.** From any cloud-backed screen (Feed, Rounds list, Round detail, Friends list, You tab), pull down to refresh — or press the desktop-web Refresh button. While the spinner is up, delete a relevant row from the staging Supabase admin dashboard; the row should disappear locally on the next refresh.
 12. **Offline write recovery.** Open dev tools → Network → Offline. Tap a color swatch on the You tab (cosmetic profile change). The local UI updates. Re-enable the network. The change should sync to cloud on the next foreground transition or subsequent successful write (verify via staging Supabase admin).
+13. **Combined refresh failure surfaces one toast.** Open dev tools → Network → Offline. Pull-to-refresh on the Feed (or any other cloud-backed screen). Exactly one toast should appear: "Couldn't refresh. Check your connection and try again." — not one per failed source.
 
 Production release from `main`:
 

@@ -19,12 +19,13 @@ import type { ReactElement, ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AccountProvider } from '@/state/AccountContext';
+import { FriendsProvider } from '@/state/FriendsContext';
 import { GolfRoundProvider } from '@/state/GolfRoundContext';
 import { HeaderProvider } from '@/state/HeaderContext';
 import { LocationProvider } from '@/state/LocationContext';
 import { OnboardingProvider } from '@/state/OnboardingContext';
 import { PlayerProvider } from '@/state/PlayerContext';
-import { SocialProvider } from '@/state/SocialContext';
+import { ProfileCacheProvider } from '@/state/ProfileCacheContext';
 import { AppThemeProvider } from '@/state/ThemeContext';
 import { ToastProvider } from '@/state/ToastContext';
 
@@ -94,11 +95,13 @@ export function AllProviders({ children }: { children: ReactNode }) {
             <AccountProvider>
               <PlayerProvider>
                 <GolfRoundProvider>
-                  <SocialProvider>
-                    <LocationProvider>
-                      <OnboardingProvider>{children}</OnboardingProvider>
-                    </LocationProvider>
-                  </SocialProvider>
+                  <ProfileCacheProvider>
+                    <FriendsProvider>
+                      <LocationProvider>
+                        <OnboardingProvider>{children}</OnboardingProvider>
+                      </LocationProvider>
+                    </FriendsProvider>
+                  </ProfileCacheProvider>
                 </GolfRoundProvider>
               </PlayerProvider>
             </AccountProvider>
