@@ -93,7 +93,21 @@ export default function FeedScreen() {
 
   if (friends.length === 0) {
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.contentEmpty}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentEmpty}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
+          />
+        }>
+        <RefreshButton
+          refreshing={refreshing}
+          onPress={onRefresh}
+          accessibilityLabel="Refresh feed"
+        />
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>👥</Text>
           <Text style={styles.emptyTitle}>Find friends to see their rounds</Text>
@@ -117,7 +131,21 @@ export default function FeedScreen() {
     // to the regular empty state.
     if (liveRounds.length === 0) {
       return (
-        <ScrollView style={styles.container} contentContainerStyle={styles.contentEmpty}>
+        <ScrollView
+          style={styles.container}
+          contentContainerStyle={styles.contentEmpty}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary}
+            />
+          }>
+          <RefreshButton
+            refreshing={refreshing}
+            onPress={onRefresh}
+            accessibilityLabel="Refresh feed"
+          />
           <View style={styles.empty}>
             <Text style={styles.emptyIcon}>⛳</Text>
             <Text style={styles.emptyTitle}>No friend rounds yet</Text>
