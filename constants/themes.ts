@@ -16,10 +16,22 @@ export type ThemeColors = {
   chipText: string;
   chipSelectedBg: string;
   chipSelectedText: string;
+  /** Background of the "You" chip on the player picker — warm accent in
+   *  light, warm-dark accent in dark. */
+  chipYouBg: string;
+  chipYouBorder: string;
   border: string;
   tabBar: string;
   tabBarActive: string;
   tabBarInactive: string;
+  /** "Notice" surface — used by attention banners (incoming friend
+   *  requests, sign-in nudges). Warm cream in light, warm-dark in dark. */
+  noticeBg: string;
+  noticeBorder: string;
+  noticeText: string;
+  noticeTextMuted: string;
+  noticeButtonBorder: string;
+  noticeButtonText: string;
 };
 
 export type ThemeName = 'light' | 'dark';
@@ -38,10 +50,18 @@ export const themes: Record<ThemeName, ThemeColors> = {
     chipText: '#39423d',
     chipSelectedBg: '#d94835',
     chipSelectedText: '#ffffff',
+    chipYouBg: '#fff4e3',
+    chipYouBorder: '#f5dcb6',
     border: '#dce2d8',
     tabBar: '#ffffff',
     tabBarActive: '#2f7d4b',
     tabBarInactive: '#718077',
+    noticeBg: '#fff8e7',
+    noticeBorder: '#f5e0b8',
+    noticeText: '#6b5a3a',
+    noticeTextMuted: '#8a7656',
+    noticeButtonBorder: '#e0d0a8',
+    noticeButtonText: '#7c6b4f',
   },
   dark: {
     background: '#0f1419',
@@ -56,10 +76,18 @@ export const themes: Record<ThemeName, ThemeColors> = {
     chipText: '#cbd6cf',
     chipSelectedBg: '#f97066',
     chipSelectedText: '#0f1419',
+    chipYouBg: '#2e2820',
+    chipYouBorder: '#4a4030',
     border: '#34424b',
     tabBar: '#18222b',
     tabBarActive: '#91d45f',
     tabBarInactive: '#91a095',
+    noticeBg: '#2a2418',
+    noticeBorder: '#4d4226',
+    noticeText: '#d4c6a8',
+    noticeTextMuted: '#a89878',
+    noticeButtonBorder: '#5a4f30',
+    noticeButtonText: '#c4b594',
   },
 };
 

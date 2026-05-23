@@ -270,8 +270,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
 
     preaccountBanner: {
-      backgroundColor: '#fff8e7',
-      borderColor: '#f5e0b8',
+      backgroundColor: colors.noticeBg,
+      borderColor: colors.noticeBorder,
       borderWidth: 1,
       borderRadius: 12,
       padding: 12,
@@ -286,7 +286,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     preaccountBody: {
       fontSize: 12,
-      color: '#6b5a3a',
+      color: colors.noticeText,
       lineHeight: 18,
       marginBottom: 10,
     },

@@ -368,8 +368,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
 
     signInBanner: {
-      backgroundColor: '#fff8e7',
-      borderColor: '#f5e0b8',
+      backgroundColor: colors.noticeBg,
+      borderColor: colors.noticeBorder,
       borderWidth: 1,
       borderRadius: 12,
       padding: 14,
@@ -383,7 +383,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginBottom: 4,
     },
     signInBody: {
-      color: '#6b5a3a',
+      color: colors.noticeText,
       fontSize: 12.5,
       lineHeight: 18,
       marginBottom: 10,

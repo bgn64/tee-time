@@ -507,8 +507,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 3,
     },
     chipYou: {
-      backgroundColor: '#fff4e3',
-      borderColor: '#f5dcb6',
+      backgroundColor: colors.chipYouBg,
+      borderColor: colors.chipYouBorder,
     },
     chipAvatar: {
       width: 22,
