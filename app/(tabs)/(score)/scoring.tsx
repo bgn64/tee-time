@@ -148,6 +148,14 @@ export default function ScoringScreen() {
 
   const maxHole = currentRound.course.holes.length;
 
+  // Auto-advance support: when a round has exactly one scorer
+  // (single-player stroke round or single-team scramble), committing a
+  // score on the current hole jumps us to the next playable hole. We
+  // pre-compute the next number once per render — covers the
+  // quick-pick chips AND the X / custom-score path because both
+  // funnel through the single `onChange` below.
+  const inRangeHoles = holesInRange(currentRound.course.holes, currentRound.holeRange);
+
   const scorers: Scorer[] = isScramble
     ? currentRound.teams!.map((t) => {
         const teamParticipants = (currentRound.participants ?? []).filter(
@@ -201,6 +209,15 @@ export default function ScoringScreen() {
           };
         })
         .filter((s): s is Scorer => s !== null);
+
+  const isSingleScorer = scorers.length === 1;
+  const currentIdxInRange = inRangeHoles.findIndex(
+    (h) => h.number === currentHole.number
+  );
+  const nextInRangeHoleNumber =
+    currentIdxInRange >= 0 && currentIdxInRange < inRangeHoles.length - 1
+      ? inRangeHoles[currentIdxInRange + 1].number
+      : null;
 
   return (
     <View style={styles.container}>
@@ -285,9 +302,15 @@ export default function ScoringScreen() {
                   holeNumber={currentHole.number}
                   par={currentHole.par}
                   strokes={score ? score.strokes : null}
-                  onChange={(strokes) =>
-                    setCustomHoleScore(s.id, currentHole.number, strokes)
-                  }
+                  onChange={(strokes) => {
+                    setCustomHoleScore(s.id, currentHole.number, strokes);
+                    // Single-scorer rounds auto-advance to the next
+                    // playable hole. No-op on the final in-range hole
+                    // — the user finishes via the existing button.
+                    if (isSingleScorer && nextInRangeHoleNumber !== null) {
+                      setCurrentHole(nextInRangeHoleNumber);
+                    }
+                  }}
                 />
               </View>
             );
