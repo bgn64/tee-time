@@ -23,6 +23,7 @@ import {
 
 import { FeedCardLarge } from '@/components/FeedCardLarge';
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
+import { OutgoingRequestsBanner } from '@/components/OutgoingRequestsBanner';
 import { LiveRoundStrip } from '@/components/LiveRoundStrip';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useAccount } from '@/state/AccountContext';
@@ -177,6 +178,7 @@ export default function FeedScreen() {
         />
       }>
       <IncomingRequestsBanner />
+      <OutgoingRequestsBanner />
       <RefreshButton
         refreshing={refreshing}
         onPress={onRefresh}

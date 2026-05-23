@@ -15,6 +15,14 @@ export type FriendRequest = {
   /** Recipient's userId. */
   toUserId: string;
   toHandle: string;
+  /**
+   * Recipient's display name and avatar color. Only populated on
+   * outgoing requests (the viewer is the sender); incoming requests
+   * leave these unset because the recipient is "me" — display info is
+   * read from `account` instead.
+   */
+  toDisplayName?: string;
+  toAvatarColor?: string;
 
   status: FriendRequestStatus;
   createdAt: string;
