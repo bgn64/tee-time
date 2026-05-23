@@ -156,6 +156,23 @@ export default function FriendsScreen() {
             {friendRows.map((row) => {
               if (row.kind === 'roster') {
                 const { player, roundsTogether: n } = row;
+                // Prefer the live profile cache for fields that
+                // represent the friend's own current state (avatar
+                // color, handle). The roster snapshot was captured
+                // at link / seed time and goes stale the moment the
+                // friend edits their profile on their own device.
+                // The `nickname` is intentionally NOT replaced —
+                // it's the local-editable label the owner can
+                // customize per-friend (matches the Player.nickname
+                // contract in types/golf.ts and mirrors how
+                // `resolveParticipantIdentity` in
+                // lib/participantIdentity.ts decides between live
+                // profile and roster fallback for every other
+                // surface in the app).
+                const liveProfile = profileCache[row.userId];
+                const avatarColor =
+                  liveProfile?.avatarColor ?? player.color ?? colors.primary;
+                const handle = liveProfile?.handle ?? player.handle;
                 return (
                   <Pressable
                     key={row.userId}
@@ -169,7 +186,7 @@ export default function FriendsScreen() {
                     <View
                       style={[
                         styles.avatar,
-                        { backgroundColor: player.color || colors.primary },
+                        { backgroundColor: avatarColor },
                       ]}>
                       <Text style={styles.avatarText}>{player.nickname[0]?.toUpperCase()}</Text>
                     </View>
@@ -178,7 +195,7 @@ export default function FriendsScreen() {
                         {player.nickname}
                       </Text>
                       <Text style={[styles.rosterMeta, styles.rosterMetaFriend]}>
-                        @{player.handle}
+                        @{handle}
                         {n > 0
                           ? ` · ${n} ${n === 1 ? 'round' : 'rounds'} together`
                           : ' · 0 rounds together yet'}
