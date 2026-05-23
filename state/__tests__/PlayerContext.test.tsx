@@ -517,4 +517,60 @@ describe('PlayerContext.refreshRoster', () => {
 
     warnSpy.mockRestore();
   });
+
+  test('R2: refreshes the roster when the app returns to the foreground', async () => {
+    const AppState = require('react-native/Libraries/AppState/AppState').default;
+
+    mockSupabaseSeedSession(aliceSession);
+    mockSupabaseSeedTable('profiles', [aliceProfile]);
+    mockSupabaseSeedTable('roster_players', [
+      {
+        owner_user_id: aliceUserId,
+        id: 'player-bob',
+        nickname: 'Bob',
+        color: '#111111',
+        linked_user_id: null,
+      },
+    ]);
+
+    const { result } = renderHookWithProviders(useAccountAndPlayers);
+
+    await waitFor(() => {
+      expect(result.current.account.account?.userId).toBe(aliceUserId);
+      expect(
+        result.current.players.allPlayers.find((p) => p.id === 'player-bob')
+      ).toBeDefined();
+    });
+
+    // Simulate another device adding Carol while this device was away.
+    mockSupabaseSeedTable('roster_players', [
+      {
+        owner_user_id: aliceUserId,
+        id: 'player-bob',
+        nickname: 'Bob',
+        color: '#111111',
+        linked_user_id: null,
+      },
+      {
+        owner_user_id: aliceUserId,
+        id: 'player-carol',
+        nickname: 'Carol',
+        color: '#333333',
+        linked_user_id: null,
+      },
+    ]);
+
+    // Foreground transition: background → active. The R2 effect listens
+    // for 'active' and triggers `refreshRoster`.
+    await act(async () => {
+      AppState.__emit('background');
+      AppState.__emit('active');
+    });
+
+    await waitFor(() => {
+      expect(
+        result.current.players.allPlayers.find((p) => p.id === 'player-carol')?.nickname
+      ).toBe('Carol');
+    });
+  });
 });

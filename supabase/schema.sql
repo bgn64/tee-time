@@ -342,8 +342,14 @@ create policy friendships_select on public.friendships
 --   Atomically:
 --     · marks the request 'accepted'
 --     · inserts symmetric friendship rows
---     · auto-links the sender's roster row (if a sourcePlayerId was provided
---       on the request) so their UNCLAIMED Mike row becomes FRIEND on accept.
+--     · optionally links the sender's `source_player_id` roster row when
+--       the request was initiated by tapping an existing local player
+--     · find-or-creates the sender's roster row for the new friend so
+--       their player picker (which reads `roster_players`, not
+--       `friendships`) surfaces the friend on the next refresh.
+--   The receiver mints its own roster row optimistically via the
+--   client-side `ensureRosterForFriend` helper for instant UX; the server
+--   side leaves the receiver's roster untouched.
 --   Runs with SECURITY DEFINER to bypass the friendships INSERT block but
 --   re-checks that the caller is actually the recipient before doing anything.
 -- =============================================================================
@@ -374,8 +380,9 @@ begin
     set status = 'accepted'
     where id = request_id;
 
-  -- Symmetric insert. ON CONFLICT DO NOTHING so re-running an already-accepted
-  -- request is harmless.
+  -- Symmetric friendship rows. ON CONFLICT DO NOTHING so a retried
+  -- INSERT (not a full RPC re-run; the status guard above blocks that)
+  -- doesn't error.
   insert into public.friendships (user_id, friend_user_id)
     values (req.from_user_id, req.to_user_id)
     on conflict do nothing;
@@ -384,17 +391,61 @@ begin
     values (req.to_user_id, req.from_user_id)
     on conflict do nothing;
 
-  -- Auto-link the sender's roster row (if any). This satisfies the design
-  -- that "Mike's UNCLAIMED row becomes FRIEND" the moment the friend
-  -- relationship exists. The recipient's side is left untouched here; their
-  -- client will create or link their own roster row in response to the
-  -- friendships insert via realtime.
+  -- Optional: when the sender initiated the request by tapping an
+  -- existing unlinked local roster row, link that specific row to the
+  -- new friend. Guarded so it can't violate the
+  -- (owner_user_id, linked_user_id) unique constraint when the sender
+  -- already has a linked row for this friend under a different id.
   if req.source_player_id is not null then
     update public.roster_players
       set linked_user_id = req.to_user_id
       where owner_user_id = req.from_user_id
-        and id = req.source_player_id;
+        and id = req.source_player_id
+        and linked_user_id is null
+        and not exists (
+          select 1 from public.roster_players r2
+          where r2.owner_user_id = req.from_user_id
+            and r2.linked_user_id = req.to_user_id
+        );
   end if;
+
+  -- Sender-side find-or-create using the deterministic id
+  -- `player-${to_user_id}`. Mirrors `ensureRosterForFriend`:
+  --   1. If a linked row for this friend already exists (under any id),
+  --      leave it alone.
+  --   2. Else if the deterministic-id row exists unlinked, link it.
+  --   3. Else INSERT a new row.
+  -- The two-step shape avoids a primary-key collision when the
+  -- deterministic id already exists unlinked (rare but possible — id is
+  -- client-controlled text and offline/legacy data could land there).
+  update public.roster_players
+    set linked_user_id = req.to_user_id
+    where owner_user_id = req.from_user_id
+      and id = 'player-' || req.to_user_id::text
+      and linked_user_id is null
+      and not exists (
+        select 1 from public.roster_players r2
+        where r2.owner_user_id = req.from_user_id
+          and r2.linked_user_id = req.to_user_id
+      );
+
+  insert into public.roster_players (
+    owner_user_id, id, nickname, color, linked_user_id
+  )
+  select
+    req.from_user_id,
+    'player-' || req.to_user_id::text,
+    p.display_name,
+    p.avatar_color,
+    req.to_user_id
+  from public.profiles p
+  where p.user_id = req.to_user_id
+    and not exists (
+      select 1 from public.roster_players r2
+      where r2.owner_user_id = req.from_user_id
+        and (r2.linked_user_id = req.to_user_id
+             or r2.id = 'player-' || req.to_user_id::text)
+    );
 end;
 $$;
 
