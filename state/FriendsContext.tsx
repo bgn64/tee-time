@@ -79,6 +79,14 @@ type FriendsContextValue = {
     newFriendUserId: string;
   } | null>;
   declineIncomingRequest: (requestId: string) => Promise<void>;
+  /**
+   * Cancel a pending request the viewer previously sent. Same DB
+   * mechanism as decline (UPDATE status='declined'); the RLS policy
+   * `friend_requests_update_either` allows either side to flip a
+   * pending row. Drops the row from `outgoingRequests` optimistically
+   * so the sender's own UI updates without waiting for the next pull.
+   */
+  cancelOutgoingRequest: (requestId: string) => Promise<void>;
 
   /**
    * Re-run the friendships + friend_requests cloud pull on demand.
@@ -252,6 +260,8 @@ export function FriendsProvider({ children }: PropsWithChildren) {
           outgoing.push({
             ...rowToFriendRequest(r, targetProfile),
             toHandle: targetProfile?.handle ?? '',
+            toDisplayName: targetProfile?.displayName ?? '',
+            toAvatarColor: targetProfile?.avatarColor ?? '#888888',
             fromHandle: meAccount?.handle ?? '',
             fromDisplayName: meAccount?.displayName ?? '',
             fromAvatarColor: meAccount?.avatarColor ?? '#888888',
@@ -359,6 +369,8 @@ export function FriendsProvider({ children }: PropsWithChildren) {
       const fr: FriendRequest = {
         ...rowToFriendRequest(row, target),
         toHandle: target.handle,
+        toDisplayName: target.displayName,
+        toAvatarColor: target.avatarColor,
         fromHandle: meAccount?.handle ?? '',
         fromDisplayName: meAccount?.displayName ?? '',
         fromAvatarColor: meAccount?.avatarColor ?? '#888888',
@@ -443,6 +455,23 @@ export function FriendsProvider({ children }: PropsWithChildren) {
     [account]
   );
 
+  const cancelOutgoingRequest = useCallback(
+    async (requestId: string) => {
+      if (!account) return;
+      const { error } = await supabase
+        .from('friend_requests')
+        .update({ status: 'declined' })
+        .eq('id', requestId);
+      if (error) {
+        console.warn('[friends] cancel:', error);
+        return;
+      }
+      // Optimistic local update — same rationale as `declineIncomingRequest`.
+      setOutgoingRequests((prev) => prev.filter((r) => r.id !== requestId));
+    },
+    [account]
+  );
+
   const value = useMemo<FriendsContextValue>(
     () => ({
       friends,
@@ -452,6 +481,7 @@ export function FriendsProvider({ children }: PropsWithChildren) {
       sendFriendRequest,
       acceptIncomingRequest,
       declineIncomingRequest,
+      cancelOutgoingRequest,
       refreshFriendsAndRequests,
       hydrated,
       syncing,
@@ -464,6 +494,7 @@ export function FriendsProvider({ children }: PropsWithChildren) {
       sendFriendRequest,
       acceptIncomingRequest,
       declineIncomingRequest,
+      cancelOutgoingRequest,
       refreshFriendsAndRequests,
       hydrated,
       syncing,

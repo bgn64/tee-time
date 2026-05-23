@@ -507,8 +507,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingVertical: 3,
     },
     chipYou: {
-      backgroundColor: '#fff4e3',
-      borderColor: '#f5dcb6',
+      backgroundColor: colors.chipYouBg,
+      borderColor: colors.chipYouBorder,
     },
     chipAvatar: {
       width: 22,
@@ -523,12 +523,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       width: 18,
       height: 18,
       borderRadius: 9,
-      backgroundColor: '#e0d8c4',
+      backgroundColor: colors.chipCloseBg,
       alignItems: 'center',
       justifyContent: 'center',
       marginLeft: 2,
     },
-    chipXText: { fontSize: 11, fontWeight: '800', color: '#6b6b6b' },
+    chipXText: { fontSize: 11, fontWeight: '800', color: colors.chipCloseText },
 
     scroll: { flex: 1 },
     scrollContent: { padding: 20, paddingTop: 14, paddingBottom: 24 },

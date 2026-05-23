@@ -36,6 +36,7 @@ import {
 } from 'react';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { AppState } from 'react-native';
 
 import { defaultPlayers } from '@/data/players';
 import { useAccount } from '@/state/AccountContext';
@@ -462,6 +463,22 @@ export function PlayerProvider({ children }: PropsWithChildren) {
 
     return { ok: true };
   }, [accountUserId, refreshGen]);
+
+  // R2: re-pull the roster whenever the app comes back to the foreground.
+  // Catches roster mutations made on another device (the only auto-pull
+  // is `useOneShotSyncOnSignIn`, which fires once per signed-in session).
+  // Not realtime — we still rely on the "refresh to get latest" model,
+  // but app-resume is a natural refresh moment for the user.
+  // `refreshRoster` is a no-op when signed out; race-safe via
+  // `useRefreshGeneration`.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void refreshRoster();
+      }
+    });
+    return () => sub.remove();
+  }, [refreshRoster]);
 
   const addPlayer = useCallback(
     (player: Player) => {

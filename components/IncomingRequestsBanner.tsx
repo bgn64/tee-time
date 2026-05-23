@@ -74,8 +74,8 @@ export function IncomingRequestsBanner({ style }: Props) {
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     banner: {
-      backgroundColor: '#fff8e7',
-      borderColor: '#f5e0b8',
+      backgroundColor: colors.noticeBg,
+      borderColor: colors.noticeBorder,
       borderWidth: 1,
       borderRadius: 12,
       padding: 12,
@@ -98,14 +98,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     avatarText: { color: '#ffffff', fontWeight: '800', fontSize: 12 },
     info: { flex: 1, minWidth: 0 },
-    from: { fontSize: 12, color: '#6b5a3a' },
+    from: { fontSize: 12, color: colors.noticeText },
     fromBold: { color: colors.textTitle, fontWeight: '800' },
     handle: { color: colors.primaryDark, fontWeight: '700' },
-    subtext: { fontSize: 10.5, color: '#8a7656', marginTop: 1 },
+    subtext: { fontSize: 10.5, color: colors.noticeTextMuted, marginTop: 1 },
     actions: { flexDirection: 'row', gap: 6 },
     btn: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 7 },
-    btnDanger: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#e0d0a8' },
-    btnDangerText: { color: '#7c6b4f', fontSize: 11, fontWeight: '800' },
+    btnDanger: { backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.noticeButtonBorder },
+    btnDangerText: { color: colors.noticeButtonText, fontSize: 11, fontWeight: '800' },
     btnPrimary: { backgroundColor: colors.primary },
     btnPrimaryText: { color: '#ffffff', fontSize: 11, fontWeight: '800' },
   });

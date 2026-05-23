@@ -125,4 +125,132 @@ describe('accept_friend_request', () => {
       ].sort()
     );
   });
+
+  test("auto-creates the sender's roster row for the new friend (S3 fan-out)", async () => {
+    const a = await createTestUser('a-fanout');
+    const b = await createTestUser('b-fanout');
+
+    const { data: requestRow } = await a.client
+      .from('friend_requests')
+      .insert({
+        from_user_id: a.userId,
+        to_user_id: b.userId,
+        status: 'pending',
+        source_player_id: null,
+      })
+      .select()
+      .single();
+
+    const { error: accErr } = await b.client.rpc('accept_friend_request', {
+      request_id: requestRow!.id,
+    });
+    expect(accErr).toBeNull();
+
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('display_name, avatar_color')
+      .eq('user_id', b.userId)
+      .single();
+
+    const { data: rosterRows } = await admin
+      .from('roster_players')
+      .select('id, nickname, color, linked_user_id')
+      .eq('owner_user_id', a.userId);
+    expect(rosterRows).toHaveLength(1);
+    expect(rosterRows![0]).toEqual({
+      id: `player-${b.userId}`,
+      nickname: profile!.display_name,
+      color: profile!.avatar_color,
+      linked_user_id: b.userId,
+    });
+  });
+
+  test('is a no-op when the sender already has a linked roster row for the friend', async () => {
+    const a = await createTestUser('a-idem');
+    const b = await createTestUser('b-idem');
+
+    // Pre-seed a legacy-style linked row under a non-deterministic id, as
+    // would exist if `ensureRosterForFriend` had already minted one (e.g.,
+    // via befriend() in another test path).
+    await admin.from('roster_players').insert({
+      owner_user_id: a.userId,
+      id: 'legacy-row-1',
+      nickname: 'legacy-nickname',
+      color: '#123456',
+      linked_user_id: b.userId,
+    });
+
+    const { data: requestRow } = await a.client
+      .from('friend_requests')
+      .insert({
+        from_user_id: a.userId,
+        to_user_id: b.userId,
+        status: 'pending',
+        source_player_id: null,
+      })
+      .select()
+      .single();
+
+    const { error: accErr } = await b.client.rpc('accept_friend_request', {
+      request_id: requestRow!.id,
+    });
+    expect(accErr).toBeNull();
+
+    const { data: rosterRows } = await admin
+      .from('roster_players')
+      .select('id, nickname, color, linked_user_id')
+      .eq('owner_user_id', a.userId);
+    expect(rosterRows).toHaveLength(1);
+    expect(rosterRows![0]).toEqual({
+      id: 'legacy-row-1',
+      nickname: 'legacy-nickname',
+      color: '#123456',
+      linked_user_id: b.userId,
+    });
+  });
+
+  test('links an existing unlinked deterministic-id row instead of colliding on PK', async () => {
+    const a = await createTestUser('a-coll');
+    const b = await createTestUser('b-coll');
+
+    // Pre-seed an unlinked row whose id is exactly what the fan-out would
+    // INSERT. The UPDATE-then-INSERT shape should link this row instead of
+    // raising a primary-key violation.
+    await admin.from('roster_players').insert({
+      owner_user_id: a.userId,
+      id: `player-${b.userId}`,
+      nickname: 'pre-existing-nick',
+      color: '#abcdef',
+      linked_user_id: null,
+    });
+
+    const { data: requestRow } = await a.client
+      .from('friend_requests')
+      .insert({
+        from_user_id: a.userId,
+        to_user_id: b.userId,
+        status: 'pending',
+        source_player_id: null,
+      })
+      .select()
+      .single();
+
+    const { error: accErr } = await b.client.rpc('accept_friend_request', {
+      request_id: requestRow!.id,
+    });
+    expect(accErr).toBeNull();
+
+    const { data: rosterRows } = await admin
+      .from('roster_players')
+      .select('id, nickname, color, linked_user_id')
+      .eq('owner_user_id', a.userId);
+    expect(rosterRows).toHaveLength(1);
+    // Existing nickname/color preserved; only linked_user_id changes.
+    expect(rosterRows![0]).toEqual({
+      id: `player-${b.userId}`,
+      nickname: 'pre-existing-nick',
+      color: '#abcdef',
+      linked_user_id: b.userId,
+    });
+  });
 });

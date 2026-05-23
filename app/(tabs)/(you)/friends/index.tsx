@@ -17,6 +17,7 @@ import { useMemo } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
+import { OutgoingRequestsBanner } from '@/components/OutgoingRequestsBanner';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useAccount } from '@/state/AccountContext';
 import { useFriends } from '@/state/FriendsContext';
@@ -124,6 +125,7 @@ export default function FriendsScreen() {
         <Text style={styles.title}>Friends</Text>
 
         <IncomingRequestsBanner />
+        <OutgoingRequestsBanner />
 
         {!account ? (
           <View style={styles.emptyWrap}>
