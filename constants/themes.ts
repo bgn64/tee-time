@@ -20,6 +20,9 @@ export type ThemeColors = {
    *  light, warm-dark accent in dark. */
   chipYouBg: string;
   chipYouBorder: string;
+  /** Small circular "remove" affordance on selected-player chips. */
+  chipCloseBg: string;
+  chipCloseText: string;
   border: string;
   tabBar: string;
   tabBarActive: string;
@@ -52,6 +55,8 @@ export const themes: Record<ThemeName, ThemeColors> = {
     chipSelectedText: '#ffffff',
     chipYouBg: '#fff4e3',
     chipYouBorder: '#f5dcb6',
+    chipCloseBg: '#e0d8c4',
+    chipCloseText: '#6b6b6b',
     border: '#dce2d8',
     tabBar: '#ffffff',
     tabBarActive: '#2f7d4b',
@@ -78,6 +83,8 @@ export const themes: Record<ThemeName, ThemeColors> = {
     chipSelectedText: '#0f1419',
     chipYouBg: '#2e2820',
     chipYouBorder: '#4a4030',
+    chipCloseBg: '#3a4750',
+    chipCloseText: '#cbd6cf',
     border: '#34424b',
     tabBar: '#18222b',
     tabBarActive: '#91d45f',
