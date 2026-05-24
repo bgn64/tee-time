@@ -112,6 +112,38 @@ export function getScorerTotalRelative(round: Round, scorerId: string): string {
 }
 
 /**
+ * Score progress for a single scorer scoped to the round's hole range.
+ * Returns the running relative-to-par and the count of holes scored.
+ * Out-of-range holes are excluded; duplicate (scorerId, hole) entries
+ * are deduped so multiple writes to the same hole only count once.
+ *
+ * Used by the feed's in-progress card to show "±score / THRU N"
+ * without needing the formatted string shape of
+ * `getScorerTotalRelative`.
+ */
+export function getScorerProgress(
+  round: Round,
+  scorerId: string | undefined
+): { relativeScore: number; thruCount: number } {
+  if (!scorerId) return { relativeScore: 0, thruCount: 0 };
+  const allowed = holeNumbersInRange(round.course.holes, round.holeRange);
+  let total = 0;
+  let scored = 0;
+  const seen = new Set<number>();
+  for (const s of round.scores) {
+    if (s.scorerId !== scorerId) continue;
+    if (!allowed.has(s.holeNumber)) continue;
+    if (seen.has(s.holeNumber)) continue;
+    seen.add(s.holeNumber);
+    const hole = round.course.holes.find((h) => h.number === s.holeNumber);
+    if (!hole) continue;
+    total += s.strokes - hole.par;
+    scored++;
+  }
+  return { relativeScore: total, thruCount: scored };
+}
+
+/**
  * Subset of `holes` that falls inside the given range. Pure, used by
  * every helper that needs to ignore out-of-range scores.
  */

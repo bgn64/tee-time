@@ -1,10 +1,13 @@
 /**
- * Feed tab — chronological list of friends' completed rounds.
+ * Feed tab — chronological list of friends' rounds.
  *
  * Each round renders as a large, self-contained FeedCardLarge — no
  * tap-through, optional caption + tee swatches handled gracefully.
- * The in-page "Feed" title is dropped (the persistent app header
- * already labels the tab).
+ * In-progress (live) rounds are pinned at the top using the same
+ * card with a small "● IN PROGRESS" pill in the band; completed
+ * rounds follow, sorted by completedAt desc. The in-page "Feed"
+ * title is dropped (the persistent app header already labels the
+ * tab).
  *
  * Three empty states (pre-account / no friends / no friend rounds)
  * keep the previous shape and CTAs.
@@ -24,7 +27,6 @@ import {
 import { FeedCardLarge } from '@/components/FeedCardLarge';
 import { IncomingRequestsBanner } from '@/components/IncomingRequestsBanner';
 import { OutgoingRequestsBanner } from '@/components/OutgoingRequestsBanner';
-import { LiveRoundStrip } from '@/components/LiveRoundStrip';
 import { RefreshButton } from '@/components/RefreshButton';
 import { useAccount } from '@/state/AccountContext';
 import { useFriends } from '@/state/FriendsContext';
@@ -61,6 +63,13 @@ export default function FeedScreen() {
       return bt - at;
     });
   }, [completedRounds, account]);
+
+  // In-progress rounds (already filtered + sorted by lastScoreAt desc by
+  // the context) are pinned above completed rounds in the feed.
+  const feedRounds = useMemo(
+    () => [...liveRounds, ...friendRounds],
+    [liveRounds, friendRounds]
+  );
 
   const { refreshing, onRefresh } = useScreenRefresh([
     refreshScorecards,
@@ -126,43 +135,38 @@ export default function FeedScreen() {
     );
   }
 
-  if (friendRounds.length === 0) {
-    // Even with no completed friend rounds, surface a live strip if a
-    // friend happens to be scoring right now — otherwise fall through
-    // to the regular empty state.
-    if (liveRounds.length === 0) {
-      return (
-        <ScrollView
-          style={styles.container}
-          contentContainerStyle={styles.contentEmpty}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary}
-            />
-          }>
-          <RefreshButton
+  if (feedRounds.length === 0) {
+    return (
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.contentEmpty}
+        refreshControl={
+          <RefreshControl
             refreshing={refreshing}
-            onPress={onRefresh}
-            accessibilityLabel="Refresh feed"
+            onRefresh={onRefresh}
+            tintColor={colors.primary}
           />
-          <View style={styles.empty}>
-            <Text style={styles.emptyIcon}>⛳</Text>
-            <Text style={styles.emptyTitle}>No friend rounds yet</Text>
-            <Text style={styles.emptyBody}>
-              You're connected with friends, but no one has scored a round you can see yet. Your own
-              rounds live in the <Text style={styles.emptyBodyEm}>Rounds</Text> tab.
-            </Text>
-            <Pressable
-              style={styles.outlineCta}
-              onPress={() => router.push('/(tabs)/(rounds)')}>
-              <Text style={styles.outlineCtaText}>View Rounds</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
-      );
-    }
+        }>
+        <RefreshButton
+          refreshing={refreshing}
+          onPress={onRefresh}
+          accessibilityLabel="Refresh feed"
+        />
+        <View style={styles.empty}>
+          <Text style={styles.emptyIcon}>⛳</Text>
+          <Text style={styles.emptyTitle}>No friend rounds yet</Text>
+          <Text style={styles.emptyBody}>
+            You're connected with friends, but no one has scored a round you can see yet. Your own
+            rounds live in the <Text style={styles.emptyBodyEm}>Rounds</Text> tab.
+          </Text>
+          <Pressable
+            style={styles.outlineCta}
+            onPress={() => router.push('/(tabs)/(rounds)')}>
+            <Text style={styles.outlineCtaText}>View Rounds</Text>
+          </Pressable>
+        </View>
+      </ScrollView>
+    );
   }
 
   // -------- Populated feed --------
@@ -184,8 +188,7 @@ export default function FeedScreen() {
         onPress={onRefresh}
         accessibilityLabel="Refresh feed"
       />
-      <LiveRoundStrip rounds={liveRounds} profileCache={profileCache} />
-      {friendRounds.map((round) => (
+      {feedRounds.map((round) => (
         <FeedCardLarge
           key={round.id}
           round={round}

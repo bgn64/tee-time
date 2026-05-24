@@ -12,7 +12,7 @@
  *
  *   · `profileCache` mutates on every `ensureProfilesCached` call —
  *     which happens whenever ANY rendered participant comes into view
- *     (feed cards, scorecard rows, live strip, friends list, etc.).
+ *     (feed cards, scorecard rows, friends list, etc.).
  *     Without the split, every prefetch re-rendered every consumer of
  *     the old combined context — including the unrelated friends list
  *     and incoming-request banner.

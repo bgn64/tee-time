@@ -8,7 +8,7 @@
  *   the root layout so it floats above all routes/tabs.
  *
  * Animation:
- *   Uses react-native's `Animated` API (matching `LiveRoundStrip`) — fade
+ *   Uses react-native's `Animated` API — fade
  *   + slide-up on mount, fade on dismiss. Reanimated would be overkill for
  *   a single-slot surface.
  */
