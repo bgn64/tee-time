@@ -4,6 +4,7 @@ import {
   formatRelativeTime,
   formatScore,
   getRoundTotalRelative,
+  getScorerProgress,
   getScorerTotalRelative,
   monthKey,
   replaceScore,
@@ -238,6 +239,72 @@ describe('getScorerTotalRelative', () => {
       ],
     });
     expect(getScorerTotalRelative(r, 'a')).toBe('');
+  });
+});
+
+// ---------- getScorerProgress ----------
+
+describe('getScorerProgress', () => {
+  test('returns zeros when scorerId is undefined', () => {
+    expect(getScorerProgress(makeRound(), undefined)).toEqual({
+      relativeScore: 0,
+      thruCount: 0,
+    });
+  });
+
+  test('returns zeros when no scores match the scorer', () => {
+    const r = makeRound({
+      scores: [{ scorerId: 'b', holeNumber: 1, strokes: 4 }],
+    });
+    expect(getScorerProgress(r, 'a')).toEqual({
+      relativeScore: 0,
+      thruCount: 0,
+    });
+  });
+
+  test('sums relative-to-par and counts holes for the matching scorer', () => {
+    const r = makeRound({
+      scores: [
+        { scorerId: 'a', holeNumber: 1, strokes: 5 }, // +1
+        { scorerId: 'a', holeNumber: 2, strokes: 3 }, // -1
+        { scorerId: 'a', holeNumber: 3, strokes: 6 }, // +2
+        { scorerId: 'b', holeNumber: 1, strokes: 4 }, // other scorer — ignored
+      ],
+    });
+    expect(getScorerProgress(r, 'a')).toEqual({
+      relativeScore: 2,
+      thruCount: 3,
+    });
+  });
+
+  test('dedupes by hole — duplicate score writes count once', () => {
+    const r = makeRound({
+      scores: [
+        { scorerId: 'a', holeNumber: 1, strokes: 5 },
+        { scorerId: 'a', holeNumber: 1, strokes: 6 }, // duplicate — ignored
+        { scorerId: 'a', holeNumber: 2, strokes: 4 },
+      ],
+    });
+    expect(getScorerProgress(r, 'a')).toEqual({
+      relativeScore: 1, // 5 + 4 - (4 + 4)
+      thruCount: 2,
+    });
+  });
+
+  test('respects holeRange — out-of-range scores excluded from both totals', () => {
+    const r = makeRound({
+      holeRange: 'front9',
+      scores: [
+        { scorerId: 'a', holeNumber: 1, strokes: 5 }, // +1 — in range
+        { scorerId: 'a', holeNumber: 2, strokes: 4 }, // 0 — in range
+        { scorerId: 'a', holeNumber: 12, strokes: 3 }, // -1 — OUT of range
+        { scorerId: 'a', holeNumber: 13, strokes: 3 }, // -1 — OUT of range
+      ],
+    });
+    expect(getScorerProgress(r, 'a')).toEqual({
+      relativeScore: 1,
+      thruCount: 2,
+    });
   });
 });
 

@@ -6,7 +6,7 @@
  *   ┌──── colored band (owner's avatar_color gradient) ─────────┐
  *   │ <Course Name>           (big)                             │
  *   │ <City, State>           (small)                           │
- *   │ [STROKE/SCRAMBLE] [FRONT 9?]                              │  ← format pill
+ *   │ [STROKE/SCRAMBLE] [FRONT 9?] [● IN PROGRESS]?             │  ← format pill
  *   │ <handle> · <relative time>          <Strokes> <±score>    │
  *   └───────────────────────────────────────────────────────────┘
  *   ReadOnlyScorecard (with finals)
@@ -17,20 +17,28 @@
  * to keep the card uncluttered — the scorecard + finals carry the
  * informational load now.
  *
+ * In-progress mode (no `completedAt`): a small "● IN PROGRESS" pill is
+ * added to the band pill row with a pulsing dot. The big ±score chip
+ * shows the running total over played holes with a small "THRU N" line
+ * underneath. The embedded scorecard hides finals (since they'd be
+ * misleading mid-round) and highlights the current hole column.
+ *
  * No tap-through; the card is self-contained.
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef } from 'react';
+import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
 import { ReadOnlyScorecard } from '@/components/ReadOnlyScorecard';
 import {
   formatRelativeTime,
   formatScore,
   getRoundTotalRelative,
+  getScorerProgress,
   holeRangeLabel,
+  holesInRange,
 } from '@/lib/scoring';
 import { useTheme } from '@/state/ThemeContext';
 import type { Player, Round } from '@/types/golf';
@@ -99,6 +107,7 @@ export function FeedCardLarge({
     ownerProfile?.avatarColor ?? ownerLocal?.color ?? DEFAULT_BAND;
 
   const isScramble = round.scoringRule === 'scramble';
+  const isInProgress = !round.completedAt;
 
   // ---- Owner-perspective scorer (used for the band score chip) ----
   const ownerParticipant = (round.participants ?? []).find(
@@ -125,7 +134,29 @@ export function FeedCardLarge({
     return sum;
   }, [round.scores, round.course.holes, round.holeRange, ownerScorerId]);
 
-  const dateLabel = formatRelativeTime(round.completedAt ?? round.startedAt);
+  // ---- In-progress progress (thru / current hole) ----
+  const { thruCount } = useMemo(
+    () => getScorerProgress(round, ownerScorerId),
+    [round, ownerScorerId]
+  );
+  const rangeHoles = useMemo(
+    () => holesInRange(round.course.holes, round.holeRange),
+    [round.course.holes, round.holeRange]
+  );
+  const currentHoleNumber = useMemo(() => {
+    if (!isInProgress || rangeHoles.length === 0) return undefined;
+    const idx = Math.min(thruCount, rangeHoles.length - 1);
+    return rangeHoles[idx]?.number;
+  }, [isInProgress, rangeHoles, thruCount]);
+
+  // For completed rounds we show the completion time; for in-progress
+  // rounds we show the time of the most recent score (falling back to
+  // `startedAt` if a row somehow has no `lastScoreAt`).
+  const dateLabel = formatRelativeTime(
+    isInProgress
+      ? (round.lastScoreAt ?? round.startedAt)
+      : (round.completedAt ?? round.startedAt)
+  );
   const location = round.course.location;
 
   const holesLabel = holeRangeLabel(round.course.holes, round.holeRange);
@@ -158,6 +189,7 @@ export function FeedCardLarge({
           <View style={styles.bandPill}>
             <Text style={styles.bandPillText}>{holesLabel}</Text>
           </View>
+          {isInProgress ? <InProgressPill /> : null}
         </View>
         <View style={styles.bandBottomRow}>
           <Text style={styles.bandByLine} numberOfLines={1}>
@@ -167,6 +199,9 @@ export function FeedCardLarge({
             <Text style={styles.bandRel}>
               {totalStrokes > 0 ? formatScore(totalRel) : '—'}
             </Text>
+            {isInProgress && thruCount > 0 ? (
+              <Text style={styles.bandThru}>THRU {thruCount}</Text>
+            ) : null}
           </View>
         </View>
       </LinearGradient>
@@ -175,6 +210,8 @@ export function FeedCardLarge({
         <View style={styles.body}>
           <ReadOnlyScorecard
             round={round}
+            hideFinalTotals={isInProgress}
+            currentHoleNumber={currentHoleNumber}
             onPressLinkedName={(id) =>
               router.push({
                 pathname: '/(tabs)/(feed)/player/[id]',
@@ -184,6 +221,45 @@ export function FeedCardLarge({
           />
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * Small pulsing-dot pill rendered in the gradient band when a round is
+ * still in progress. The dot opacity loops between 0.45 and 1.0 on the
+ * native driver so it stays smooth during scroll.
+ */
+function InProgressPill() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.45,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 700,
+          easing: Easing.inOut(Easing.ease),
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
+
+  return (
+    <View style={styles.bandPill} accessibilityLabel="In progress">
+      <Animated.View style={[styles.bandPillDot, { opacity }]} />
+      <Text style={styles.bandPillText}>IN PROGRESS</Text>
     </View>
   );
 }
@@ -220,6 +296,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     bandPillRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
+      alignItems: 'center',
       gap: 6,
       marginTop: 10,
     },
@@ -232,12 +309,21 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 8,
       paddingVertical: 4,
       borderRadius: 6,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
     },
     bandPillText: {
       fontSize: 9.5,
       fontWeight: '800',
       letterSpacing: 0.6,
       color: '#ffffff',
+    },
+    bandPillDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: '#ffffff',
     },
     bandBottomRow: {
       flexDirection: 'row',
@@ -253,15 +339,20 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
     },
     bandScoreBlock: {
-      flexDirection: 'row',
-      alignItems: 'baseline',
-      gap: 6,
+      alignItems: 'flex-end',
     },
     bandRel: {
       color: '#ffffff',
       fontSize: 30,
       fontWeight: '800',
       lineHeight: 32,
+    },
+    bandThru: {
+      marginTop: 2,
+      fontSize: 10.5,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      color: 'rgba(255,255,255,0.85)',
     },
 
     // ---- Body ----

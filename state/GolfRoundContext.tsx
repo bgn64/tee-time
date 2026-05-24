@@ -154,7 +154,7 @@ function buildHoles(raw: any[], tees: Tee[]): Hole[] {
 
 /**
  * Threshold below which a friend's in-progress round is treated as
- * "active" for the live-strip filter. Beyond this we assume the scorer
+ * "active" for the live-feed filter. Beyond this we assume the scorer
  * abandoned the tab and stop surfacing the row. Aligned with the
  * `scorecards_live_idx` partial index; if you change the value here,
  * consider whether `pruneStaleLiveOwnRounds` (12h) should move with it.
@@ -169,8 +169,9 @@ type GolfRoundContextValue = {
   /**
    * Friend-owned, in-progress scorecards visible to the viewer with
    * activity in the last 6 hours and `isLiveShareable !== false`. Sorted
-   * most-recent-activity first. The Feed renders these in a compact
-   * live strip above the standard `completedRounds` cards.
+   * most-recent-activity first. The Feed renders these as
+   * `FeedCardLarge`s pinned above the standard `completedRounds` cards
+   * with a small "● IN PROGRESS" pill on the band.
    *
    * Excludes the viewer's own in-progress round (that lives in
    * `currentRound`) and excludes any round that hasn't received a
@@ -196,7 +197,8 @@ type GolfRoundContextValue = {
       teeIds?: Record<string, string | undefined>;
       /**
        * If false, the round is marked non-shareable on the cloud row
-       * and is hidden from friends' live strips. Defaults to true.
+       * and is hidden from friends' in-progress feed cards. Defaults
+       * to true.
        */
       isLiveShareable?: boolean;
     }
@@ -327,9 +329,10 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
   const [currentRound, setCurrentRound] = useState<Round | null>(null);
   /**
    * The cloud-synced rounds list. Holds BOTH completed rounds (legacy
-   * use-case) and in-progress rows belonging to friends (the live-strip
-   * source). The public `completedRounds` and `liveRounds` selectors
-   * derive from this single source of truth.
+   * use-case) and in-progress rows belonging to friends (the source
+   * for friends' in-progress feed cards). The public `completedRounds`
+   * and `liveRounds` selectors derive from this single source of
+   * truth.
    *
    * Our own in-progress row, if any, may be present here as a benign
    * mirror of `currentRound`. It's filtered out of `liveRounds` so we
@@ -366,7 +369,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
   // Derived views. `completedRounds` is the historical "list of finished
   // rounds visible to me" the rest of the app already consumes.
-  // `liveRounds` is the new live-strip data source.
+  // `liveRounds` powers the in-progress feed cards.
   const completedRounds = useMemo<Round[]>(
     () => cloudRounds.filter((r) => !!r.completedAt),
     [cloudRounds]
@@ -994,8 +997,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
    * Push a scorecard row to the cloud. Used at three points in a round's
    * lifecycle:
    *   - `startRound` creates the initial row (empty scores, completed_at
-   *     null, last_score_at null — invisible to friends' live strips
-   *     until the first score lands).
+   *     null, last_score_at null — invisible to friends' live feed
+   *     cards until the first score lands).
    *   - Each hole-boundary navigation (`goToNextHole`,
    *     `goToPreviousHole`, `setCurrentHole`, `setHoleRange`) and every
    *     completed-round score edit upserts the current state.
@@ -1428,8 +1431,8 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
         // Garbage-collect any of our own abandoned in-progress rows from
         // a previous session before pushing the new one. This keeps the
-        // friends' live strip clean and avoids accidentally resurrecting
-        // a card we'd forgotten about.
+        // friends' in-progress feed clean and avoids accidentally
+        // resurrecting a card we'd forgotten about.
         if (account?.userId) {
           const myId = account.userId;
           const staleCutoff = Date.now() - STALE_OWN_LIVE_WINDOW_MS;
@@ -1448,10 +1451,10 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
 
         // Push the initial row immediately so subsequent score-bearing
         // upserts hit the existing row. Don't bump last_score_at — the
-        // live-strip filter requires a non-null timestamp, which means
-        // a just-started round (no scores yet) won't appear in friends'
+        // live filter requires a non-null timestamp, which means a
+        // just-started round (no scores yet) won't appear in friends'
         // feeds until the first hole is committed. Empty placeholder
-        // rounds therefore don't clutter the live strip.
+        // rounds therefore don't clutter the live feed cards.
         void cloudUpsertRound(newRound, { bumpLastScoreAt: false });
       },
       setHoleScore: (scorerId, holeNumber, relativeScore) => {
@@ -1477,7 +1480,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         // Push every score tap to the cloud so a tab close / crash mid-
         // hole doesn't drop the entry, and so `last_score_at` correctly
         // reflects the latest score event (it powers the friends'
-        // live-strip ordering — see migration 017).
+        // in-progress feed ordering — see migration 017).
         void cloudUpsertRound(next);
       },
       setCustomHoleScore: (scorerId, holeNumber, strokes) => {
@@ -1562,7 +1565,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
         });
         // A range change isn't itself a "score event" — don't bump
         // last_score_at so a sleepy friend toggling front-9 doesn't
-        // re-promote their card to the top of the live strip.
+        // re-promote their card to the top of the live feed.
         if (changed && snapshot) {
           void cloudUpsertRound(snapshot, { bumpLastScoreAt: false });
         }
@@ -1626,7 +1629,7 @@ export function GolfRoundProvider({ children }: PropsWithChildren) {
       },
       abandonCurrentRound: () => {
         // Drop any cloud mirror so the row doesn't linger in friends'
-        // live strips after the scorer bails out.
+        // in-progress feed cards after the scorer bails out.
         const snapshotId = currentRound?.id;
         if (snapshotId) {
           setCloudRounds((rounds) => rounds.filter((r) => r.id !== snapshotId));

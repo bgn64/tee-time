@@ -99,9 +99,9 @@ function FormatScreen() {
   const [teamTeeIds, setTeamTeeIds] = useState<Record<string, string | undefined>>({});
   const [pickerTarget, setPickerTarget] = useState<TeePickerTarget>(null);
 
-  // Live-strip opt-out. Default ON; users can flip OFF to keep the
-  // round out of friends' live strips while still syncing to their own
-  // cloud history. State survives stroke/scramble swaps.
+  // Live-share opt-out. Default ON; users can flip OFF to keep the
+  // round out of friends' in-progress feed cards while still syncing
+  // to their own cloud history. State survives stroke/scramble swaps.
   const [shareLive, setShareLive] = useState(true);
 
   // "Move X" bottom sheet state. `moveSource` carries the playerId we
