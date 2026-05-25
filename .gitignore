@@ -36,8 +36,14 @@ yarn-error.*
 # typescript
 *.tsbuildinfo
 
+# PowerSync web worker assets (copied via `npx powersync-web copy-assets`)
+/public/@powersync
+
 example
 
 # generated native folders
 /ios
 /android
+
+.tmp-export/
+
