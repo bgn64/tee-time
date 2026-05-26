@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -6,18 +6,19 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-} from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { Stack, useLocalSearchParams } from "expo-router";
-import { useQuery } from "@powersync/react";
+  View
+} from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { Stack, useLocalSearchParams } from 'expo-router';
+import { useQuery } from '@powersync/react';
 
-import { useSystem } from "@/library/powersync/system";
-import { LISTS_TABLE, TODOS_TABLE } from "@/library/powersync/AppSchema";
-import { TodoItemWidget } from "@/components/widgets/TodoItemWidget";
-import { NameInputModal } from "@/components/widgets/NameInputModal";
-import { confirmAsync, showAlert } from "@/library/utils/alert";
-import { uuid } from "@/library/utils/uuid";
+import { useSystem } from '@/library/powersync/system';
+import { LISTS_TABLE, TODOS_TABLE } from '@/library/powersync/AppSchema';
+import { useTheme } from '@/library/theme/ThemeContext';
+import { TodoItemWidget } from '@/components/widgets/TodoItemWidget';
+import { NameInputModal } from '@/components/widgets/NameInputModal';
+import { confirmAsync, showAlert } from '@/library/utils/alert';
+import { uuid } from '@/library/utils/uuid';
 
 interface TodoRow {
   id: string;
@@ -38,17 +39,19 @@ interface ListRow {
 export default function EditListScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const system = useSystem();
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const [modalVisible, setModalVisible] = React.useState(false);
 
   const { data: lists } = useQuery<ListRow>(
     `SELECT id, name FROM ${LISTS_TABLE} WHERE id = ? LIMIT 1`,
-    [id],
+    [id]
   );
   const list = lists?.[0];
 
   const { data: todos, isLoading } = useQuery<TodoRow>(
     `SELECT * FROM ${TODOS_TABLE} WHERE list_id = ? ORDER BY created_at ASC NULLS LAST`,
-    [id],
+    [id]
   );
 
   const handleCreate = async (description: string) => {
@@ -56,15 +59,15 @@ export default function EditListScreen() {
     try {
       const userId = await system.supabaseConnector.userId();
       if (!userId) {
-        showAlert("Not signed in", "You must be signed in to add a todo.");
+        showAlert('Not signed in', 'You must be signed in to add a todo.');
         return;
       }
       await system.powersync.execute(
         `INSERT INTO ${TODOS_TABLE} (id, list_id, created_at, description, created_by, completed) VALUES (?, ?, datetime(), ?, ?, 0)`,
-        [uuid(), id, description, userId],
+        [uuid(), id, description, userId]
       );
     } catch (err: any) {
-      showAlert("Could not add todo", err?.message ?? String(err));
+      showAlert('Could not add todo', err?.message ?? String(err));
     }
   };
 
@@ -78,33 +81,30 @@ export default function EditListScreen() {
           nextCompleted,
           nextCompleted ? new Date().toISOString() : null,
           nextCompleted ? userId : null,
-          todo.id,
-        ],
+          todo.id
+        ]
       );
     } catch (err: any) {
-      showAlert("Could not update todo", err?.message ?? String(err));
+      showAlert('Could not update todo', err?.message ?? String(err));
     }
   };
 
   const handleDelete = async (todo: TodoRow) => {
-    const ok = await confirmAsync(
-      "Delete todo?",
-      todo.description ?? undefined,
-    );
+    const ok = await confirmAsync('Delete todo?', todo.description ?? undefined);
     if (!ok) return;
     try {
       await system.powersync.execute(`DELETE FROM ${TODOS_TABLE} WHERE id = ?`, [todo.id]);
     } catch (err: any) {
-      showAlert("Could not delete todo", err?.message ?? String(err));
+      showAlert('Could not delete todo', err?.message ?? String(err));
     }
   };
 
   return (
     <View style={styles.container}>
-      <Stack.Screen options={{ title: list?.name ?? "List" }} />
+      <Stack.Screen options={{ title: list?.name ?? 'List' }} />
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -112,7 +112,7 @@ export default function EditListScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <TodoItemWidget
-              description={item.description ?? ""}
+              description={item.description ?? ''}
               completed={!!item.completed}
               onToggle={() => handleToggle(item)}
               onDelete={() => handleDelete(item)}
@@ -148,43 +148,45 @@ export default function EditListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f7f7f8",
-  },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  empty: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-  },
-  emptyContent: {
-    flex: 1,
-  },
-  emptyText: {
-    color: "#666",
-    textAlign: "center",
-    fontSize: 15,
-  },
-  fab: {
-    position: "absolute",
-    right: 20,
-    bottom: Platform.OS === "web" ? 20 : 28,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#2563eb",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background
+    },
+    centered: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    empty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 40
+    },
+    emptyContent: {
+      flex: 1
+    },
+    emptyText: {
+      color: colors.textMuted,
+      textAlign: 'center',
+      fontSize: 15
+    },
+    fab: {
+      position: 'absolute',
+      right: 20,
+      bottom: Platform.OS === 'web' ? 20 : 28,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4
+    }
+  });
+}

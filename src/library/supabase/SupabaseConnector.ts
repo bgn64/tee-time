@@ -39,8 +39,24 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
     });
   }
 
-  async login(email: string, password: string) {
-    const { error } = await this.client.auth.signInWithPassword({ email, password });
+  async sendMagicCode(email: string): Promise<void> {
+    const { error } = await this.client.auth.signInWithOtp({
+      email,
+      // Invite-only: refuse to provision accounts on the fly. Unknown
+      // emails get a clear error which bubbles up as a UI alert.
+      options: { shouldCreateUser: false }
+    });
+    if (error) {
+      throw error;
+    }
+  }
+
+  async verifyMagicCode(email: string, code: string): Promise<void> {
+    const { error } = await this.client.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email'
+    });
     if (error) {
       throw error;
     }

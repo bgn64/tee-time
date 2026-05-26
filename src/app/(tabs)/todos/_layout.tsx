@@ -1,20 +1,20 @@
-import React from "react";
-import { Stack } from "expo-router";
+import React from 'react';
+import { Stack } from 'expo-router';
 
-import { SignInGate } from "@/components/widgets/SignInGate";
+import { useTheme } from '@/library/theme/ThemeContext';
 
 export default function TodosLayout() {
+  const { colors } = useTheme();
   return (
-    <SignInGate>
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: "#25292e" },
-          headerTintColor: "#fff",
-          headerShadowVisible: false,
-        }}>
-        <Stack.Screen name="index" options={{ title: "Lists" }} />
-        <Stack.Screen name="[id]" options={{ title: "List" }} />
-      </Stack>
-    </SignInGate>
+    <Stack
+      screenOptions={{
+        headerStyle: { backgroundColor: colors.tabBar },
+        headerTintColor: colors.textTitle,
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: colors.background }
+      }}>
+      <Stack.Screen name="index" options={{ title: 'Lists' }} />
+      <Stack.Screen name="[id]" options={{ title: 'List' }} />
+    </Stack>
   );
 }

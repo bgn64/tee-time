@@ -1,4 +1,4 @@
-import React from "react";
+import React from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -6,18 +6,19 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
-} from "react-native";
-import Ionicons from "@expo/vector-icons/Ionicons";
-import { router, Stack } from "expo-router";
-import { useQuery } from "@powersync/react";
+  View
+} from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { router, Stack } from 'expo-router';
+import { useQuery } from '@powersync/react';
 
-import { useSystem } from "@/library/powersync/system";
-import { LISTS_TABLE, TODOS_TABLE } from "@/library/powersync/AppSchema";
-import { ListItemWidget } from "@/components/widgets/ListItemWidget";
-import { NameInputModal } from "@/components/widgets/NameInputModal";
-import { confirmAsync, showAlert } from "@/library/utils/alert";
-import { uuid } from "@/library/utils/uuid";
+import { useSystem } from '@/library/powersync/system';
+import { LISTS_TABLE, TODOS_TABLE } from '@/library/powersync/AppSchema';
+import { useTheme } from '@/library/theme/ThemeContext';
+import { ListItemWidget } from '@/components/widgets/ListItemWidget';
+import { NameInputModal } from '@/components/widgets/NameInputModal';
+import { confirmAsync, showAlert } from '@/library/utils/alert';
+import { uuid } from '@/library/utils/uuid';
 
 interface ListRow {
   id: string;
@@ -44,6 +45,8 @@ const LISTS_WITH_COUNTS_SQL = `
 
 export default function ListsScreen() {
   const system = useSystem();
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const { data: lists, isLoading } = useQuery<ListRow>(LISTS_WITH_COUNTS_SQL);
   const [modalVisible, setModalVisible] = React.useState(false);
 
@@ -52,22 +55,22 @@ export default function ListsScreen() {
     try {
       const userId = await system.supabaseConnector.userId();
       if (!userId) {
-        showAlert("Not signed in", "You must be signed in to create a list.");
+        showAlert('Not signed in', 'You must be signed in to create a list.');
         return;
       }
       await system.powersync.execute(
         `INSERT INTO ${LISTS_TABLE} (id, created_at, name, owner_id) VALUES (?, datetime(), ?, ?)`,
-        [uuid(), name, userId],
+        [uuid(), name, userId]
       );
     } catch (err: any) {
-      showAlert("Could not create list", err?.message ?? String(err));
+      showAlert('Could not create list', err?.message ?? String(err));
     }
   };
 
   const handleDelete = async (list: ListRow) => {
     const ok = await confirmAsync(
-      "Delete list?",
-      `"${list.name ?? "Untitled"}" and its todos will be removed.`,
+      'Delete list?',
+      `"${list.name ?? 'Untitled'}" and its todos will be removed.`
     );
     if (!ok) return;
     try {
@@ -76,29 +79,32 @@ export default function ListsScreen() {
         await tx.execute(`DELETE FROM ${LISTS_TABLE} WHERE id = ?`, [list.id]);
       });
     } catch (err: any) {
-      showAlert("Could not delete list", err?.message ?? String(err));
+      showAlert('Could not delete list', err?.message ?? String(err));
     }
   };
 
   const handleOpen = (list: ListRow) => {
-    router.push({ pathname: "/(tabs)/todos/[id]", params: { id: list.id } });
+    router.push({ pathname: '/(tabs)/todos/[id]', params: { id: list.id } });
   };
 
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: "Lists",
+          title: 'Lists',
           headerRight: () => (
-            <TouchableOpacity onPress={() => system.signOut()} hitSlop={8} style={styles.headerButton}>
-              <Ionicons name="log-out-outline" size={22} color="#fff" />
+            <TouchableOpacity
+              onPress={() => system.signOut()}
+              hitSlop={8}
+              style={styles.headerButton}>
+              <Ionicons name="log-out-outline" size={22} color={colors.textTitle} />
             </TouchableOpacity>
-          ),
+          )
         }}
       />
       {isLoading ? (
         <View style={styles.centered}>
-          <ActivityIndicator />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -106,7 +112,7 @@ export default function ListsScreen() {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
             <ListItemWidget
-              name={item.name ?? ""}
+              name={item.name ?? ''}
               totalCount={Number(item.total_count) || 0}
               completedCount={Number(item.completed_count) || 0}
               onPress={() => handleOpen(item)}
@@ -143,46 +149,48 @@ export default function ListsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f7f7f8",
-  },
-  centered: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  empty: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-  },
-  emptyContent: {
-    flex: 1,
-  },
-  emptyText: {
-    color: "#666",
-    textAlign: "center",
-    fontSize: 15,
-  },
-  fab: {
-    position: "absolute",
-    right: 20,
-    bottom: Platform.OS === "web" ? 20 : 28,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#2563eb",
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 6,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  headerButton: {
-    paddingHorizontal: 8,
-  },
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background
+    },
+    centered: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center'
+    },
+    empty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 40
+    },
+    emptyContent: {
+      flex: 1
+    },
+    emptyText: {
+      color: colors.textMuted,
+      textAlign: 'center',
+      fontSize: 15
+    },
+    fab: {
+      position: 'absolute',
+      right: 20,
+      bottom: Platform.OS === 'web' ? 20 : 28,
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOpacity: 0.2,
+      shadowRadius: 6,
+      shadowOffset: { width: 0, height: 2 },
+      elevation: 4
+    },
+    headerButton: {
+      paddingHorizontal: 8
+    }
+  });
+}

@@ -1,12 +1,7 @@
 import React from 'react';
-import {
-  Modal,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+
+import { useTheme } from '@/library/theme/ThemeContext';
 
 interface NameInputModalProps {
   visible: boolean;
@@ -31,11 +26,7 @@ export function NameInputModal({
   onCancel
 }: NameInputModalProps) {
   return (
-    <Modal
-      visible={visible}
-      animationType="fade"
-      transparent
-      onRequestClose={onCancel}>
+    <Modal visible={visible} animationType="fade" transparent onRequestClose={onCancel}>
       {/* key={String(visible)} resets the input state every time the modal opens */}
       <NameInputModalBody
         key={String(visible)}
@@ -60,6 +51,8 @@ function NameInputModalBody({
   onSubmit,
   onCancel
 }: BodyProps) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const [value, setValue] = React.useState(initialValue);
 
   const handleSubmit = () => {
@@ -77,6 +70,7 @@ function NameInputModalBody({
         <TextInput
           style={styles.input}
           placeholder={placeholder}
+          placeholderTextColor={colors.textMuted}
           value={value}
           onChangeText={setValue}
           autoFocus
@@ -96,60 +90,64 @@ function NameInputModalBody({
   );
 }
 
-const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24
-  },
-  card: {
-    width: '100%',
-    maxWidth: 420,
-    backgroundColor: 'white',
-    borderRadius: 12,
-    padding: 20
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '600',
-    marginBottom: 12,
-    color: '#111'
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: '#111',
-    backgroundColor: '#fff'
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 8,
-    marginTop: 16
-  },
-  button: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 8
-  },
-  cancelButton: {
-    backgroundColor: '#eee'
-  },
-  cancelText: {
-    color: '#333',
-    fontWeight: '500'
-  },
-  submitButton: {
-    backgroundColor: '#2563eb'
-  },
-  submitText: {
-    color: 'white',
-    fontWeight: '600'
-  }
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    backdrop: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 24
+    },
+    card: {
+      width: '100%',
+      maxWidth: 420,
+      backgroundColor: colors.cardBg,
+      borderRadius: 12,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: colors.border
+    },
+    title: {
+      fontSize: 18,
+      fontWeight: '700',
+      marginBottom: 12,
+      color: colors.textTitle
+    },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+      color: colors.textTitle,
+      backgroundColor: colors.background
+    },
+    buttonRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 8,
+      marginTop: 16
+    },
+    button: {
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 8
+    },
+    cancelButton: {
+      backgroundColor: colors.chipBg
+    },
+    cancelText: {
+      color: colors.textBody,
+      fontWeight: '600'
+    },
+    submitButton: {
+      backgroundColor: colors.primary
+    },
+    submitText: {
+      color: '#ffffff',
+      fontWeight: '700'
+    }
+  });
+}
