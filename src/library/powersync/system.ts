@@ -11,6 +11,7 @@ import {
 import { AppConfig } from '../supabase/AppConfig';
 import { SupabaseConnector } from '../supabase/SupabaseConnector';
 import { ExpoKVStorage, WebKVStorage } from '../storage/KVStorage';
+import { clearCurrentHoleForUser } from '../golf/currentHoleStore';
 import { AppSchema } from './AppSchema';
 
 const logger = createBaseLogger();
@@ -122,6 +123,15 @@ export class System {
 
   /** Sign the user out and clear all local PowerSync data. Safe to call multiple times. */
   async signOut() {
+    // Capture the user id BEFORE logout — getSession() returns null
+    // post-sign-out, and we still want to sweep this user's per-device
+    // current-hole keys. Runs unconditionally; the cleanup is idempotent
+    // and must not be skipped by the `!connected` early-return in
+    // ensureDisconnectedAndClear.
+    const userId = await this.supabaseConnector.userId().catch(() => undefined);
+    if (userId) {
+      await clearCurrentHoleForUser(userId);
+    }
     await this.supabaseConnector.logout();
     await this.ensureDisconnectedAndClear();
   }

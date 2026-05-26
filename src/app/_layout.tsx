@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { PowerSyncContext } from '@powersync/react';
 
 import { SystemContext, system } from '@/library/powersync/system';
+import { RoundProvider } from '@/library/golf/RoundContext';
 import { ThemeProvider, useTheme } from '@/library/theme/ThemeContext';
 
 export default function RootLayout() {
@@ -64,17 +65,19 @@ function RootLayoutInner() {
   return (
     <SystemContext.Provider value={system}>
       <PowerSyncContext.Provider value={system.powersync}>
-        <StatusBar style={statusBarStyle} />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: colors.background },
-            headerTintColor: colors.textTitle,
-            headerShadowVisible: false,
-            contentStyle: { backgroundColor: colors.background }
-          }}>
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="+not-found" options={{ title: 'Not found' }} />
-        </Stack>
+        <RoundProvider>
+          <StatusBar style={statusBarStyle} />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: colors.background },
+              headerTintColor: colors.textTitle,
+              headerShadowVisible: false,
+              contentStyle: { backgroundColor: colors.background }
+            }}>
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="+not-found" options={{ title: 'Not found' }} />
+          </Stack>
+        </RoundProvider>
       </PowerSyncContext.Provider>
     </SystemContext.Provider>
   );

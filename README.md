@@ -41,6 +41,14 @@ This command will move the starter code to the **app-example** directory and cre
 - If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
 - Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
 
+## Score tab — out-of-repo setup
+
+The Score tab introduces two new synced tables (`scorecards`, `scorecard_scores`) plus a server-side trigger that denormalizes `owner_user_id` onto child rows. After pulling these changes you need to apply the new schema to your Supabase project and update the PowerSync sync rules — neither is run automatically by the app.
+
+1. **Apply the SQL migration.** Open the Supabase dashboard → SQL editor and paste the contents of [`supabase/migrations/002_scorecards.sql`](./supabase/migrations/002_scorecards.sql). This creates the two new tables, the `scorecard_scores` owner-denorm trigger, the `auth.uid()` RLS policies, and `ALTER PUBLICATION powersync ADD TABLE …` so PowerSync can replicate them.
+2. **Update the PowerSync sync rules.** Open the PowerSync dashboard → Sync Rules and replace the rules with the contents of [`sync-rules.yaml`](./sync-rules.yaml). The new file adds `scorecards` and `scorecard_scores` streams scoped to `owner_user_id = request.user_id()` so two devices signed in to the same account see the same in-progress round.
+3. **Smoke-test cross-device sync.** Sign in on web and on a phone/simulator with the same magic-link OTP account. Start a round on one device, tap a score, and confirm the second device's `ReadOnlyScorecard` reflects the change within a couple of seconds. The current-hole position (`HoleNavBar`) intentionally stays per-device — only the scores sync.
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

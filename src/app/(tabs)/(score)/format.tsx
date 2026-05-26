@@ -1,0 +1,421 @@
+/**
+ * Format Selection — Step 2 of the Score-tab round-setup flow.
+ *
+ * Trimmed version of the destination `format.tsx`: stroke-only, no
+ * scramble UI, no live-share toggle. Reads `courseId` + comma-
+ * separated `playerIds` from the URL, lets the user pick a tee per
+ * player via `TeePickerSheet`, then calls `startRound(...)`. Once the
+ * round becomes visible in the RoundProvider's `useQuery`, the
+ * `<Redirect>` gate below carries the user into the locked scoring
+ * screen automatically.
+ *
+ * Redirect gate: bounces to `/scoring` if a round is already in
+ * flight so a stale push of this screen can't kick off a second one.
+ */
+
+import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+
+import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
+import { SEED_COURSES } from '@/data/courses';
+import { SEED_PLAYERS } from '@/data/players';
+import { defaultTeeIdForCourse } from '@/library/golf/courseHelpers';
+import { useRound } from '@/library/golf/RoundContext';
+import { useTheme } from '@/library/theme/ThemeContext';
+import type { Tee } from '@/types/golf';
+
+export default function FormatScreen() {
+  const { colors } = useTheme();
+  const { courseId, playerIds: rawPlayerIds } = useLocalSearchParams<{
+    courseId?: string;
+    playerIds?: string;
+  }>();
+  const { currentRound, roundHydrated, startRound } = useRound();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const playerIds = useMemo<string[]>(
+    () => (rawPlayerIds ? rawPlayerIds.split(',').filter(Boolean) : []),
+    [rawPlayerIds]
+  );
+
+  const course = SEED_COURSES.find((c) => c.id === courseId);
+
+  const [teeIds, setTeeIds] = useState<Record<string, string | undefined>>(
+    () => {
+      const defaultTee = course ? defaultTeeIdForCourse(course) : undefined;
+      const seeded: Record<string, string | undefined> = {};
+      for (const pid of playerIds) seeded[pid] = defaultTee;
+      return seeded;
+    }
+  );
+  const [pickerTarget, setPickerTarget] = useState<string | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  if (!roundHydrated) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} />
+      </View>
+    );
+  }
+
+  if (currentRound) {
+    return <Redirect href="/(tabs)/(score)/scoring" />;
+  }
+
+  if (!course || playerIds.length === 0) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <Text style={[styles.errorText, { color: colors.textBody }]}>
+          Missing course or players. Go back and try again.
+        </Text>
+      </View>
+    );
+  }
+
+  const courseTees: Tee[] = course.tees ?? [];
+  const hasTees = courseTees.length > 0;
+  const teeById = new Map(courseTees.map((t) => [t.id, t]));
+
+  function resolveName(playerId: string): string {
+    const p = SEED_PLAYERS.find((q) => q.id === playerId);
+    return p?.nickname ?? playerId;
+  }
+
+  function resolveColor(playerId: string): string {
+    const p = SEED_PLAYERS.find((q) => q.id === playerId);
+    return p?.color ?? colors.primary;
+  }
+
+  async function handleStart() {
+    if (starting) return;
+    if (!course || playerIds.length === 0) return;
+    setStarting(true);
+    setStartError(null);
+    try {
+      await startRound({
+        course,
+        playerIds,
+        holeRange: 'all',
+        teeIds,
+      });
+      // No explicit navigation — once `currentRound` becomes
+      // non-null in the RoundProvider, the `<Redirect>` gate at the
+      // top of this screen sends us to `/scoring`. This avoids racing
+      // PowerSync's `useQuery` subscription with `router.replace`,
+      // which previously caused scoring.tsx to mount before the round
+      // was visible and trigger the defensive "round disappeared"
+      // bounce.
+    } catch (e) {
+      setStartError(e instanceof Error ? e.message : String(e));
+      setStarting(false);
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.headerRow}>
+        <Pressable
+          onPress={() => router.back()}
+          hitSlop={8}
+          style={styles.backBtn}>
+          <Ionicons name="chevron-back" size={22} color={colors.textTitle} />
+          <Text style={styles.backText}>Players</Text>
+        </Pressable>
+      </View>
+
+      <ScrollView contentContainerStyle={styles.content}>
+        <Text style={styles.greeting} numberOfLines={1}>
+          {course.name} ·{' '}
+          {playerIds.length === 1 ? 'solo' : `${playerIds.length} players`}
+        </Text>
+        <Text style={styles.title}>How are you scoring?</Text>
+
+        <View style={styles.toggleRow}>
+          <View style={[styles.toggle, styles.toggleActive]}>
+            <Text style={[styles.toggleText, styles.toggleTextActive]}>
+              Stroke
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.help}>
+          <Text style={styles.helpHead}>Stroke play.</Text>
+          <Text style={styles.helpBody}>
+            Everyone scores for themselves. Lowest total wins.
+          </Text>
+        </View>
+
+        <Text style={styles.sectionLabel}>SCORING FOR</Text>
+        <View style={styles.list}>
+          {playerIds.map((id) => {
+            const color = resolveColor(id);
+            const letter = (resolveName(id)[0] ?? '?').toUpperCase();
+            const tee = teeIds[id] ? teeById.get(teeIds[id]!) : undefined;
+            return (
+              <View key={id} style={styles.rowCard}>
+                <View style={[styles.rowAvatar, { backgroundColor: color }]}>
+                  <Text style={styles.rowAvatarText}>{letter}</Text>
+                </View>
+                <Text style={styles.rowName} numberOfLines={1}>
+                  {resolveName(id)}
+                </Text>
+                {hasTees && (
+                  <Pressable
+                    style={[styles.teePill, !tee && styles.teePillEmpty]}
+                    onPress={() => setPickerTarget(id)}>
+                    {tee ? (
+                      <>
+                        <View
+                          style={[
+                            styles.teePillDot,
+                            { backgroundColor: teeSwatch(tee) },
+                          ]}
+                        />
+                        <Text style={styles.teePillText} numberOfLines={1}>
+                          {tee.name}
+                        </Text>
+                      </>
+                    ) : (
+                      <Text style={styles.teePillTextEmpty}>+ Tee</Text>
+                    )}
+                    <Text style={styles.teePillChev}>▾</Text>
+                  </Pressable>
+                )}
+              </View>
+            );
+          })}
+        </View>
+
+        {startError && (
+          <Text style={[styles.errorText, { color: colors.accent, marginTop: 12 }]}>
+            {startError}
+          </Text>
+        )}
+      </ScrollView>
+
+      <View style={styles.footer}>
+        <Pressable
+          style={[styles.nextBtn, starting && styles.nextBtnDisabled]}
+          disabled={starting}
+          onPress={handleStart}>
+          {starting ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.nextBtnText}>Start round</Text>
+          )}
+        </Pressable>
+      </View>
+
+      <TeePickerSheet
+        visible={pickerTarget !== null && hasTees}
+        scorerName={pickerTarget ? resolveName(pickerTarget) : ''}
+        tees={courseTees}
+        selectedTeeId={pickerTarget ? teeIds[pickerTarget] : undefined}
+        onCancel={() => setPickerTarget(null)}
+        onPick={(teeId) => {
+          if (!pickerTarget) return;
+          setTeeIds((prev) => ({ ...prev, [pickerTarget]: teeId }));
+          setPickerTarget(null);
+        }}
+      />
+    </View>
+  );
+}
+
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    centered: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+    },
+    errorText: {
+      fontSize: 13,
+      textAlign: 'center',
+    },
+    headerRow: {
+      paddingHorizontal: 10,
+      paddingTop: 8,
+      paddingBottom: 4,
+    },
+    backBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      alignSelf: 'flex-start',
+      paddingVertical: 6,
+      paddingRight: 8,
+    },
+    backText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textTitle,
+    },
+    content: {
+      padding: 14,
+      paddingTop: 8,
+      paddingBottom: 32,
+    },
+    greeting: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textMuted,
+      letterSpacing: 0.2,
+    },
+    title: {
+      fontSize: 22,
+      fontWeight: '800',
+      color: colors.textTitle,
+      marginTop: 4,
+      marginBottom: 14,
+    },
+    toggleRow: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 14,
+    },
+    toggle: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBg,
+    },
+    toggleActive: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    toggleText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textBody,
+    },
+    toggleTextActive: { color: '#fff' },
+    help: {
+      backgroundColor: colors.chipBg,
+      borderRadius: 10,
+      padding: 10,
+      marginBottom: 14,
+    },
+    helpHead: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: colors.primaryDark,
+    },
+    helpBody: {
+      fontSize: 12,
+      color: colors.textBody,
+      marginTop: 2,
+    },
+    sectionLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      color: colors.textMuted,
+      marginBottom: 8,
+    },
+    list: { gap: 8 },
+    rowCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 10,
+      backgroundColor: colors.cardBg,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    rowAvatar: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    rowAvatarText: {
+      color: '#fff',
+      fontWeight: '800',
+      fontSize: 13,
+    },
+    rowName: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textTitle,
+    },
+    teePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 9,
+      paddingVertical: 6,
+      borderRadius: 999,
+      backgroundColor: colors.chipBg,
+    },
+    teePillEmpty: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: 'transparent',
+    },
+    teePillDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: 'rgba(0,0,0,0.15)',
+    },
+    teePillText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    teePillTextEmpty: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
+    teePillChev: {
+      fontSize: 10,
+      color: colors.textMuted,
+      fontWeight: '800',
+    },
+    footer: {
+      padding: 14,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
+    },
+    nextBtn: {
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      paddingVertical: 13,
+      alignItems: 'center',
+    },
+    nextBtnDisabled: {
+      backgroundColor: colors.primaryDark,
+      opacity: 0.7,
+    },
+    nextBtnText: {
+      color: '#fff',
+      fontWeight: '800',
+      fontSize: 14,
+      letterSpacing: 0.3,
+    },
+  });
+}

@@ -1,0 +1,41 @@
+# PowerSync sync stream rules for the tee-time PoC.
+# Edited locally; deployed via `powersync deploy sync-config`.
+
+config:
+  edition: 3
+
+streams:
+  # Every list owned by the authenticated user.
+  lists:
+    query: |
+      SELECT *
+      FROM lists
+      WHERE owner_id = auth.user_id()
+    auto_subscribe: true
+
+  # All todos belonging to the user's lists.
+  todos:
+    query: |
+      SELECT todos.*
+      FROM todos
+      JOIN lists ON lists.id = todos.list_id
+      WHERE lists.owner_id = auth.user_id()
+    auto_subscribe: true
+
+  # Every scorecard (header row) owned by the authenticated user.
+  scorecards:
+    query: |
+      SELECT *
+      FROM scorecards
+      WHERE owner_user_id = auth.user_id()
+    auto_subscribe: true
+
+  # Per-cell scores. owner_user_id is denormalized on each row by the
+  # BEFORE INSERT/UPDATE trigger in supabase/migrations/002_scorecards.sql,
+  # so no join against scorecards is needed here.
+  scorecard_scores:
+    query: |
+      SELECT *
+      FROM scorecard_scores
+      WHERE owner_user_id = auth.user_id()
+    auto_subscribe: true

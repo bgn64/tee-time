@@ -104,12 +104,14 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
 
         switch (op.op) {
           case UpdateType.PUT: {
-            const record = { ...op.opData, id: op.id };
+            const record = parseJsonColumns(op.table, { ...op.opData, id: op.id });
             result = await table.upsert(record);
             break;
           }
           case UpdateType.PATCH:
-            result = await table.update(op.opData ?? {}).eq('id', op.id);
+            result = await table
+              .update(parseJsonColumns(op.table, op.opData ?? {}))
+              .eq('id', op.id);
             break;
           case UpdateType.DELETE:
             result = await table.delete().eq('id', op.id);
@@ -137,4 +139,35 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
       }
     }
   }
+}
+
+// Columns whose local representation is a JSON-encoded string but
+// whose Postgres type is `jsonb`. The upload connector parses them
+// back into objects before sending to Supabase so the jsonb column
+// receives an object literal — not a quoted string scalar.
+const JSON_COLUMNS_BY_TABLE: Record<string, readonly string[]> = {
+  scorecards: ['course_snapshot', 'participants', 'player_ids']
+};
+
+function parseJsonColumns(
+  table: string,
+  record: Record<string, any>
+): Record<string, any> {
+  const cols = JSON_COLUMNS_BY_TABLE[table];
+  if (!cols || cols.length === 0) return record;
+  const next: Record<string, any> = { ...record };
+  for (const col of cols) {
+    const value = next[col];
+    if (value == null) continue;
+    if (typeof value !== 'string') continue;
+    try {
+      next[col] = JSON.parse(value);
+    } catch (e) {
+      console.warn(
+        `[SupabaseConnector] Failed to parse JSON column ${table}.${col}; sending as-is.`,
+        e
+      );
+    }
+  }
+  return next;
 }
