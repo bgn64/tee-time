@@ -36,7 +36,6 @@ import { RangeDropdown, rangeLabel } from '@/components/scoring/RangeDropdown';
 import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
 import { ScoreEntryRow } from '@/components/scoring/ScoreEntryRow';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
-import { findSeedPlayer } from '@/data/players';
 import { yardageForHole } from '@/library/golf/courseHelpers';
 import { useRound } from '@/library/golf/RoundContext';
 import {
@@ -44,6 +43,7 @@ import {
   holesInRange,
   playerProgress,
 } from '@/library/golf/scoring';
+import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
 import { confirmAsync } from '@/library/utils/alert';
 
@@ -65,6 +65,17 @@ export default function ScoringScreen() {
   const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [teeEditTarget, setTeeEditTarget] = useState<string | null>(null);
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  // Resolve display name / avatar color for every participant in
+  // the round. Called unconditionally (before the early-return
+  // branches below) so the hook order is stable. Returns an empty
+  // map when there's no round yet — that's fine; the consumer code
+  // is also gated on currentRound.
+  const participantKeys = useMemo(
+    () => currentRound?.playerIds ?? [],
+    [currentRound]
+  );
+  const resolver = useParticipantResolver(participantKeys);
 
   // Stash handlers in refs so background-back / focus listeners hold
   // the freshest closures (Android back fires after a render snapshot
@@ -92,8 +103,12 @@ export default function ScoringScreen() {
       );
       if (!ok) return;
     }
+    // Navigation is handled by the defensive bounce effect below
+    // once `currentRound` flips to null — using a single nav site
+    // avoids the dismissAll-after-dismissAll race that fires
+    // POP_TO_TOP on web (where the stack may only contain scoring
+    // after a page reload).
     await completeCurrentRound();
-    router.dismissAll();
   }, [completeCurrentRound]);
 
   // Block Android hardware back while the locked round is on screen.
@@ -104,21 +119,35 @@ export default function ScoringScreen() {
     }, [])
   );
 
-  // Track whether we've seen a non-null round at least once so the
-  // defensive bounce below only fires for the "round was here, then
-  // went away" case (abandon / sync delete) — not for the brief tick
-  // between scoring.tsx mounting and PowerSync's useQuery emitting
-  // the freshly-inserted scorecard.
-  const hasSeenRoundRef = useRef(false);
+  // Bounce back to the score-tab root when there is no active round
+  // and PowerSync's local cache has been read. Covers three paths:
+  //
+  //   · User taps Finish or Abandon → currentRound flips to null →
+  //     this effect navigates them out.
+  //   · Another device deletes / completes the round → same trigger.
+  //   · User reloads the page while parked on /scoring with no
+  //     active round (or lands on the URL fresh) → same trigger.
+  //
+  // We use `router.replace('/(tabs)/(score)')` instead of
+  // `router.dismissAll()` because the Stack may have no entries
+  // beneath scoring (e.g. immediately after a web reload), and
+  // `dismissAll` fires POP_TO_TOP in that case. Replace works
+  // regardless of stack history.
+  //
+  // `hasBouncedRef` guards against re-firing on every render after
+  // the round disappears — the navigation only needs to happen once.
+  // It resets when a new round arrives so a future
+  // round-then-abandon cycle still triggers.
+  const hasBouncedRef = useRef(false);
   useEffect(() => {
-    if (currentRound) hasSeenRoundRef.current = true;
-  }, [currentRound]);
-
-  // Defensive bounce if the round disappears (abandon races, sync deletes).
-  useEffect(() => {
-    if (roundHydrated && !currentRound && hasSeenRoundRef.current) {
-      router.dismissAll();
+    if (!roundHydrated) return;
+    if (currentRound) {
+      hasBouncedRef.current = false;
+      return;
     }
+    if (hasBouncedRef.current) return;
+    hasBouncedRef.current = true;
+    router.replace('/(tabs)/(score)' as never);
   }, [roundHydrated, currentRound]);
 
   if (!roundHydrated || !currentHoleHydrated) {
@@ -139,14 +168,15 @@ export default function ScoringScreen() {
   const maxHole = currentRound.course.holes.length;
   const inRangeHoles = holesInRange(currentRound.course.holes, currentRound.holeRange);
 
-  // Resolve display name + avatar color for each scorer from the
-  // local seed roster (the round itself only carries `participantKey`
-  // + tee). Falls back to participantKey if a player vanishes from
-  // the seed (shouldn't happen for v1).
+  // Resolve display name + avatar color for each scorer via the
+  // participant resolver (PowerSync watches over profiles +
+  // custom_players, with a direct-fetch fallback for unfriended
+  // ex-friends). Falls back to a placeholder when the row isn't
+  // resolvable (e.g., offline + ex-friend + historic round).
   const scorers = currentRound.playerIds.map((pid) => {
-    const p = findSeedPlayer(pid);
-    const name = p?.nickname ?? pid;
-    const color = p?.color ?? colors.primary;
+    const resolved = resolver.get(pid);
+    const name = resolved?.displayName || 'Player';
+    const color = resolved?.avatarColor || colors.primary;
     return {
       id: pid,
       name,
@@ -290,9 +320,12 @@ export default function ScoringScreen() {
         onCancel={() => setAbandonConfirmVisible(false)}
         onConfirm={() => {
           setAbandonConfirmVisible(false);
-          setTimeout(async () => {
-            await abandonCurrentRound();
-            router.dismissAll();
+          // Same pattern as handleFinish: trigger the round deletion
+          // and let the defensive bounce effect handle navigation
+          // once `currentRound` becomes null. Single nav site → no
+          // POP_TO_TOP race.
+          setTimeout(() => {
+            void abandonCurrentRound();
           }, 0);
         }}
       />

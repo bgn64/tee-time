@@ -7,6 +7,7 @@ export const SCORECARD_SCORES_TABLE = 'scorecard_scores';
 export const PROFILES_TABLE = 'profiles';
 export const FRIENDSHIPS_TABLE = 'friendships';
 export const FRIEND_REQUESTS_TABLE = 'friend_requests';
+export const CUSTOM_PLAYERS_TABLE = 'custom_players';
 
 const todos = new Table(
   {
@@ -101,6 +102,23 @@ const friend_requests = new Table(
   { indexes: { by_to: ['to_user_id'], by_from: ['from_user_id'] } }
 );
 
+// Off-app players the signed-in user plays rounds with (e.g. "Dad",
+// "Mike"). Soft-deleted via `deleted_at` rather than removed — the
+// sync stream replicates ALL rows including tombstoned ones so the
+// scorecard participant resolver keeps rendering them in historic
+// rounds. The picker filters `deleted_at IS NULL` locally.
+const custom_players = new Table(
+  {
+    owner_user_id: column.text,
+    nickname: column.text,
+    avatar_color: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+    deleted_at: column.text
+  },
+  { indexes: { by_owner: ['owner_user_id'] } }
+);
+
 export const AppSchema = new Schema({
   todos,
   lists,
@@ -108,7 +126,8 @@ export const AppSchema = new Schema({
   scorecard_scores,
   profiles,
   friendships,
-  friend_requests
+  friend_requests,
+  custom_players
 });
 
 export type Database = (typeof AppSchema)['types'];
@@ -119,3 +138,4 @@ export type ScorecardScoreRecord = Database['scorecard_scores'];
 export type ProfileRecord = Database['profiles'];
 export type FriendshipRecord = Database['friendships'];
 export type FriendRequestRecord = Database['friend_requests'];
+export type CustomPlayerRecord = Database['custom_players'];

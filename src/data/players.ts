@@ -1,13 +1,16 @@
 /**
- * Seed players for the prototype.
+ * Legacy seed players (Score-tab roster v1 only).
  *
- * The player picker on the Score tab uses these as a fixed roster
- * until we build out a real friend graph. `You` is always pinned to
- * the top of the picker; the others are toggleable additions (max 4
- * total scorers per round, including You).
+ * Kept around solely as a fallback for pre-Phase-7 scorecards whose
+ * `participantKey` values were unprefixed seed ids (`'player-you'`,
+ * `'player-alice'`, …). `useParticipantResolver` calls `findSeedPlayer`
+ * when it parses a key as `kind: 'legacy'` so those in-flight rounds
+ * still render "You" / "Alice" / etc.
  *
- * Ids are stable string literals so the cloud `scorecards.participants`
- * jsonb keeps consistent `participantKey`s across devices.
+ * Going forward every new scorecard mints prefixed participantKeys
+ * (`user:{uuid}` / `custom:{uuid}`) sourced from the live friend
+ * graph + `custom_players`. Do NOT add new seed players here — add
+ * a custom player from the picker instead.
  */
 
 import type { Player } from '@/types/golf';

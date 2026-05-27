@@ -64,6 +64,33 @@ Search-result profiles are NOT synced: handle search needs a server-side prefix 
    - B taps the `Friends ✓` pill → dropdown shows `Unfriend` → confirm → friendship deleted on both sides.
 4. **Offline check.** With B's friends list populated, disconnect the network and reload the web app. The friends list and any pending FRs should still render — PowerSync's local SQLite holds them across reloads, and the RPC writes are deliberately not queued offline (they need server-side multi-row transactions).
 
+## Custom players — out-of-repo setup
+
+The Score-tab player picker replaces the old seeded roster with two
+real sources: your **friends** (live via the existing
+`friend_profiles` PowerSync stream) and **custom players** —
+user-scoped roster of off-app people you play rounds with. Custom
+players are created inline from the picker; each row has a 3-dot
+menu offering soft-delete (the row stays synced so historic
+scorecards keep rendering correctly).
+
+`participantKey` switches to a prefixed format
+(`user:{uid}` / `custom:{cid}`) so the same scorecard schema can
+reference both kinds. The seeded ids on any in-flight pre-migration
+rounds (e.g. `'player-you'`) still resolve via a legacy fallback.
+
+1. **Apply the SQL migration.** Open the Supabase dashboard → SQL editor and paste the contents of [`supabase/migrations/004_custom_players.sql`](./supabase/migrations/004_custom_players.sql). This creates the `custom_players` table (owner-scoped via FK + RLS) with a `deleted_at` column for soft-delete. The picker filters `deleted_at IS NULL` locally; the scorecard participant resolver doesn't, so deleted players keep rendering on historic rounds.
+2. **Redeploy the PowerSync sync rules.** The `custom_players` stream has been added to [`powersync/sync-config.yaml`](./powersync/sync-config.yaml). It returns ALL of the user's rows including soft-deleted ones (the picker / resolver split handles the filter locally). Push with `powersync deploy sync-config` (or paste into the dashboard → Sync Rules → Deploy).
+3. **Smoke-test the end-to-end flow** with two accounts A (friends with B):
+   - A opens the **Score** tab → picks a course → Players. Confirm "You" is pinned, B appears under FRIENDS, and the "+ Add new player" row is visible.
+   - Type "Dad" into the search box. The "+ Add new player" row updates to `Add "Dad" as a new player`. Tap it. Confirm "Dad" appears under CUSTOM PLAYERS with a 3-dot menu on the right, and is selected.
+   - Start the round with You + B + Dad. Confirm the scoring screen renders all three avatars / names correctly.
+   - Tap a name in the Final-totals row of the read-only scorecard. For `user:` participants (You + B) the row should navigate to the profile screen.
+   - Back on the players picker, tap the 3-dot menu on Dad → Delete → confirm. Confirm Dad disappears from the picker.
+   - Open the in-flight round's scorecard — Dad should still render correctly there (live lookup hits the soft-deleted row).
+4. **Unfriend / ex-friend check (online)**. After completing the round, have B unfriend A. Open the scorecard on A's device. B's name + avatar should still render correctly (the participant resolver's tier-2 direct fetch reads B's profile from Supabase since the `profiles_select_all` RLS allows it).
+5. **Offline limitation**. The same scenario when offline → B falls back to "Player". Mitigation (a `scorecard_participants` retention sync stream) is deferred.
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

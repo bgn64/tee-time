@@ -27,9 +27,9 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
 import { SEED_COURSES } from '@/data/courses';
-import { SEED_PLAYERS } from '@/data/players';
 import { defaultTeeIdForCourse } from '@/library/golf/courseHelpers';
 import { useRound } from '@/library/golf/RoundContext';
+import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Tee } from '@/types/golf';
 
@@ -61,6 +61,11 @@ export default function FormatScreen() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
+  // Resolve display info for each participant via the resolver
+  // (PowerSync watches over profiles + custom_players). Called
+  // unconditionally so the hook order is stable.
+  const resolver = useParticipantResolver(playerIds);
+
   if (!roundHydrated) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -88,13 +93,11 @@ export default function FormatScreen() {
   const teeById = new Map(courseTees.map((t) => [t.id, t]));
 
   function resolveName(playerId: string): string {
-    const p = SEED_PLAYERS.find((q) => q.id === playerId);
-    return p?.nickname ?? playerId;
+    return resolver.get(playerId)?.displayName || 'Player';
   }
 
   function resolveColor(playerId: string): string {
-    const p = SEED_PLAYERS.find((q) => q.id === playerId);
-    return p?.color ?? colors.primary;
+    return resolver.get(playerId)?.avatarColor || colors.primary;
   }
 
   async function handleStart() {

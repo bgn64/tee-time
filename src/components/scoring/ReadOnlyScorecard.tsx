@@ -18,11 +18,12 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { TeamAvatarCluster, type AvatarMember } from './TeamAvatarCluster';
 import { teeSwatch } from './TeePickerSheet';
-import { findSeedPlayer } from '@/data/players';
 import { formatScore } from '@/library/golf/scoring';
+import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Hole, Round, RoundScore, Tee } from '@/types/golf';
 
@@ -32,6 +33,10 @@ type Scorer = {
   color: string;
   teeId?: string;
   members: AvatarMember[];
+  /** Present for `user:` participants — drives tap-to-profile from the
+   * final-totals row. Self also gets a userId; the row navigates to
+   * the same profile screen the search tab uses. */
+  userId?: string;
 };
 
 type Props = {
@@ -77,38 +82,50 @@ export function ReadOnlyScorecard({
     return tees.sort((a, b) => (b.totalYardage ?? -1) - (a.totalYardage ?? -1));
   }, [teeIdsInPlay, round.course.tees, round.course.holes]);
 
+  // Resolve participant display info from PowerSync local
+  // (profiles + custom_players) with a direct-fetch fallback for
+  // unfriended ex-friends. The keys come from `playerIds` so a
+  // round whose `participants[]` is missing still resolves.
+  const resolverKeys = useMemo(
+    () => round.playerIds ?? [],
+    [round.playerIds]
+  );
+  const resolver = useParticipantResolver(resolverKeys);
+
   const scorers: Scorer[] = useMemo(() => {
     const list: Scorer[] = [];
     for (const p of round.participants ?? []) {
-      const seed = findSeedPlayer(p.participantKey);
-      const name = seed?.nickname ?? 'Player';
-      const color = seed?.color ?? colors.primary;
+      const resolved = resolver.get(p.participantKey);
+      const name = resolved?.displayName || 'Player';
+      const color = resolved?.avatarColor || colors.primary;
       list.push({
         id: p.participantKey,
         name,
         color,
         teeId: p.teeId,
         members: [{ id: p.participantKey, name, color }],
+        userId: resolved?.userId,
       });
     }
-    // Legacy fallback: if `participants[]` is somehow empty, fall back
-    // to `playerIds`. Shouldn't happen in v1 because `startRound`
-    // always seeds participants, but it costs nothing to be defensive.
+    // Defensive: if `participants[]` is somehow empty, fall back to
+    // `playerIds`. Shouldn't happen in v1 because `startRound` always
+    // seeds participants, but it costs nothing to be defensive.
     if (list.length === 0) {
       for (const pid of round.playerIds ?? []) {
-        const seed = findSeedPlayer(pid);
-        const name = seed?.nickname ?? 'Player';
-        const color = seed?.color ?? colors.primary;
+        const resolved = resolver.get(pid);
+        const name = resolved?.displayName || 'Player';
+        const color = resolved?.avatarColor || colors.primary;
         list.push({
           id: pid,
           name,
           color,
           members: [{ id: pid, name, color }],
+          userId: resolved?.userId,
         });
       }
     }
     return list;
-  }, [round.participants, round.playerIds, colors.primary]);
+  }, [round.participants, round.playerIds, resolver, colors.primary]);
 
   const front9 = useMemo(
     () => round.course.holes.filter((h) => h.number <= 9),
@@ -393,6 +410,7 @@ function FinalTotals({
   courseTees,
   onEditTee,
 }: FinalProps) {
+  const router = useRouter();
   const parTotal = allHoles.reduce((t, h) => t + h.par, 0);
   const teeById = useMemo(() => {
     const m = new Map<string, Tee>();
@@ -461,9 +479,22 @@ function FinalTotals({
         return (
           <View key={scorer.id} style={styles.totalRow}>
             <TeamAvatarCluster members={scorer.members} size="md" ringColor={ringColor} />
-            <Text style={styles.totalName} numberOfLines={1}>
-              {scorer.name}
-            </Text>
+            {scorer.userId ? (
+              <Pressable
+                style={styles.totalNameWrap}
+                onPress={() =>
+                  router.push(`/(tabs)/(search)/profile/${scorer.userId}` as never)
+                }
+                hitSlop={4}>
+                <Text style={[styles.totalName, styles.totalNameLink]} numberOfLines={1}>
+                  {scorer.name}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.totalName} numberOfLines={1}>
+                {scorer.name}
+              </Text>
+            )}
             {pillNode}
             <Text
               style={[
@@ -617,6 +648,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 12,
       fontWeight: '700',
       color: colors.textTitle,
+    },
+    totalNameWrap: {
+      flex: 1,
+    },
+    totalNameLink: {
+      color: colors.primaryDark,
+      textDecorationLine: 'underline',
     },
     finalTeePill: {
       flexDirection: 'row',

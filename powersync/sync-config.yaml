@@ -120,3 +120,20 @@ streams:
       WHERE (from_user_id = auth.user_id() OR to_user_id = auth.user_id())
         AND status = 'pending'
     auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Custom players (added with migration 004_custom_players.sql).
+  #
+  # User-scoped roster of off-app people the user plays rounds with.
+  # Syncs ALL of the user's rows including soft-deleted ones so the
+  # scorecard participant resolver keeps rendering them correctly
+  # after a delete. The player picker filters
+  # `WHERE deleted_at IS NULL` locally.
+  # ---------------------------------------------------------------
+
+  custom_players:
+    query: |
+      SELECT *
+      FROM custom_players
+      WHERE owner_user_id = auth.user_id()
+    auto_subscribe: true

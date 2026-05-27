@@ -18,3 +18,8 @@ export function newRoundId(): string {
 export function newScoreId(): string {
   return uuid();
 }
+
+/** Stable id for a new custom player row (server-side `custom_players.id`). */
+export function newCustomPlayerId(): string {
+  return uuid();
+}
