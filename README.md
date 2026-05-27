@@ -49,6 +49,21 @@ The Score tab introduces two new synced tables (`scorecards`, `scorecard_scores`
 2. **Update the PowerSync sync rules.** Open the PowerSync dashboard → Sync Rules and replace the rules with the contents of [`sync-rules.yaml`](./sync-rules.yaml). The new file adds `scorecards` and `scorecard_scores` streams scoped to `owner_user_id = request.user_id()` so two devices signed in to the same account see the same in-progress round.
 3. **Smoke-test cross-device sync.** Sign in on web and on a phone/simulator with the same magic-link OTP account. Start a round on one device, tap a score, and confirm the second device's `ReadOnlyScorecard` reflects the change within a couple of seconds. The current-hole position (`HoleNavBar`) intentionally stays per-device — only the scores sync.
 
+## Friending — out-of-repo setup
+
+The friending feature adds three new tables (`profiles`, `friend_requests`, `friendships`) plus six SECURITY DEFINER RPCs that own all the write paths. The friend graph **is** synced to clients via PowerSync — the Home incoming-requests banner is realtime, and the friends list is offline-available — but writes still flow through RPCs so multi-row invariants (e.g., "accepted FR ⇔ two friendship rows") can be enforced atomically.
+
+Search-result profiles are NOT synced: handle search needs a server-side prefix index across the global user set, so the Search tab queries Supabase directly.
+
+1. **Apply the SQL migration.** Open the Supabase dashboard → SQL editor and paste the contents of [`supabase/migrations/003_friends.sql`](./supabase/migrations/003_friends.sql). This creates the three tables, the partial unique index that prevents duplicate pending requests in one direction, the RLS read policies (no direct insert/update/delete — clients must go through RPCs), and the six RPCs (`complete_profile`, `send_friend_request`, `accept_friend_request`, `decline_friend_request`, `cancel_friend_request`, `unfriend`). Each RPC starts with an `auth.uid()` null guard and is granted EXECUTE only to `authenticated`. The `friendships` PK is a synthetic `id uuid` (with `UNIQUE (user_id, friend_user_id)` preserving the symmetric-two-rows invariant) — PowerSync requires a single-column `id` on every synced row.
+2. **Redeploy the PowerSync sync rules.** Five new streams have been added to [`powersync/sync-config.yaml`](./powersync/sync-config.yaml): `own_profile`, `friend_profiles`, `requester_profiles`, `friendships`, and `friend_requests`. The three profile streams alias `user_id AS id` so PowerSync sees a usable local row key. Push the file with `powersync deploy sync-config` (or paste the YAML into the PowerSync dashboard → Sync Rules and Deploy). The `powersync` publication is already `FOR ALL TABLES`, so no `ALTER PUBLICATION` is needed for the new tables.
+3. **Smoke-test the end-to-end flow** with two invited accounts on two browser windows:
+   - A signs in, picks `@alice`. B signs in, picks `@bob`.
+   - A opens the **Search** tab, types `bo`, taps Bob's row → profile shows `+ Add Friend`. Tap → flips to `Requested`.
+   - B opens **Home** → sees the incoming-request banner appear **without refreshing** (this is the realtime check; PowerSync pushes the new row to B's open tab). Tap Confirm → banner clears, A's profile flips to `Friends ✓`.
+   - B taps the `Friends ✓` pill → dropdown shows `Unfriend` → confirm → friendship deleted on both sides.
+4. **Offline check.** With B's friends list populated, disconnect the network and reload the web app. The friends list and any pending FRs should still render — PowerSync's local SQLite holds them across reloads, and the RPC writes are deliberately not queued offline (they need server-side multi-row transactions).
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

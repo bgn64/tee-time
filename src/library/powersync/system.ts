@@ -125,9 +125,13 @@ export class System {
   async signOut() {
     // Capture the user id BEFORE logout — getSession() returns null
     // post-sign-out, and we still want to sweep this user's per-device
-    // current-hole keys. Runs unconditionally; the cleanup is idempotent
-    // and must not be skipped by the `!connected` early-return in
-    // ensureDisconnectedAndClear.
+    // current-hole keys. Runs unconditionally; the cleanup is
+    // idempotent and must not be skipped by the `!connected`
+    // early-return in ensureDisconnectedAndClear.
+    //
+    // The profile row itself is wiped by disconnectAndClear() below
+    // (PowerSync's local SQLite stores it), so no separate
+    // KV-storage cleanup is needed.
     const userId = await this.supabaseConnector.userId().catch(() => undefined);
     if (userId) {
       await clearCurrentHoleForUser(userId);

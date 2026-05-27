@@ -39,3 +39,84 @@ streams:
       FROM scorecard_scores
       WHERE owner_user_id = auth.user_id()
     auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Friending streams (added with migration 003_friends.sql).
+  #
+  # PowerSync requires a single-column `id` per row. The `profiles`
+  # table is keyed on `user_id`, so the three profile streams below
+  # explicitly alias `user_id AS id` and enumerate the synced columns.
+  # PowerSync dedups across streams when multiple select the same
+  # source row, so own_profile + friend_profiles + requester_profiles
+  # can overlap safely.
+  #
+  # All writes still flow through the SECURITY DEFINER RPCs in
+  # 003_friends.sql; PowerSync handles read replication only.
+  # ---------------------------------------------------------------
+
+  # The signed-in user's own profile row.
+  own_profile:
+    query: |
+      SELECT
+        user_id AS id, handle, display_name, avatar_color,
+        created_at, updated_at
+      FROM profiles
+      WHERE user_id = auth.user_id()
+    auto_subscribe: true
+
+  # Profiles of users the signed-in user is friends with. Joined
+  # through `friendships` because PowerSync's JOIN ON clauses only
+  # support simple equality.
+  friend_profiles:
+    query: |
+      SELECT
+        profiles.user_id AS id,
+        profiles.handle,
+        profiles.display_name,
+        profiles.avatar_color,
+        profiles.created_at,
+        profiles.updated_at
+      FROM profiles
+      JOIN friendships ON friendships.friend_user_id = profiles.user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true
+
+  # Profiles of users with a pending friend request to / from the
+  # signed-in user. Two IN-subquery branches because PowerSync JOIN
+  # ON clauses don't accept `IN (a, b)` membership predicates.
+  requester_profiles:
+    query: |
+      SELECT
+        user_id AS id, handle, display_name, avatar_color,
+        created_at, updated_at
+      FROM profiles
+      WHERE user_id IN (
+        SELECT from_user_id FROM friend_requests
+        WHERE to_user_id = auth.user_id() AND status = 'pending'
+      )
+      OR user_id IN (
+        SELECT to_user_id FROM friend_requests
+        WHERE from_user_id = auth.user_id() AND status = 'pending'
+      )
+    auto_subscribe: true
+
+  # Half-edges (me, friend). The other side syncs to the friend's
+  # device via their own subscription; the client only ever reads its
+  # own half-edges so syncing both halves would just double the
+  # local row count.
+  friendships:
+    query: |
+      SELECT *
+      FROM friendships
+      WHERE user_id = auth.user_id()
+    auto_subscribe: true
+
+  # Pending friend requests either direction. Declined / accepted /
+  # expired rows aren't needed locally.
+  friend_requests:
+    query: |
+      SELECT *
+      FROM friend_requests
+      WHERE (from_user_id = auth.user_id() OR to_user_id = auth.user_id())
+        AND status = 'pending'
+    auto_subscribe: true

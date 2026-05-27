@@ -1,15 +1,29 @@
 /**
  * SignInScreen — magic-link OTP sign-in for an invite-only app.
  *
- * Two-step state machine:
- *   1. email — input email, "Send code". Email is trimmed + lowercased
+ * Three-step state machine:
+ *   1. email  — input email, "Send code". Email is trimmed + lowercased
  *      ONCE on submit and the normalized value is stored in state so the
  *      verify step uses exactly the same address regardless of what's
  *      typed in the input afterwards.
- *   2. code  — enter the 6-digit code from the inbox, "Verify".
+ *   2. code   — enter the 6-digit code from the inbox, "Verify".
+ *   3. handle — Once the session lands, AccountContext fetches the
+ *      profile. If there's no profile row, we render `<HandleStep>`
+ *      so the user picks a display name and @handle BEFORE the
+ *      AuthGate clears.
  *
- * On successful verify, the Supabase auth-state listener (wired in
- * AuthGate + system.ts) flips the session and PowerSync connects.
+ * Why the handle step lives inside SignInScreen (rather than its own
+ * gated route): SignInScreen is what AuthGate falls through to when
+ * the user has a session but no profile (`initialStep="handle"`), so a
+ * single component owns "anything that needs to happen before the
+ * tabs render". The user's session is already valid at that point —
+ * they just haven't picked a handle yet — and the handle step calls
+ * `useAccount().completeProfile` which writes the new row and flips
+ * the AccountContext status, clearing the gate.
+ *
+ * On successful verify, AccountContext picks up the session and either
+ *   · advances us to the handle step (if no profile exists), OR
+ *   · the AuthGate clears entirely (if the profile already exists).
  *
  * No register step — Supabase is called with `shouldCreateUser: false`
  * so unknown emails are rejected at the API.
@@ -21,25 +35,38 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View
 } from 'react-native';
 
-import { useTheme } from '@/library/theme/ThemeContext';
+import { useAccount } from '@/library/social/AccountContext';
 import { useSystem } from '@/library/powersync/system';
+import { useTheme } from '@/library/theme/ThemeContext';
 import { showAlert } from '@/library/utils/alert';
+import { HandleStep } from '@/components/social/HandleStep';
 import { OtpInput } from './OtpInput';
 
-type Step = 'email' | 'code';
+type Step = 'email' | 'code' | 'handle';
 
-export function SignInScreen() {
+type Props = {
+  /**
+   * Where to start the flow. `'email'` (the default) is the fresh
+   * sign-in case; `'handle'` is what AuthGate uses when the user
+   * has a session but no `profiles` row.
+   */
+  initialStep?: Step;
+};
+
+export function SignInScreen({ initialStep = 'email' }: Props) {
   const { colors } = useTheme();
   const system = useSystem();
+  const { needsProfile } = useAccount();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
-  const [step, setStep] = React.useState<Step>('email');
+  const [step, setStep] = React.useState<Step>(initialStep);
   const [emailDraft, setEmailDraft] = React.useState('');
   // Normalized address used for verifyOtp — set once on "Send code" so
   // edits to the input field after the code is sent don't break verify.
@@ -114,12 +141,25 @@ export function SignInScreen() {
   const emailValid = /\S+@\S+\.\S+/.test(emailDraft.trim());
   const codeValid = /^\d{6}$/.test(code);
 
+  // The visible step is a pure derivation of internal `step` state and
+  // AccountContext's `needsProfile` flag. Deriving (instead of mirroring
+  // needsProfile into state via an effect) keeps a single source of
+  // truth and avoids the React 19 set-state-in-effect anti-pattern.
+  // Two ways the user lands on `handle`:
+  //   1. Fresh sign-in: OTP verify → AccountContext loads → no profile
+  //      row → `needsProfile = true` → we render the handle step.
+  //   2. Re-entry from AuthGate: parent passes `initialStep="handle"`
+  //      so `step` itself is already `'handle'`.
+  const currentStep: Step = needsProfile ? 'handle' : step;
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={styles.container}>
-      <View style={styles.body}>
-        {step === 'email' ? (
+      <ScrollView
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled">
+        {currentStep === 'email' ? (
           <>
             <Text style={styles.title}>Sign in</Text>
             <Text style={styles.subtitle}>
@@ -163,7 +203,7 @@ export function SignInScreen() {
               This app is invite only. If your email isn&apos;t recognized, ask the admin to invite you.
             </Text>
           </>
-        ) : (
+        ) : currentStep === 'code' ? (
           <>
             <Text style={styles.title}>Check your email</Text>
             <Text style={styles.subtitle}>
@@ -203,8 +243,12 @@ export function SignInScreen() {
               <Text style={styles.linkButtonTextMuted}>Use a different email</Text>
             </Pressable>
           </>
+        ) : (
+          // currentStep === 'handle' — session present (from a just-verified
+          // OTP or from AuthGate's re-entry), profile row missing.
+          <HandleStep />
         )}
-      </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -225,7 +269,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.background
     },
     body: {
-      flex: 1,
+      flexGrow: 1,
       padding: 24,
       paddingTop: 48,
       maxWidth: 480,
