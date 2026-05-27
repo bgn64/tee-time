@@ -306,6 +306,9 @@ export default function ScoringScreen() {
           currentHoleNumber={currentHole.number}
           onHolePress={setCurrentHole}
           onEditTee={setTeeEditTarget}
+          onPressParticipant={(userId) =>
+            router.push(`/(tabs)/(score)/profile/${userId}` as never)
+          }
         />
 
         <Pressable

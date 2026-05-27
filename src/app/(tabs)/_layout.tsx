@@ -43,12 +43,13 @@ export default function TabLayout() {
               }}
             />
             <Tabs.Screen
-              name="about"
+              name="(you)"
               options={{
-                title: 'About',
+                title: 'You',
+                headerShown: false,
                 tabBarIcon: ({ color, focused }) => (
                   <Ionicons
-                    name={focused ? 'information-circle' : 'information-circle-outline'}
+                    name={focused ? 'person-circle' : 'person-circle-outline'}
                     color={color}
                     size={24}
                   />
@@ -97,6 +98,10 @@ export default function TabLayout() {
                 )
               }}
             />
+            {/* The placeholder `about` route file is hidden from the
+                tab bar. It can be safely deleted once it's clear no
+                links still point to it. */}
+            <Tabs.Screen name="about" options={{ href: null }} />
           </Tabs>
         </FriendsProvider>
       </AuthGate>

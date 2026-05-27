@@ -91,6 +91,20 @@ rounds (e.g. `'player-you'`) still resolve via a legacy fallback.
 4. **Unfriend / ex-friend check (online)**. After completing the round, have B unfriend A. Open the scorecard on A's device. B's name + avatar should still render correctly (the participant resolver's tier-2 direct fetch reads B's profile from Supabase since the `profiles_select_all` RLS allows it).
 5. **Offline limitation**. The same scenario when offline → B falls back to "Player". Mitigation (a `scorecard_participants` retention sync stream) is deferred.
 
+## You tab — no out-of-repo setup
+
+The new **You tab** in the bottom nav replaces the placeholder About tab. It renders the signed-in user's profile via the same `<ProfileScreen>` component used everywhere else (Search results, scorecard tap-to-profile, friends-list drill-ins). No new tables, RLS policies, or sync streams — everything is computed from rows already synced (`profiles`, `friendships`, `scorecards`).
+
+The profile screen now shows:
+- **Friends N** (tappable on your own profile → drills to `/(you)/friends`; hidden on others')
+- **Rounds played** (own) / **Rounds together** (others) — both computed from completed scorecards in your local PowerSync DB.
+
+Both counts have a known accuracy ceiling: they only see scorecards *you* own (`scorecards.owner_user_id = auth.user_id()`). A round another user created with you in it isn't synced to your device, so the count silently undercounts in that direction. Fix (broaden the `scorecards` sync rule to include rounds you appear in) is well-scoped and deferred.
+
+### Navigation pattern — per-tab profile routes
+
+Profiles are reachable from three tabs now (Search, Score scorecard, You/friends list). Each tab gets its own `profile/[userId]` route; tapping a name from anywhere pushes onto the **current** tab's stack so tab context is preserved (Instagram / X convention). Switching tabs preserves each tab's exploration history; back always behaves predictably within the current tab.
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

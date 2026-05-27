@@ -18,7 +18,6 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { useRouter } from 'expo-router';
 
 import { TeamAvatarCluster, type AvatarMember } from './TeamAvatarCluster';
 import { teeSwatch } from './TeePickerSheet';
@@ -34,8 +33,9 @@ type Scorer = {
   teeId?: string;
   members: AvatarMember[];
   /** Present for `user:` participants — drives tap-to-profile from the
-   * final-totals row. Self also gets a userId; the row navigates to
-   * the same profile screen the search tab uses. */
+   * final-totals row. The component itself is navigation-agnostic;
+   * the consumer wires `onPressParticipant` to push onto whichever
+   * tab's stack is appropriate. */
   userId?: string;
 };
 
@@ -45,6 +45,10 @@ type Props = {
   onHolePress?: (holeNumber: number) => void;
   hideFinalTotals?: boolean;
   onEditTee?: (scorerId: string) => void;
+  /** Fired when a `user:` participant's name is tapped in the
+   * Final-totals row. Caller owns the navigation so this component
+   * stays usable from any tab's stack. */
+  onPressParticipant?: (userId: string) => void;
 };
 
 export function ReadOnlyScorecard({
@@ -53,6 +57,7 @@ export function ReadOnlyScorecard({
   onHolePress,
   hideFinalTotals,
   onEditTee,
+  onPressParticipant,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -205,6 +210,7 @@ export function ReadOnlyScorecard({
             ringColor={colors.cardBg}
             courseTees={round.course.tees ?? []}
             onEditTee={onEditTee}
+            onPressParticipant={onPressParticipant}
           />
         </View>
       )}
@@ -399,6 +405,7 @@ type FinalProps = {
   ringColor: string;
   courseTees: Tee[];
   onEditTee?: (scorerId: string) => void;
+  onPressParticipant?: (userId: string) => void;
 };
 
 function FinalTotals({
@@ -409,8 +416,8 @@ function FinalTotals({
   ringColor,
   courseTees,
   onEditTee,
+  onPressParticipant,
 }: FinalProps) {
-  const router = useRouter();
   const parTotal = allHoles.reduce((t, h) => t + h.par, 0);
   const teeById = useMemo(() => {
     const m = new Map<string, Tee>();
@@ -479,12 +486,10 @@ function FinalTotals({
         return (
           <View key={scorer.id} style={styles.totalRow}>
             <TeamAvatarCluster members={scorer.members} size="md" ringColor={ringColor} />
-            {scorer.userId ? (
+            {scorer.userId && onPressParticipant ? (
               <Pressable
                 style={styles.totalNameWrap}
-                onPress={() =>
-                  router.push(`/(tabs)/(search)/profile/${scorer.userId}` as never)
-                }
+                onPress={() => onPressParticipant(scorer.userId!)}
                 hitSlop={4}>
                 <Text style={[styles.totalName, styles.totalNameLink]} numberOfLines={1}>
                   {scorer.name}
