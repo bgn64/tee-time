@@ -113,9 +113,11 @@ The **Home tab** is the friend-rounds feed. Every friend's completed round appea
 
 Apply **migration 005** (`supabase/migrations/005_friend_scorecard_visibility.sql`) and deploy the updated **`powersync/sync-config.yaml`** (two new streams: `friend_scorecards`, `friend_scorecard_scores`). The migration is defense-in-depth — PowerSync sync rules read via the replication slot and bypass RLS, so the feed *works* without it; the migration just aligns the RLS surface with what the app exposes.
 
-### How "live" works without a schema change
+### How "live" works
 
-The feed derives `lastScoreAt` client-side as `MAX(scorecard_scores.updated_at)` per scorecard — we deliberately do **not** denormalize a `last_score_at` column onto `scorecards` (the comment in `RoundContext` explicitly avoids bumping `scorecards.updated_at` on every score tap because the multi-KB `course_snapshot` would re-sync). Per-cell scores already sync row-by-row, so the derived value updates live as soon as PowerSync delivers a new score row from the friend's device.
+`RoundContext.setCustomHoleScore` bumps `scorecards.updated_at` on every score tap (the parent scorecard row gets re-synced along with the score-row insert). The feed sorts live rounds by `scorecards.updated_at DESC` directly — no client-side aggregate query over score rows. Trade-off: every tap re-replicates the parent row (including its ~few-KB `course_snapshot`). For ≤ a handful of concurrent live rounds the cost is negligible; revisit with a denormalized `last_score_at` column if profiling ever shows it hurting on mobile data.
+
+The card's "X ago" label on a live round shows the time **your device** last received an update for that round, not the scorer's timestamp. If you're offline, the label keeps ticking forward ("3m ago" → "1h ago" → "Yesterday") so it honestly reflects how stale your data is rather than implying freshness it can't guarantee. Completed rounds keep using `completedAt` since that's an immutable moment with real meaning.
 
 ### Participant snapshots for friend custom players
 
@@ -123,9 +125,8 @@ A friend's custom players (`custom:{uuid}` participants — e.g. "Dad") don't sy
 
 ### Known gaps
 
-- **Sync volume per friend** scales linearly with their round count + per-cell score count. No time-window cap yet; very active friends could create noticeable initial-sync cost. Easy future improvement: scope `friend_scorecards` to the last N days.
+- **Sync volume per friend** scales linearly with their round count + per-cell score count, **plus** the parent scorecard row (with its course_snapshot) re-syncs on every tap. No time-window cap yet; very active friends could create noticeable initial-sync cost. Easy future improvement: scope `friend_scorecards` to the last N days.
 - **No stale-live-round cutoff** — a friend who taps two scores then puts the phone down stays "live" in your feed until they complete or abandon the round. Old app used a 6-hour window.
-- **Highlight column** on live cards is derived (first in-range hole not yet fully scored), not the owner's actual per-device cursor — close enough to the lived UX.
 - **Non-friend app users** in a friend's round resolve via online Supabase REST fetch; offline they render as "Player".
 
 ## Learn more

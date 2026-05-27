@@ -296,17 +296,6 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     [system, userId]
   );
 
-  const touchScorecardUpdatedAt = useCallback(
-    async (id: string) => {
-      const now = new Date().toISOString();
-      await system.powersync.execute(
-        `UPDATE ${SCORECARDS_TABLE} SET updated_at = ? WHERE id = ?`,
-        [now, id]
-      );
-    },
-    [system]
-  );
-
   const setCustomHoleScore = useCallback<RoundContextValue['setCustomHoleScore']>(
     async (scorerId, holeNumber, strokes) => {
       const id = scorecardIdRef.current;
@@ -335,10 +324,23 @@ export function RoundProvider({ children }: { children: ReactNode }) {
             [newScoreId(), id, scorerId, holeNumber, strokes, userId, now]
           );
         }
+        // Bump the parent scorecard's updated_at so it serves as
+        // the canonical "last activity" timestamp. Friends' devices
+        // sort live feed cards by this value (most-recently-active
+        // bubbles to the top) without needing a derived
+        // MAX(scorecard_scores.updated_at) aggregate.
+        //
+        // Yes, this re-replicates the full scorecards row (including
+        // the multi-KB course_snapshot) on every tap. For ≤ a handful
+        // of concurrently-active live rounds the cost is acceptable;
+        // re-introduce a denormalized last_score_at column if
+        // profiling ever shows the snapshot re-sync hurting on
+        // mobile data.
+        await tx.execute(
+          `UPDATE ${SCORECARDS_TABLE} SET updated_at = ? WHERE id = ?`,
+          [now, id]
+        );
       });
-      // Intentionally do NOT bump scorecards.updated_at here — score
-      // taps shouldn't resync the whole scorecard row (with its
-      // ~multi-KB course_snapshot) on every chip press.
     },
     [system, userId]
   );
@@ -425,11 +427,6 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     },
     [system, userId]
   );
-
-  // Keep `touchScorecardUpdatedAt` reachable for future call sites;
-  // currently no public method needs it (score writes skip parent
-  // touches deliberately, and header mutations bump updated_at inline).
-  void touchScorecardUpdatedAt;
 
   const value = useMemo<RoundContextValue>(
     () => ({

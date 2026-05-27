@@ -123,10 +123,10 @@ export default function HomeFeedScreen() {
       style={styles.scroll}
       contentContainerStyle={styles.content}>
       <IncomingRequestsBanner style={styles.banner} />
-      {feedRounds.map((fr) => (
+      {feedRounds.map((round) => (
         <FeedCardLarge
-          key={fr.round.id}
-          feedRound={fr}
+          key={round.id}
+          round={round}
           onPressParticipant={onPressParticipant}
         />
       ))}

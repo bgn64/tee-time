@@ -16,9 +16,12 @@
  *   - A pulsing "● IN PROGRESS" pill on the band pill row.
  *   - The big chip shows the owner's running ±score with a "THRU N"
  *     subline.
- *   - FinalTotals are hidden (they'd be misleading mid-round) and
- *     the scorecard highlights the first not-fully-scored hole as a
- *     visual cue.
+ *   - FinalTotals are hidden (they'd be misleading mid-round).
+ *   - The "X ago" label reflects the time **this device** last
+ *     received an update for the round, not the time the scorer
+ *     wrote it. If you're offline, the label keeps ticking forward
+ *     ("3m ago" → "1h ago" → "Yesterday") honestly reflecting that
+ *     your data is stale.
  *
  * The tap-to-profile navigation is owned by the caller via
  * `onPressParticipant`. The scorecard surfaces tap targets in both
@@ -32,7 +35,6 @@ import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
 import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
 import {
-  firstNotFullyScoredHole,
   formatRelativeTime,
   formatScore,
   getRoundTotalRelative,
@@ -42,10 +44,10 @@ import {
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
-import type { FeedRound } from '@/library/golf/useFeedRounds';
+import type { Round } from '@/types/golf';
 
 type Props = {
-  feedRound: FeedRound;
+  round: Round;
   onPressParticipant?: (userId: string) => void;
 };
 
@@ -76,12 +78,12 @@ function shade(hex: string, amount: number): string {
   return `#${hh(r)}${hh(g)}${hh(b)}`;
 }
 
-export function FeedCardLarge({ feedRound, onPressParticipant }: Props) {
+export function FeedCardLarge({ round, onPressParticipant }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const { round, lastScoreAt, ownerUserId } = feedRound;
-  const { profile: ownerProfile } = useProfile(ownerUserId);
+  const ownerUserId = round.ownerUserId ?? '';
+  const { profile: ownerProfile } = useProfile(ownerUserId || null);
 
   const ownerHandle = ownerProfile?.handle
     ? `@${ownerProfile.handle}`
@@ -96,9 +98,6 @@ export function FeedCardLarge({ feedRound, onPressParticipant }: Props) {
   const ownerScorerId = userParticipantKey(ownerUserId);
 
   const totalRel = getRoundTotalRelative(round, ownerScorerId);
-  // React Compiler memoizes derived totals — no explicit useMemo
-  // needed (the dep-array linters fight the compiler when
-  // `ownerScorerId` is a locally derived string).
   let totalStrokes = 0;
   for (const s of round.scores) {
     if (s.scorerId !== ownerScorerId) continue;
@@ -111,19 +110,32 @@ export function FeedCardLarge({ feedRound, onPressParticipant }: Props) {
 
   const { thruCount } = getScorerProgress(round, ownerScorerId);
 
-  // Highlight the column the owner is "working on" — derived as the
-  // first in-range hole that doesn't yet have a score for every
-  // participant. More intuitive than `maxScoredHole + 1`, which would
-  // jump ahead the moment a single player scored.
-  const currentHoleNumber = isInProgress ? firstNotFullyScoredHole(round) : undefined;
+  // Device-local sync-arrival stamp: bump it whenever the round's
+  // identity (its scores or completion state) changes on this
+  // device. Used for the live-card "X ago" label so the relative
+  // time honestly reflects when WE last heard about the round —
+  // never the scorer's clock time, which would imply data
+  // freshness we can't guarantee.
+  //
+  // Uses the "adjust state during render" pattern instead of a
+  // useEffect setter so we don't trigger a cascading re-render
+  // every time the identity ticks.
+  const identity = round.scores.length + '|' + (round.completedAt ?? '');
+  const [prevIdentity, setPrevIdentity] = useState(identity);
+  const [lastReceivedAt, setLastReceivedAt] = useState(() =>
+    new Date().toISOString()
+  );
+  if (prevIdentity !== identity) {
+    setPrevIdentity(identity);
+    setLastReceivedAt(new Date().toISOString());
+  }
 
-  // For completed rounds we surface completion time; for in-progress
-  // rounds the most recent score time (falling back to startedAt
-  // when somehow there are no scores).
+  // For completed rounds we surface the scorer's completion time
+  // (an immutable, meaningful moment — "this round was finished
+  // at HH:MM"). For in-progress rounds we use the device-local
+  // arrival stamp so the label tracks data staleness honestly.
   const dateLabel = formatRelativeTime(
-    isInProgress
-      ? (lastScoreAt ?? round.startedAt)
-      : (round.completedAt ?? round.startedAt)
+    isInProgress ? lastReceivedAt : (round.completedAt ?? round.startedAt)
   );
   const location = round.course.location;
 
@@ -176,7 +188,6 @@ export function FeedCardLarge({ feedRound, onPressParticipant }: Props) {
           <ReadOnlyScorecard
             round={round}
             hideFinalTotals={isInProgress}
-            currentHoleNumber={currentHoleNumber}
             onPressParticipant={onPressParticipant}
           />
         </View>

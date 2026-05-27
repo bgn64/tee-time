@@ -176,24 +176,3 @@ export function requiredScoreTuples(round: Round): { scorerId: string; holeNumbe
   }
   return tuples;
 }
-
-/**
- * The first in-range hole that doesn't yet have a score for every
- * participant. Used by feed live cards to highlight the column the
- * owner is "working on" — derived rather than synced because the
- * per-device current-hole cursor lives in AsyncStorage on the owner's
- * device only.
- *
- * Returns `undefined` if every in-range cell is already filled (the
- * round is fully scored — caller should hide the highlight).
- */
-export function firstNotFullyScoredHole(round: Round): number | undefined {
-  const inRange = holesInRange(round.course.holes, round.holeRange);
-  for (const h of inRange) {
-    const allScored = round.playerIds.every((pid) =>
-      round.scores.some((s) => s.scorerId === pid && s.holeNumber === h.number)
-    );
-    if (!allScored) return h.number;
-  }
-  return undefined;
-}

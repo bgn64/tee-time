@@ -1,30 +1,28 @@
 /**
  * useFeedRounds — friend-feed projection over local PowerSync rows.
  *
- * Reads every scorecard owned by a current friend (filtered via the
- * local `friendships` table — NOT just `owner_user_id <> me`, so that
- * unfriending hides cards from the feed immediately even before
- * PowerSync prunes the cached scorecard rows from local SQLite),
- * decorates each with the activity stats derived from the per-cell
- * score rows, and buckets them into:
+ * Returns the signed-in user's friends' rounds projected as `Round`
+ * objects, bucketed into:
  *
- *   liveRounds      — completedAt null, scoreCount ≥ 1, sorted by
- *                     lastScoreAt desc.
+ *   liveRounds      — completedAt null, scores.length >= 1, sorted
+ *                     by scorecards.updated_at desc (most recently
+ *                     active bubbles to the top).
  *   completedRounds — completedAt set, sorted by completedAt desc.
  *
- * The `lastScoreAt` field is derived client-side as
- * `MAX(scorecard_scores.updated_at)` for each scorecard — there is
- * intentionally no denormalized column on the scorecards row (every
- * score tap would otherwise need to bump the multi-KB course_snapshot,
- * which the upload connector then has to re-replicate). Because
- * per-cell scores already sync row-by-row through PowerSync, the
- * derived value ticks in real time as soon as a friend's score
- * lands.
+ * Filters by JOINing the **local** `friendships` table — not just
+ * `owner_user_id <> me` — so an unfriend hides cards from the feed
+ * the instant the friendship row is gone, even if PowerSync hasn't
+ * yet pruned the cached scorecard rows from local SQLite.
  *
- * Score hydration uses a `JOIN scorecards JOIN friendships` query
- * instead of a `WHERE scorecard_id IN (...)` list so we don't run
- * into SQLite's 999-parameter limit when many friends have many
- * rounds.
+ * Sort key contract: `RoundContext.setCustomHoleScore` bumps
+ * `scorecards.updated_at` on every score tap. That makes the column
+ * a faithful "last activity" timestamp; the feed sorts by it
+ * directly with no client-side aggregate over score rows.
+ *
+ * Score hydration uses a `JOIN scorecards JOIN friendships` query so
+ * we don't run into SQLite's 999-parameter limit when many friends
+ * have many rounds (a dynamic `IN (?, ?, ?, ...)` list would break
+ * at the limit).
  */
 
 import React from 'react';
@@ -44,7 +42,7 @@ import type {
   ScoringRule,
 } from '@/types/golf';
 
-type ScorecardWithAggRow = {
+type ScorecardRow = {
   id: string;
   owner_user_id: string | null;
   course_id: string | null;
@@ -56,9 +54,6 @@ type ScorecardWithAggRow = {
   started_at: string | null;
   completed_at: string | null;
   updated_at: string | null;
-  last_score_at: string | null;
-  score_count: number | null;
-  max_hole: number | null;
 };
 
 type ScoreRow = {
@@ -68,55 +63,21 @@ type ScoreRow = {
   strokes: number | null;
 };
 
-export type FeedRound = {
-  round: Round;
-  ownerUserId: string;
-  lastScoreAt?: string;
-  scoreCount: number;
-  maxScoredHole?: number;
-};
-
 export type FeedRoundsResult = {
-  liveRounds: FeedRound[];
-  completedRounds: FeedRound[];
+  liveRounds: Round[];
+  completedRounds: Round[];
   isLoading: boolean;
 };
 
 const SELECT_FEED_SCORECARDS_SQL = `
-  SELECT
-    sc.id,
-    sc.owner_user_id,
-    sc.course_id,
-    sc.course_snapshot,
-    sc.scoring_rule,
-    sc.player_ids,
-    sc.participants,
-    sc.hole_range,
-    sc.started_at,
-    sc.completed_at,
-    sc.updated_at,
-    agg.last_score_at AS last_score_at,
-    agg.score_count   AS score_count,
-    agg.max_hole      AS max_hole
+  SELECT sc.*
   FROM ${SCORECARDS_TABLE} sc
   JOIN ${FRIENDSHIPS_TABLE} f
     ON f.friend_user_id = sc.owner_user_id
-  LEFT JOIN (
-    SELECT scorecard_id,
-           MAX(updated_at) AS last_score_at,
-           COUNT(*)        AS score_count,
-           MAX(hole_number) AS max_hole
-    FROM ${SCORECARD_SCORES_TABLE}
-    GROUP BY scorecard_id
-  ) agg ON agg.scorecard_id = sc.id
 `;
 
 const SELECT_FEED_SCORES_SQL = `
-  SELECT
-    ss.scorecard_id,
-    ss.scorer_id,
-    ss.hole_number,
-    ss.strokes
+  SELECT ss.scorecard_id, ss.scorer_id, ss.hole_number, ss.strokes
   FROM ${SCORECARD_SCORES_TABLE} ss
   JOIN ${SCORECARDS_TABLE} sc ON sc.id = ss.scorecard_id
   JOIN ${FRIENDSHIPS_TABLE} f ON f.friend_user_id = sc.owner_user_id
@@ -134,7 +95,7 @@ function safeParse<T>(raw: string | null | undefined, fallback: T, label: string
 
 export function useFeedRounds(): FeedRoundsResult {
   const { data: scorecardRows, isLoading: scorecardLoading } =
-    useQuery<ScorecardWithAggRow>(SELECT_FEED_SCORECARDS_SQL);
+    useQuery<ScorecardRow>(SELECT_FEED_SCORECARDS_SQL);
 
   const { data: scoreRows, isLoading: scoresLoading } =
     useQuery<ScoreRow>(SELECT_FEED_SCORES_SQL);
@@ -157,8 +118,8 @@ export function useFeedRounds(): FeedRoundsResult {
     return m;
   }, [scoreRows]);
 
-  const projected = React.useMemo<FeedRound[]>(() => {
-    const out: FeedRound[] = [];
+  const projected = React.useMemo<Round[]>(() => {
+    const out: Round[] = [];
     for (const row of scorecardRows) {
       if (!row.owner_user_id) continue;
       const course = safeParse<Course | null>(
@@ -174,7 +135,7 @@ export function useFeedRounds(): FeedRoundsResult {
       );
       const playerIds = safeParse<string[]>(row.player_ids, [], 'scorecards.player_ids');
       const scores = scoresByScorecard.get(row.id) ?? [];
-      const round: Round = {
+      out.push({
         id: row.id,
         ownerUserId: row.owner_user_id,
         course,
@@ -183,43 +144,45 @@ export function useFeedRounds(): FeedRoundsResult {
         participants,
         holeRange: (row.hole_range as HoleRange) ?? 'all',
         // We don't sync the owner's per-device current-hole cursor;
-        // the feed card derives a highlight from `firstNotFullyScoredHole`
-        // at render time so this field stays a safe 1.
+        // feed cards derive any "current" highlight at render time
+        // so this field stays at a safe sentinel value.
         currentHoleNumber: 1,
         scores,
         startedAt: row.started_at ?? new Date().toISOString(),
         completedAt: row.completed_at ?? undefined,
-      };
-      out.push({
-        round,
-        ownerUserId: row.owner_user_id,
-        lastScoreAt: row.last_score_at ?? undefined,
-        scoreCount: Number(row.score_count ?? 0),
-        maxScoredHole:
-          row.max_hole != null && Number.isFinite(Number(row.max_hole))
-            ? Number(row.max_hole)
-            : undefined,
       });
     }
     return out;
   }, [scorecardRows, scoresByScorecard]);
 
+  // Build a side map keyed by scorecard id so the sort callbacks
+  // can read scorecards.updated_at without re-projecting. The
+  // canonical "last activity" timestamp lives on the row directly
+  // because RoundContext bumps it on every score tap.
+  const updatedAtById = React.useMemo(() => {
+    const m = new Map<string, string>();
+    for (const row of scorecardRows) {
+      if (row.id && row.updated_at) m.set(row.id, row.updated_at);
+    }
+    return m;
+  }, [scorecardRows]);
+
   const liveRounds = React.useMemo(() => {
     return projected
-      .filter((fr) => !fr.round.completedAt && fr.scoreCount >= 1)
+      .filter((r) => !r.completedAt && r.scores.length > 0)
       .sort((a, b) => {
-        const at = new Date(a.lastScoreAt ?? a.round.startedAt).getTime();
-        const bt = new Date(b.lastScoreAt ?? b.round.startedAt).getTime();
+        const at = new Date(updatedAtById.get(a.id) ?? a.startedAt).getTime();
+        const bt = new Date(updatedAtById.get(b.id) ?? b.startedAt).getTime();
         return bt - at;
       });
-  }, [projected]);
+  }, [projected, updatedAtById]);
 
   const completedRounds = React.useMemo(() => {
     return projected
-      .filter((fr) => !!fr.round.completedAt)
+      .filter((r) => !!r.completedAt)
       .sort((a, b) => {
-        const at = new Date(a.round.completedAt ?? a.round.startedAt).getTime();
-        const bt = new Date(b.round.completedAt ?? b.round.startedAt).getTime();
+        const at = new Date(a.completedAt ?? a.startedAt).getTime();
+        const bt = new Date(b.completedAt ?? b.startedAt).getTime();
         return bt - at;
       });
   }, [projected]);
