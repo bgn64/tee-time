@@ -36,6 +36,8 @@ import { useQuery } from '@powersync/react';
 import {
   SCORECARDS_TABLE,
   SCORECARD_SCORES_TABLE,
+  CUSTOM_PLAYERS_TABLE,
+  type CustomPlayerRecord,
   ScorecardRecord,
   ScorecardScoreRecord,
 } from '@/library/powersync/AppSchema';
@@ -47,6 +49,7 @@ import {
   writeCurrentHole,
 } from './currentHoleStore';
 import { newRoundId, newScoreId } from './ids';
+import { parseParticipantKey } from './participantKey';
 import { holesInRange } from './scoring';
 import type {
   Course,
@@ -222,10 +225,48 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         throw new Error('Pick at least one player before starting a round.');
       }
       const defaultTee = defaultTeeIdForCourse(course);
-      const participants: RoundParticipant[] = playerIds.map((pid) => ({
-        participantKey: pid,
-        teeId: teeIds && pid in teeIds ? teeIds[pid] : defaultTee,
-      }));
+
+      // Snapshot custom-player nicknames + colors into the round
+      // participants so a friend viewing the round in their feed
+      // (where the owner's custom_players rows do NOT sync) still
+      // sees the owner's nicknames. One small query, only against
+      // the custom: participants in this specific round.
+      const customIds = playerIds
+        .map((pid) => parseParticipantKey(pid))
+        .filter((p) => p.kind === 'custom')
+        .map((p) => (p as { kind: 'custom'; customPlayerId: string }).customPlayerId);
+      const customSnapshots = new Map<string, { name: string; color: string }>();
+      if (customIds.length > 0) {
+        const placeholders = customIds.map(() => '?').join(', ');
+        const rows = await system.powersync.getAll<
+          Pick<CustomPlayerRecord, 'nickname' | 'avatar_color'> & { id: string }
+        >(
+          `SELECT id, nickname, avatar_color FROM ${CUSTOM_PLAYERS_TABLE} WHERE id IN (${placeholders})`,
+          customIds
+        );
+        for (const row of rows) {
+          customSnapshots.set(row.id, {
+            name: row.nickname ?? '',
+            color: row.avatar_color ?? '',
+          });
+        }
+      }
+
+      const participants: RoundParticipant[] = playerIds.map((pid) => {
+        const parsed = parseParticipantKey(pid);
+        const teeId = teeIds && pid in teeIds ? teeIds[pid] : defaultTee;
+        if (parsed.kind === 'custom') {
+          const snap = customSnapshots.get(parsed.customPlayerId);
+          return {
+            participantKey: pid,
+            teeId,
+            localDisplayName: snap?.name,
+            localDisplayColor: snap?.color,
+          };
+        }
+        return { participantKey: pid, teeId };
+      });
+
       const id = newRoundId();
       const now = new Date().toISOString();
       await system.powersync.writeTransaction(async (tx) => {

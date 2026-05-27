@@ -64,10 +64,28 @@ export type RoundScore = {
 /**
  * Per-player metadata on a round. Stroke-only — no teamId, no linked-
  * friend snapshots.
+ *
+ * `localDisplayName` / `localDisplayColor` are an optional snapshot
+ * captured at `startRound` time. They're populated **only for
+ * `custom:` participants** so that a friend viewing the round in
+ * their feed (where the owner's `custom_players` rows do NOT sync)
+ * still sees the owner's nickname for them ("Dad") instead of a
+ * placeholder. `user:` participants don't need a snapshot — friend
+ * `profiles` sync via `friend_profiles`, and non-friend app users
+ * fall back to the resolver's online Supabase fetch.
+ *
+ * The resolver consults the snapshot only when the local
+ * `custom_players` row can't be found. The owner's own renders
+ * always read the live row, so a rename propagates to historic
+ * scorecards on their device. Friends keep seeing the
+ * point-in-time snapshot — acceptable trade-off given the alternative
+ * is "Removed player" everywhere.
  */
 export type RoundParticipant = {
   participantKey: string;
   teeId?: string;
+  localDisplayName?: string;
+  localDisplayColor?: string;
 };
 
 export type Round = {

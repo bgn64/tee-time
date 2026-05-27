@@ -95,7 +95,25 @@ export function ReadOnlyScorecard({
     () => round.playerIds ?? [],
     [round.playerIds]
   );
-  const resolver = useParticipantResolver(resolverKeys);
+
+  // Build a snapshot map from `participants[]` so the resolver can
+  // fall back to round-time localDisplayName / localDisplayColor when
+  // the live custom_players row isn't available locally (the
+  // friend-feed case — the owner's custom_players don't sync to my
+  // device).
+  const participantSnapshots = useMemo(() => {
+    const m = new Map<string, { displayName?: string; avatarColor?: string }>();
+    for (const p of round.participants ?? []) {
+      if (!p.localDisplayName && !p.localDisplayColor) continue;
+      m.set(p.participantKey, {
+        displayName: p.localDisplayName,
+        avatarColor: p.localDisplayColor,
+      });
+    }
+    return m;
+  }, [round.participants]);
+
+  const resolver = useParticipantResolver(resolverKeys, participantSnapshots);
 
   const scorers: Scorer[] = useMemo(() => {
     const list: Scorer[] = [];
@@ -199,6 +217,7 @@ export function ReadOnlyScorecard({
         teesInPlay={teesInPlay}
         courseTees={round.course.tees ?? []}
         ringColor={colors.cardBg}
+        onPressParticipant={onPressParticipant}
       />
       {!hideFinalTotals && (
         <View style={{ marginTop: 14 }}>
@@ -229,6 +248,11 @@ type SectionProps = {
   teesInPlay: Tee[];
   courseTees: Tee[];
   ringColor: string;
+  /** When set, the per-scorer avatar in the main grid becomes a tap
+   *  target that pushes onto the host stack's profile route. Lets the
+   *  feed's live cards (which hide FinalTotals) still surface
+   *  tap-to-profile. */
+  onPressParticipant?: (userId: string) => void;
 };
 
 function NineSection({
@@ -242,6 +266,7 @@ function NineSection({
   teesInPlay,
   courseTees,
   ringColor,
+  onPressParticipant,
 }: SectionProps) {
   const parTotal = holes.reduce((t, h) => t + h.par, 0);
 
@@ -346,7 +371,16 @@ function NineSection({
               <View style={[styles.teeBar, { backgroundColor: teeSwatch(scorerTee) }]} />
             ) : null}
             <View style={[styles.cellName, scorerTee && styles.cellNameWithBar]}>
-              <TeamAvatarCluster members={scorer.members} size="sm" ringColor={ringColor} />
+              {scorer.userId && onPressParticipant ? (
+                <Pressable
+                  onPress={() => onPressParticipant(scorer.userId!)}
+                  hitSlop={4}
+                  accessibilityLabel={`View ${scorer.name}'s profile`}>
+                  <TeamAvatarCluster members={scorer.members} size="sm" ringColor={ringColor} />
+                </Pressable>
+              ) : (
+                <TeamAvatarCluster members={scorer.members} size="sm" ringColor={ringColor} />
+              )}
             </View>
             {cells.map((c, i) => {
               const holeNumber = holes[i].number;

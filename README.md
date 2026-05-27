@@ -103,7 +103,30 @@ Both counts have a known accuracy ceiling: they only see scorecards *you* own (`
 
 ### Navigation pattern — per-tab profile routes
 
-Profiles are reachable from three tabs now (Search, Score scorecard, You/friends list). Each tab gets its own `profile/[userId]` route; tapping a name from anywhere pushes onto the **current** tab's stack so tab context is preserved (Instagram / X convention). Switching tabs preserves each tab's exploration history; back always behaves predictably within the current tab.
+Profiles are reachable from four tabs now (Home feed, Search, Score scorecard, You/friends list). Each tab gets its own `profile/[userId]` route; tapping a name from anywhere pushes onto the **current** tab's stack so tab context is preserved (Instagram / X convention). Switching tabs preserves each tab's exploration history; back always behaves predictably within the current tab.
+
+## Home tab — Feed
+
+The **Home tab** is the friend-rounds feed. Every friend's completed round appears chronologically; in-flight rounds (≥1 score written) pin to the top with a pulsing `● IN PROGRESS` pill and tick in real time as scores arrive.
+
+### Deploy steps
+
+Apply **migration 005** (`supabase/migrations/005_friend_scorecard_visibility.sql`) and deploy the updated **`powersync/sync-config.yaml`** (two new streams: `friend_scorecards`, `friend_scorecard_scores`). The migration is defense-in-depth — PowerSync sync rules read via the replication slot and bypass RLS, so the feed *works* without it; the migration just aligns the RLS surface with what the app exposes.
+
+### How "live" works without a schema change
+
+The feed derives `lastScoreAt` client-side as `MAX(scorecard_scores.updated_at)` per scorecard — we deliberately do **not** denormalize a `last_score_at` column onto `scorecards` (the comment in `RoundContext` explicitly avoids bumping `scorecards.updated_at` on every score tap because the multi-KB `course_snapshot` would re-sync). Per-cell scores already sync row-by-row, so the derived value updates live as soon as PowerSync delivers a new score row from the friend's device.
+
+### Participant snapshots for friend custom players
+
+A friend's custom players (`custom:{uuid}` participants — e.g. "Dad") don't sync to your device because `custom_players` is scoped to `owner_user_id = me`. `RoundParticipant` now carries optional `localDisplayName` + `localDisplayColor` populated at `startRound` time. The participant resolver uses those snapshots as a fallback so friends see your nicknames in the feed even though they can't query your `custom_players` table.
+
+### Known gaps
+
+- **Sync volume per friend** scales linearly with their round count + per-cell score count. No time-window cap yet; very active friends could create noticeable initial-sync cost. Easy future improvement: scope `friend_scorecards` to the last N days.
+- **No stale-live-round cutoff** — a friend who taps two scores then puts the phone down stays "live" in your feed until they complete or abandon the round. Old app used a 6-hour window.
+- **Highlight column** on live cards is derived (first in-range hole not yet fully scored), not the owner's actual per-device cursor — close enough to the lived UX.
+- **Non-friend app users** in a friend's round resolve via online Supabase REST fetch; offline they render as "Player".
 
 ## Learn more
 

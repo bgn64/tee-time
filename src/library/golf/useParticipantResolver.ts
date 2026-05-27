@@ -14,7 +14,15 @@
  *       resolver intentionally does NOT filter `deleted_at`, so
  *       historic scorecards keep rendering deleted players.
  *
- *   Tier 2 (direct Supabase fetch):
+ *   Tier 2a (round participant snapshot):
+ *     For `custom:{cid}` keys whose local row is missing — the
+ *     friend-feed case, where the owner's custom_players rows
+ *     don't sync to my device. The `participants` JSON on the
+ *     scorecard carries a `localDisplayName` + `localDisplayColor`
+ *     snapshot captured at startRound time. Passed in via the
+ *     `participantSnapshots` arg.
+ *
+ *   Tier 2b (direct Supabase fetch):
  *     For `user:{uid}` keys whose profile isn't in local SQLite —
  *     typically an unfriended ex-friend who participated in a
  *     historic round. The `profiles_select_all` RLS policy lets us
@@ -102,7 +110,14 @@ function customSql(customIds: readonly string[]): { sql: string; params: string[
 }
 
 export function useParticipantResolver(
-  participantKeys: readonly string[]
+  participantKeys: readonly string[],
+  /**
+   * Optional snapshot map keyed by participantKey. Populated by
+   * callers that have a `Round` in hand (with its `participants`
+   * array). Used as a Tier 2a fallback for `custom:` participants
+   * whose local row isn't synced (the friend-feed case).
+   */
+  participantSnapshots?: ReadonlyMap<string, { displayName?: string; avatarColor?: string }>
 ): Map<string, ResolvedParticipant> {
   const system = useSystem();
 
@@ -249,6 +264,20 @@ export function useParticipantResolver(
           });
           continue;
         }
+        // Tier 2a — snapshot from the round's participants JSON.
+        // Covers the friend-feed case (the owner's custom_players
+        // rows don't sync, so the live row is unavailable but the
+        // round-time snapshot is).
+        const snap = participantSnapshots?.get(key);
+        if (snap && (snap.displayName || snap.avatarColor)) {
+          out.set(key, {
+            participantKey: key,
+            displayName: snap.displayName ?? '',
+            avatarColor: snap.avatarColor || PLACEHOLDER_AVATAR_COLOR,
+            fallback: false
+          });
+          continue;
+        }
         // Custom row not yet synced (e.g., very first launch before
         // initial sync completes). Falls back to a placeholder; the
         // resolver re-renders once the row lands.
@@ -270,5 +299,5 @@ export function useParticipantResolver(
       }
     }
     return out;
-  }, [parsed, profileById, fetched, customById]);
+  }, [parsed, profileById, fetched, customById, participantSnapshots]);
 }

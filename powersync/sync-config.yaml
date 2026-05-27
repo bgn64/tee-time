@@ -137,3 +137,44 @@ streams:
       FROM custom_players
       WHERE owner_user_id = auth.user_id()
     auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Friend feed streams (added with milestone "Feed tab + live rounds").
+  #
+  # Sync scorecards (header rows) + scorecard_scores (per-cell rows)
+  # owned by any user the signed-in user is friends with. Together
+  # with the existing scorecards / scorecard_scores streams (which
+  # scope to own rows), this makes every row needed for the Feed tab
+  # available in local SQLite — no Supabase REST calls on the read
+  # path.
+  #
+  # The JOIN-on-equality pattern matches `friend_profiles` above; no
+  # WHERE clause on friendships is needed because the friendships
+  # sync rule already scopes the table to the signed-in user.
+  #
+  # Unfriending automatically drops the synced friend rows on the
+  # next sync tick because the JOIN no longer matches. The feed
+  # query also filters via a local `friendships` join so stale
+  # local rows don't blink visible during the sync gap.
+  #
+  # PowerSync dedups across streams; the user's own rows are NOT
+  # double-synced even though both `scorecards` and `friend_*`
+  # streams could in principle match if friendships ever included
+  # a self-edge (it doesn't — RPC forbids self-friending).
+  # ---------------------------------------------------------------
+
+  friend_scorecards:
+    query: |
+      SELECT scorecards.*
+      FROM scorecards
+      JOIN friendships ON friendships.friend_user_id = scorecards.owner_user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true
+
+  friend_scorecard_scores:
+    query: |
+      SELECT scorecard_scores.*
+      FROM scorecard_scores
+      JOIN friendships ON friendships.friend_user_id = scorecard_scores.owner_user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true
