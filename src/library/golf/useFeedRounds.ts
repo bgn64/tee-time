@@ -33,28 +33,11 @@ import {
   SCORECARDS_TABLE,
   SCORECARD_SCORES_TABLE,
 } from '@/library/powersync/AppSchema';
-import type {
-  Course,
-  HoleRange,
-  Round,
-  RoundParticipant,
-  RoundScore,
-  ScoringRule,
-} from '@/types/golf';
-
-type ScorecardRow = {
-  id: string;
-  owner_user_id: string | null;
-  course_id: string | null;
-  course_snapshot: string | null;
-  scoring_rule: string | null;
-  player_ids: string | null;
-  participants: string | null;
-  hole_range: string | null;
-  started_at: string | null;
-  completed_at: string | null;
-  updated_at: string | null;
-};
+import {
+  projectScorecardRow,
+  type ScorecardRowShape,
+} from './projectScorecard';
+import type { Round, RoundScore } from '@/types/golf';
 
 type ScoreRow = {
   scorecard_id: string | null;
@@ -83,19 +66,9 @@ const SELECT_FEED_SCORES_SQL = `
   JOIN ${FRIENDSHIPS_TABLE} f ON f.friend_user_id = sc.owner_user_id
 `;
 
-function safeParse<T>(raw: string | null | undefined, fallback: T, label: string): T {
-  if (raw == null || raw === '') return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch (e) {
-    console.warn(`[useFeedRounds] Failed to parse ${label}; using fallback.`, e, raw);
-    return fallback;
-  }
-}
-
 export function useFeedRounds(): FeedRoundsResult {
   const { data: scorecardRows, isLoading: scorecardLoading } =
-    useQuery<ScorecardRow>(SELECT_FEED_SCORECARDS_SQL);
+    useQuery<ScorecardRowShape>(SELECT_FEED_SCORECARDS_SQL);
 
   const { data: scoreRows, isLoading: scoresLoading } =
     useQuery<ScoreRow>(SELECT_FEED_SCORES_SQL);
@@ -121,36 +94,9 @@ export function useFeedRounds(): FeedRoundsResult {
   const projected = React.useMemo<Round[]>(() => {
     const out: Round[] = [];
     for (const row of scorecardRows) {
-      if (!row.owner_user_id) continue;
-      const course = safeParse<Course | null>(
-        row.course_snapshot,
-        null,
-        'scorecards.course_snapshot'
-      );
-      if (!course) continue;
-      const participants = safeParse<RoundParticipant[]>(
-        row.participants,
-        [],
-        'scorecards.participants'
-      );
-      const playerIds = safeParse<string[]>(row.player_ids, [], 'scorecards.player_ids');
       const scores = scoresByScorecard.get(row.id) ?? [];
-      out.push({
-        id: row.id,
-        ownerUserId: row.owner_user_id,
-        course,
-        scoringRule: (row.scoring_rule as ScoringRule) ?? 'stroke',
-        playerIds,
-        participants,
-        holeRange: (row.hole_range as HoleRange) ?? 'all',
-        // We don't sync the owner's per-device current-hole cursor;
-        // feed cards derive any "current" highlight at render time
-        // so this field stays at a safe sentinel value.
-        currentHoleNumber: 1,
-        scores,
-        startedAt: row.started_at ?? new Date().toISOString(),
-        completedAt: row.completed_at ?? undefined,
-      });
+      const round = projectScorecardRow(row, scores);
+      if (round) out.push(round);
     }
     return out;
   }, [scorecardRows, scoresByScorecard]);

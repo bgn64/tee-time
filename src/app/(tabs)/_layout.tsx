@@ -18,7 +18,7 @@ export default function TabLayout() {
     <AccountProvider>
       <AuthGate>
         <FriendsProvider>
-          <Tabs
+          <Tabs initialRouteName="(home)"
             screenOptions={{
               tabBarActiveTintColor: colors.tabBarActive,
               tabBarInactiveTintColor: colors.tabBarInactive,
@@ -44,13 +44,13 @@ export default function TabLayout() {
               }}
             />
             <Tabs.Screen
-              name="(you)"
+              name="(search)"
               options={{
-                title: 'You',
+                title: 'Search',
                 headerShown: false,
                 tabBarIcon: ({ color, focused }) => (
                   <Ionicons
-                    name={focused ? 'person-circle' : 'person-circle-outline'}
+                    name={focused ? 'search' : 'search-outline'}
                     color={color}
                     size={24}
                   />
@@ -72,13 +72,27 @@ export default function TabLayout() {
               }}
             />
             <Tabs.Screen
-              name="(search)"
+              name="(rounds)"
               options={{
-                title: 'Search',
+                title: 'Rounds',
                 headerShown: false,
                 tabBarIcon: ({ color, focused }) => (
                   <Ionicons
-                    name={focused ? 'search' : 'search-outline'}
+                    name={focused ? 'golf' : 'golf-outline'}
+                    color={color}
+                    size={24}
+                  />
+                )
+              }}
+            />
+            <Tabs.Screen
+              name="(you)"
+              options={{
+                title: 'You',
+                headerShown: false,
+                tabBarIcon: ({ color, focused }) => (
+                  <Ionicons
+                    name={focused ? 'person-circle' : 'person-circle-outline'}
                     color={color}
                     size={24}
                   />

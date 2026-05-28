@@ -129,6 +129,24 @@ A friend's custom players (`custom:{uuid}` participants — e.g. "Dad") don't sy
 - **No stale-live-round cutoff** — a friend who taps two scores then puts the phone down stays "live" in your feed until they complete or abandon the round. Old app used a 6-hour window.
 - **Non-friend app users** in a friend's round resolve via online Supabase REST fetch; offline they render as "Player".
 
+## Rounds tab — no out-of-repo setup
+
+The **Rounds tab** lists the user's **own** completed scorecards (`owner_user_id = me AND completed_at IS NOT NULL`). Friends' rounds intentionally stay on the Home feed — the Rounds tab is "rounds I scored," matching the same one-owner-per-scorecard mental model that the Score tab and stats hooks already follow.
+
+### Toolbar
+
+A search bar (fuzzy match across course name + every participant's resolved display name/handle), a Filter pill (hole range × date range), and a Sort pill (Newest / Oldest / Best score / Worst score). Score sort uses the user's per-scorer total when they were in the round, falling back to the round-wide total when they weren't (a round scored for friends/family without playing yourself). Cards group by month when sorted by time; flat when sorted by score.
+
+### Detail screen
+
+Read-only `ReadOnlyScorecard` with FinalTotals visible, plus an owner-only Delete button. The detail screen does its own targeted query by id so deep links and mid-navigation deletes resolve cleanly to a "Round not available" empty state instead of crashing.
+
+`deleteRound(id)` on `RoundContext` is owner-scoped at the SQL level (`AND owner_user_id = ?` on both DELETEs) as defense in depth — RLS would also reject the upload but enforcing it locally keeps the UI consistent. Delete navigates via `router.replace`, not `router.back`, so you don't see a stale-detail flash or get a "back to a deleted round" entry in the navigation history.
+
+### Out of scope (deferred)
+
+In-place score corrections (the old app's edit mode), scramble paths (we're stroke-only), captions, photos. The edit-mode hook is easy to add later because we already have all the live-scoring components.
+
 ## Learn more
 
 To learn more about developing your project with Expo, look at the following resources:

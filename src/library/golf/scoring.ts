@@ -8,6 +8,7 @@
  * totals / "thru N" / finish-validation aggregate excludes them.
  */
 
+import { userParticipantKey } from './participantKey';
 import type { Hole, HoleRange, Round, RoundScore } from '@/types/golf';
 
 const MS_PER_MIN = 60 * 1000;
@@ -17,6 +18,11 @@ const MS_PER_DAY = 24 * MS_PER_HOUR;
 const MONTH_SHORT = [
   'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+];
+
+const MONTH_LONG = [
+  'JANUARY', 'FEBRUARY', 'MARCH', 'APRIL', 'MAY', 'JUNE',
+  'JULY', 'AUGUST', 'SEPTEMBER', 'OCTOBER', 'NOVEMBER', 'DECEMBER'
 ];
 
 /** "+3" / "−2" / "E" — uses unicode minus (U+2212). */
@@ -175,4 +181,35 @@ export function requiredScoreTuples(round: Round): { scorerId: string; holeNumbe
     }
   }
   return tuples;
+}
+
+/**
+ * "May 6" — short month + day-of-month.
+ */
+export function formatDay(date: Date): string {
+  return `${MONTH_SHORT[date.getMonth()]} ${date.getDate()}`;
+}
+
+/**
+ * "MAY 2026" — month/year key used as the stable group label in
+ * the Rounds tab's month-grouped list rendering.
+ */
+export function monthKey(date: Date): string {
+  return `${MONTH_LONG[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+/**
+ * The score a round should sort/display by on the Rounds list. When
+ * the signed-in user was a participant, use their per-scorer total;
+ * otherwise fall back to the round-wide total (covers the edge case
+ * where the user scored a round for friends/family without playing
+ * themselves — the existing player picker doesn't auto-include
+ * self). Always returns a finite number.
+ */
+export function scoreForRoundsList(round: Round, myUserId: string): number {
+  const myKey = userParticipantKey(myUserId);
+  if (round.playerIds.includes(myKey)) {
+    return getRoundTotalRelative(round, myKey);
+  }
+  return getRoundTotalRelative(round);
 }

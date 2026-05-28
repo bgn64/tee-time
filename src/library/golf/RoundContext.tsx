@@ -78,6 +78,11 @@ type RoundContextValue = {
   setParticipantTee: (participantKey: string, teeId: string | undefined) => Promise<void>;
   completeCurrentRound: () => Promise<void>;
   abandonCurrentRound: () => Promise<void>;
+  /** Deletes a completed (or in-flight) scorecard owned by the signed-in
+   *  user. Owner-scoped at the SQL level — passes silently when the row
+   *  isn't owned by the caller. Awaited by the detail screen before
+   *  navigation so the list re-renders without the deleted card. */
+  deleteRound: (id: string) => Promise<void>;
 };
 
 const RoundContext = createContext<RoundContextValue | null>(null);
@@ -443,6 +448,34 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     [system, userId]
   );
 
+  const deleteRound = useCallback<RoundContextValue['deleteRound']>(
+    async (id) => {
+      if (!id) return;
+      if (!userId) return;
+      // Owner-scoped at the SQL level — RLS would also catch a
+      // cross-owner delete, but enforcing it locally avoids
+      // dropping cached friend rows from the feed while the upload
+      // queue retries against a rejected server. Both DELETEs
+      // include `owner_user_id = ?` for defense in depth.
+      await system.powersync.writeTransaction(async (tx) => {
+        await tx.execute(
+          `DELETE FROM ${SCORECARD_SCORES_TABLE}
+           WHERE scorecard_id = ? AND owner_user_id = ?`,
+          [id, userId]
+        );
+        await tx.execute(
+          `DELETE FROM ${SCORECARDS_TABLE}
+           WHERE id = ? AND owner_user_id = ?`,
+          [id, userId]
+        );
+      });
+      // Best-effort clean-up of the per-device cursor; cheap if
+      // no entry exists for this scorecard.
+      await clearCurrentHoleForScorecard(userId, id);
+    },
+    [system, userId]
+  );
+
   const value = useMemo<RoundContextValue>(
     () => ({
       currentRound,
@@ -456,6 +489,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       setParticipantTee,
       completeCurrentRound,
       abandonCurrentRound,
+      deleteRound,
     }),
     [
       currentRound,
@@ -469,6 +503,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       setParticipantTee,
       completeCurrentRound,
       abandonCurrentRound,
+      deleteRound,
     ]
   );
 
