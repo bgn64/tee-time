@@ -5,23 +5,6 @@ config:
   edition: 3
 
 streams:
-  # Every list owned by the authenticated user.
-  lists:
-    query: |
-      SELECT *
-      FROM lists
-      WHERE owner_id = auth.user_id()
-    auto_subscribe: true
-
-  # All todos belonging to the user's lists.
-  todos:
-    query: |
-      SELECT todos.*
-      FROM todos
-      JOIN lists ON lists.id = todos.list_id
-      WHERE lists.owner_id = auth.user_id()
-    auto_subscribe: true
-
   # Every scorecard (header row) owned by the authenticated user.
   scorecards:
     query: |

@@ -58,20 +58,6 @@ export default function TabLayout() {
               }}
             />
             <Tabs.Screen
-              name="todos"
-              options={{
-                title: 'Todos',
-                headerShown: false,
-                tabBarIcon: ({ color, focused }) => (
-                  <Ionicons
-                    name={focused ? 'list-circle' : 'list-circle-outline'}
-                    color={color}
-                    size={24}
-                  />
-                )
-              }}
-            />
-            <Tabs.Screen
               name="(score)"
               options={{
                 title: 'Score',
@@ -99,10 +85,6 @@ export default function TabLayout() {
                 )
               }}
             />
-            {/* The placeholder `about` route file is hidden from the
-                tab bar. It can be safely deleted once it's clear no
-                links still point to it. */}
-            <Tabs.Screen name="about" options={{ href: null }} />
           </Tabs>
         </FriendsProvider>
       </AuthGate>

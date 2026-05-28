@@ -93,7 +93,7 @@ rounds (e.g. `'player-you'`) still resolve via a legacy fallback.
 
 ## You tab — no out-of-repo setup
 
-The new **You tab** in the bottom nav replaces the placeholder About tab. It renders the signed-in user's profile via the same `<ProfileScreen>` component used everywhere else (Search results, scorecard tap-to-profile, friends-list drill-ins). No new tables, RLS policies, or sync streams — everything is computed from rows already synced (`profiles`, `friendships`, `scorecards`).
+The new **You tab** in the bottom nav renders the signed-in user's profile via the same `<ProfileScreen>` component used everywhere else (Search results, scorecard tap-to-profile, friends-list drill-ins). No new tables, RLS policies, or sync streams — everything is computed from rows already synced (`profiles`, `friendships`, `scorecards`).
 
 The profile screen now shows:
 - **Friends N** (tappable on your own profile → drills to `/(you)/friends`; hidden on others')
