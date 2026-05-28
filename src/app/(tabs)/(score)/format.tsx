@@ -1,16 +1,22 @@
 /**
  * Format Selection — Step 2 of the Score-tab round-setup flow.
  *
- * Trimmed version of the destination `format.tsx`: stroke-only, no
- * scramble UI, no live-share toggle. Reads `courseId` + comma-
- * separated `playerIds` from the URL, lets the user pick a tee per
- * player via `TeePickerSheet`, then calls `startRound(...)`. Once the
- * round becomes visible in the RoundProvider's `useQuery`, the
- * `<Redirect>` gate below carries the user into the locked scoring
- * screen automatically.
+ * Trimmed version of the destination `format.tsx`: stroke + scramble,
+ * no live-share toggle. Reads `courseId` + comma-separated `playerIds`
+ * from the URL, lets the user pick a tee per player (stroke) or
+ * configure teams + per-team tees (scramble), then calls
+ * `startRound(...)`. Once the round becomes visible in the
+ * RoundProvider's `useQuery`, the `<Redirect>` gate below carries the
+ * user into the locked scoring screen automatically.
  *
  * Redirect gate: bounces to `/scoring` if a round is already in
  * flight so a stale push of this screen can't kick off a second one.
+ *
+ * Scramble state ownership: groups/teamIds/teeIdByTeam live here (not
+ * in `<ScrambleBody />`) so toggling stroke ↔ scramble preserves the
+ * user's team work. Derivations (`teams`, `teeIdByParticipant`,
+ * `canStart`) are recomputed from that state, so `handleStart` reads
+ * the same shape regardless of where the user toggled last.
  */
 
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
@@ -25,13 +31,18 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { ScrambleBody } from '@/components/scoring/ScrambleBody';
 import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
 import { SEED_COURSES } from '@/data/courses';
 import { defaultTeeIdForCourse } from '@/library/golf/courseHelpers';
+import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRound } from '@/library/golf/RoundContext';
+import { buildInitialScrambleState, buildTeamsFromGroups } from '@/library/golf/teams';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
-import type { Tee } from '@/types/golf';
+import type { ScoringRule, Tee, Team } from '@/types/golf';
+
+const NEW_TEAM_PLACEHOLDER = 'New team';
 
 export default function FormatScreen() {
   const { colors } = useTheme();
@@ -39,7 +50,7 @@ export default function FormatScreen() {
     courseId?: string;
     playerIds?: string;
   }>();
-  const { currentRound, roundHydrated, startRound } = useRound();
+  const { currentRound, roundHydrated, startRound, userId } = useRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const playerIds = useMemo<string[]>(
@@ -49,6 +60,7 @@ export default function FormatScreen() {
 
   const course = SEED_COURSES.find((c) => c.id === courseId);
 
+  const [scoringRule, setScoringRule] = useState<ScoringRule>('stroke');
   const [teeIds, setTeeIds] = useState<Record<string, string | undefined>>(
     () => {
       const defaultTee = course ? defaultTeeIdForCourse(course) : undefined;
@@ -61,10 +73,78 @@ export default function FormatScreen() {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
 
+  // Scramble team-config state — hoisted here from ScrambleBody so
+  // toggling stroke ↔ scramble doesn't discard the user's work.
+  // Seeded once via the same helper that previously lived inside
+  // ScrambleBody. Re-mount on `rawPlayerIds` change is handled by
+  // expo-router (the URL is the route key), so we don't need a manual
+  // reset effect here.
+  const [scrambleInit] = useState(() =>
+    buildInitialScrambleState(
+      playerIds,
+      course ? defaultTeeIdForCourse(course) : undefined
+    )
+  );
+  const [scrambleGroups, setScrambleGroups] = useState<string[][]>(scrambleInit.groups);
+  const [scrambleTeamIds, setScrambleTeamIds] = useState<string[]>(scrambleInit.teamIds);
+  const [scrambleTeeIdByTeam, setScrambleTeeIdByTeam] = useState<
+    Record<string, string | undefined>
+  >(scrambleInit.teeIdByTeam);
+
   // Resolve display info for each participant via the resolver
   // (PowerSync watches over profiles + custom_players). Called
   // unconditionally so the hook order is stable.
   const resolver = useParticipantResolver(playerIds);
+
+  // Inputs to the scramble derivations below. Computed before the
+  // early returns so the `useMemo`s downstream stay in the same hook
+  // position on every render. `defaultTeeId` is undefined when the
+  // course isn't loaded yet — the derivations all handle that
+  // gracefully because the only render path that actually consumes
+  // them is gated on `course` further down.
+  const selfParticipantKey = userId ? userParticipantKey(userId) : undefined;
+  const defaultTeeId = course ? defaultTeeIdForCourse(course) : undefined;
+  const selfFirstName = (() => {
+    if (!selfParticipantKey) return undefined;
+    const name = resolver.get(selfParticipantKey)?.displayName?.trim();
+    if (!name) return undefined;
+    return name.split(/\s+/)[0];
+  })();
+
+  // Derive scramble teams + per-participant tees from the hoisted
+  // state. Re-derived on every render — name/color follow the live
+  // resolver, but the `id` field is held stable through
+  // `scrambleTeamIds` so React keys + score writes stay coherent.
+  const scrambleTeams: Team[] = useMemo(() => {
+    return buildTeamsFromGroups(
+      scrambleGroups,
+      (id) => {
+        const r = resolver.get(id);
+        return r ? { displayName: r.displayName, avatarColor: r.avatarColor } : undefined;
+      },
+      selfParticipantKey ?? null,
+      scrambleTeamIds,
+      selfFirstName
+    ).map((t, i) => {
+      // Pending empty bucket gets a friendly placeholder name.
+      if (scrambleGroups[i].length === 0) {
+        return { ...t, name: NEW_TEAM_PLACEHOLDER };
+      }
+      return t;
+    });
+  }, [scrambleGroups, scrambleTeamIds, resolver, selfParticipantKey, selfFirstName]);
+
+  const scrambleTeeIdByParticipant: Record<string, string | undefined> = useMemo(() => {
+    const out: Record<string, string | undefined> = {};
+    for (const team of scrambleTeams) {
+      const teeId = scrambleTeeIdByTeam[team.id] ?? defaultTeeId;
+      for (const pid of team.playerIds) out[pid] = teeId;
+    }
+    return out;
+  }, [scrambleTeams, scrambleTeeIdByTeam, defaultTeeId]);
+
+  const scrambleCanStart =
+    scrambleTeams.length > 0 && scrambleTeams.every((t) => t.playerIds.length > 0);
 
   if (!roundHydrated) {
     return (
@@ -106,12 +186,26 @@ export default function FormatScreen() {
     setStarting(true);
     setStartError(null);
     try {
-      await startRound({
-        course,
-        playerIds,
-        holeRange: 'all',
-        teeIds,
-      });
+      if (scoringRule === 'scramble') {
+        if (!scrambleCanStart || scrambleTeams.length === 0) {
+          throw new Error('Every team needs at least one player.');
+        }
+        await startRound({
+          course,
+          playerIds: scrambleTeams.flatMap((t) => t.playerIds),
+          holeRange: 'all',
+          teeIds: scrambleTeeIdByParticipant,
+          scoringRule: 'scramble',
+          teams: scrambleTeams,
+        });
+      } else {
+        await startRound({
+          course,
+          playerIds,
+          holeRange: 'all',
+          teeIds,
+        });
+      }
       // No explicit navigation — once `currentRound` becomes
       // non-null in the RoundProvider, the `<Redirect>` gate at the
       // top of this screen sends us to `/scoring`. This avoids racing
@@ -124,6 +218,9 @@ export default function FormatScreen() {
       setStarting(false);
     }
   }
+
+  const startDisabled =
+    starting || (scoringRule === 'scramble' && !scrambleCanStart);
 
   return (
     <View style={styles.container}>
@@ -145,60 +242,113 @@ export default function FormatScreen() {
         <Text style={styles.title}>How are you scoring?</Text>
 
         <View style={styles.toggleRow}>
-          <View style={[styles.toggle, styles.toggleActive]}>
-            <Text style={[styles.toggleText, styles.toggleTextActive]}>
+          <Pressable
+            onPress={() => setScoringRule('stroke')}
+            style={[
+              styles.toggle,
+              scoringRule === 'stroke' && styles.toggleActive,
+            ]}>
+            <Text
+              style={[
+                styles.toggleText,
+                scoringRule === 'stroke' && styles.toggleTextActive,
+              ]}>
               Stroke
             </Text>
-          </View>
+          </Pressable>
+          <Pressable
+            onPress={() => setScoringRule('scramble')}
+            disabled={playerIds.length < 2}
+            style={[
+              styles.toggle,
+              scoringRule === 'scramble' && styles.toggleActive,
+              playerIds.length < 2 && styles.toggleDisabled,
+            ]}>
+            <Text
+              style={[
+                styles.toggleText,
+                scoringRule === 'scramble' && styles.toggleTextActive,
+                playerIds.length < 2 && styles.toggleTextDisabled,
+              ]}>
+              Scramble
+            </Text>
+          </Pressable>
         </View>
 
         <View style={styles.help}>
-          <Text style={styles.helpHead}>Stroke play.</Text>
-          <Text style={styles.helpBody}>
-            Everyone scores for themselves. Lowest total wins.
-          </Text>
+          {scoringRule === 'stroke' ? (
+            <>
+              <Text style={styles.helpHead}>Stroke play.</Text>
+              <Text style={styles.helpBody}>
+                Everyone scores for themselves. Lowest total wins.
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.helpHead}>Scramble.</Text>
+              <Text style={styles.helpBody}>
+                Pick teams. Each team plays one ball per hole and shares the same tees.
+              </Text>
+            </>
+          )}
         </View>
 
-        <Text style={styles.sectionLabel}>SCORING FOR</Text>
-        <View style={styles.list}>
-          {playerIds.map((id) => {
-            const color = resolveColor(id);
-            const letter = (resolveName(id)[0] ?? '?').toUpperCase();
-            const tee = teeIds[id] ? teeById.get(teeIds[id]!) : undefined;
-            return (
-              <View key={id} style={styles.rowCard}>
-                <View style={[styles.rowAvatar, { backgroundColor: color }]}>
-                  <Text style={styles.rowAvatarText}>{letter}</Text>
+        {scoringRule === 'stroke' ? (
+          <View style={styles.list}>
+            {playerIds.map((id) => {
+              const color = resolveColor(id);
+              const letter = (resolveName(id)[0] ?? '?').toUpperCase();
+              const tee = teeIds[id] ? teeById.get(teeIds[id]!) : undefined;
+              return (
+                <View key={id} style={styles.rowCard}>
+                  <View style={[styles.rowAvatar, { backgroundColor: color }]}>
+                    <Text style={styles.rowAvatarText}>{letter}</Text>
+                  </View>
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {resolveName(id)}
+                  </Text>
+                  {hasTees && (
+                    <Pressable
+                      style={[styles.teePill, !tee && styles.teePillEmpty]}
+                      onPress={() => setPickerTarget(id)}>
+                      {tee ? (
+                        <>
+                          <View
+                            style={[
+                              styles.teePillDot,
+                              { backgroundColor: teeSwatch(tee) },
+                            ]}
+                          />
+                          <Text style={styles.teePillText} numberOfLines={1}>
+                            {tee.name}
+                          </Text>
+                        </>
+                      ) : (
+                        <Text style={styles.teePillTextEmpty}>+ Tee</Text>
+                      )}
+                      <Text style={styles.teePillChev}>▾</Text>
+                    </Pressable>
+                  )}
                 </View>
-                <Text style={styles.rowName} numberOfLines={1}>
-                  {resolveName(id)}
-                </Text>
-                {hasTees && (
-                  <Pressable
-                    style={[styles.teePill, !tee && styles.teePillEmpty]}
-                    onPress={() => setPickerTarget(id)}>
-                    {tee ? (
-                      <>
-                        <View
-                          style={[
-                            styles.teePillDot,
-                            { backgroundColor: teeSwatch(tee) },
-                          ]}
-                        />
-                        <Text style={styles.teePillText} numberOfLines={1}>
-                          {tee.name}
-                        </Text>
-                      </>
-                    ) : (
-                      <Text style={styles.teePillTextEmpty}>+ Tee</Text>
-                    )}
-                    <Text style={styles.teePillChev}>▾</Text>
-                  </Pressable>
-                )}
-              </View>
-            );
-          })}
-        </View>
+              );
+            })}
+          </View>
+        ) : (
+          <ScrambleBody
+            playerIds={playerIds}
+            resolver={resolver}
+            selfParticipantKey={selfParticipantKey}
+            firstNameForSelf={selfFirstName}
+            courseTees={courseTees}
+            defaultTeeId={defaultTeeId}
+            groups={scrambleGroups}
+            setGroups={setScrambleGroups}
+            teamIds={scrambleTeamIds}
+            setTeamIds={setScrambleTeamIds}
+            teeIdByTeam={scrambleTeeIdByTeam}
+            setTeeIdByTeam={setScrambleTeeIdByTeam}
+          />
+        )}
 
         {startError && (
           <Text style={[styles.errorText, { color: colors.accent, marginTop: 12 }]}>
@@ -209,8 +359,8 @@ export default function FormatScreen() {
 
       <View style={styles.footer}>
         <Pressable
-          style={[styles.nextBtn, starting && styles.nextBtnDisabled]}
-          disabled={starting}
+          style={[styles.nextBtn, startDisabled && styles.nextBtnDisabled]}
+          disabled={startDisabled}
           onPress={handleStart}>
           {starting ? (
             <ActivityIndicator color="#fff" />
@@ -221,7 +371,7 @@ export default function FormatScreen() {
       </View>
 
       <TeePickerSheet
-        visible={pickerTarget !== null && hasTees}
+        visible={pickerTarget !== null && hasTees && scoringRule === 'stroke'}
         scorerName={pickerTarget ? resolveName(pickerTarget) : ''}
         tees={courseTees}
         selectedTeeId={pickerTarget ? teeIds[pickerTarget] : undefined}
@@ -305,12 +455,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.primary,
       borderColor: colors.primary,
     },
+    toggleDisabled: {
+      opacity: 0.45,
+    },
     toggleText: {
       fontSize: 13,
       fontWeight: '700',
       color: colors.textBody,
     },
     toggleTextActive: { color: '#fff' },
+    toggleTextDisabled: { color: colors.textMuted },
     help: {
       backgroundColor: colors.chipBg,
       borderRadius: 10,
@@ -326,13 +480,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 12,
       color: colors.textBody,
       marginTop: 2,
-    },
-    sectionLabel: {
-      fontSize: 10,
-      fontWeight: '800',
-      letterSpacing: 0.6,
-      color: colors.textMuted,
-      marginBottom: 8,
     },
     list: { gap: 8 },
     rowCard: {

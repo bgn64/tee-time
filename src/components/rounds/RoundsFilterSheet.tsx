@@ -1,7 +1,7 @@
 /**
  * Bottom-sheet modal that exposes the Rounds-tab filters: hole range
- * and date range. The format filter from the old app is dropped
- * because we're stroke-only — every round is `scoringRule = 'stroke'`.
+ * and date range. No format filter yet (scramble was just added; if a
+ * stroke-vs-scramble filter is needed later, slot it in here).
  *
  * Selections apply live (no Apply button). Header carries a
  * Clear-all link + close button. Pinned to the bottom of the screen

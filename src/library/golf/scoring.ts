@@ -199,17 +199,34 @@ export function monthKey(date: Date): string {
 }
 
 /**
+ * The opaque `scorerId` used to look up a specific user's running
+ * total in this round. In stroke rounds that's the user's
+ * `participantKey`. In scramble rounds it's the id of the team that
+ * contains the user. Returns `undefined` if the user isn't on the
+ * scorecard at all (or, in a scramble round, somehow isn't on any
+ * team — defensive, shouldn't happen given `startRound` validation).
+ */
+export function scorerIdForUser(round: Round, userId: string): string | undefined {
+  const myKey = userParticipantKey(userId);
+  if (round.scoringRule === 'scramble' && round.teams && round.teams.length > 0) {
+    const team = round.teams.find((t) => t.playerIds.includes(myKey));
+    return team?.id;
+  }
+  if (round.playerIds.includes(myKey)) return myKey;
+  return undefined;
+}
+
+/**
  * The score a round should sort/display by on the Rounds list. When
- * the signed-in user was a participant, use their per-scorer total;
- * otherwise fall back to the round-wide total (covers the edge case
- * where the user scored a round for friends/family without playing
- * themselves — the existing player picker doesn't auto-include
- * self). Always returns a finite number.
+ * the signed-in user was a participant, use their per-scorer total
+ * (their team's total in scramble); otherwise fall back to the
+ * round-wide total (covers the edge case where the user scored a
+ * round for friends/family without playing themselves — the existing
+ * player picker doesn't auto-include self). Always returns a finite
+ * number.
  */
 export function scoreForRoundsList(round: Round, myUserId: string): number {
-  const myKey = userParticipantKey(myUserId);
-  if (round.playerIds.includes(myKey)) {
-    return getRoundTotalRelative(round, myKey);
-  }
+  const sid = scorerIdForUser(round, myUserId);
+  if (sid) return getRoundTotalRelative(round, sid);
   return getRoundTotalRelative(round);
 }

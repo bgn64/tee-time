@@ -3,13 +3,17 @@
  *
  * Drastically simplified port of the destination tee-time app's
  * `ReadOnlyScorecard`:
- *   - Stroke-only (the destination's scramble teams path is dropped).
+ *   - Stroke + scramble: in scramble the "scorers" are teams (one row
+ *     per team; team members share a tee that's read off the first
+ *     member's participant entry; the team id is what `RoundScore`
+ *     rows are keyed by). In stroke each participant is one scorer.
  *   - No friend-graph / profile cache / live name resolution — names
  *     come from the round's `participants[]` snapshot + the seed
  *     player list, with no linked-friend tap-through.
  *   - No HCP row (handicap_index isn't tracked in the simplified
  *     `Hole` type).
- *   - Final-box tee pill stays editable when `onEditTee` is supplied.
+ *   - Final-box tee pill stays editable when `onEditTee` is supplied
+ *     (consumer fans out per-member writes in scramble).
  *
  * Jump-to-hole pattern: when `onHolePress` is set, every cell in the
  * grid wraps a Pressable that calls back with the hole number, so the
@@ -116,6 +120,40 @@ export function ReadOnlyScorecard({
   const resolver = useParticipantResolver(resolverKeys, participantSnapshots);
 
   const scorers: Scorer[] = useMemo(() => {
+    const isScramble =
+      round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
+
+    if (isScramble) {
+      // One row per team. Tee is shared by every team member, so we
+      // read it from the first member's participant entry. `userId`
+      // is intentionally not set — taps on a team row don't have a
+      // single profile target (the team owns the row, not any one
+      // member).
+      const list: Scorer[] = [];
+      for (const team of round.teams ?? []) {
+        const firstMember = team.playerIds[0];
+        const firstParticipant = firstMember
+          ? round.participants.find((p) => p.participantKey === firstMember)
+          : undefined;
+        const members: AvatarMember[] = team.playerIds.map((pid) => {
+          const r = resolver.get(pid);
+          return {
+            id: pid,
+            name: r?.displayName || 'Player',
+            color: r?.avatarColor || colors.primary,
+          };
+        });
+        list.push({
+          id: team.id,
+          name: team.name,
+          color: team.color,
+          teeId: firstParticipant?.teeId,
+          members,
+        });
+      }
+      return list;
+    }
+
     const list: Scorer[] = [];
     for (const p of round.participants ?? []) {
       const resolved = resolver.get(p.participantKey);
@@ -148,7 +186,14 @@ export function ReadOnlyScorecard({
       }
     }
     return list;
-  }, [round.participants, round.playerIds, resolver, colors.primary]);
+  }, [
+    round.scoringRule,
+    round.teams,
+    round.participants,
+    round.playerIds,
+    resolver,
+    colors.primary,
+  ]);
 
   const front9 = useMemo(
     () => round.course.holes.filter((h) => h.number <= 9),

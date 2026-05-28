@@ -427,6 +427,11 @@ function RoundCard({ round, resolver, myUserId, styles, colors, onPress }: Round
         <View style={styles.metaRight}>
           <View style={styles.tag}>
             <Text style={styles.tagText}>
+              {round.scoringRule === 'scramble' ? 'SCRAMBLE' : 'STROKE'}
+            </Text>
+          </View>
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>
               {holeRangeLabel(round.course.holes, round.holeRange).toUpperCase()}
             </Text>
           </View>

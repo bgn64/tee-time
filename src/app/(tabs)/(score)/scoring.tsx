@@ -35,8 +35,10 @@ import { HoleNavBar } from '@/components/scoring/HoleNavBar';
 import { RangeDropdown, rangeLabel } from '@/components/scoring/RangeDropdown';
 import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
 import { ScoreEntryRow } from '@/components/scoring/ScoreEntryRow';
+import type { AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
 import { yardageForHole } from '@/library/golf/courseHelpers';
+import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRound } from '@/library/golf/RoundContext';
 import {
   formatScore,
@@ -53,10 +55,12 @@ export default function ScoringScreen() {
     currentRound,
     roundHydrated,
     currentHoleHydrated,
+    userId,
     setCustomHoleScore,
     setCurrentHole,
     setHoleRange,
     setParticipantTee,
+    setParticipantTees,
     completeCurrentRound,
     abandonCurrentRound,
   } = useRound();
@@ -89,8 +93,16 @@ export default function ScoringScreen() {
     const round = currentRoundRef.current;
     if (!round) return;
     const inRange = holesInRange(round.course.holes, round.holeRange);
+    // In scramble, each team is one scorer (one score row per hole),
+    // so the "every scorer × every hole" gate uses team ids. In
+    // stroke each participant is a scorer.
+    const isScramble =
+      round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
+    const requiredScorerIds = isScramble
+      ? round.teams!.map((t) => t.id)
+      : round.playerIds;
     const fullyScored = inRange.every((h) =>
-      round.playerIds.every((sid) =>
+      requiredScorerIds.every((sid) =>
         round.scores.some(
           (s) => s.scorerId === sid && s.holeNumber === h.number
         )
@@ -173,17 +185,44 @@ export default function ScoringScreen() {
   // custom_players, with a direct-fetch fallback for unfriended
   // ex-friends). Falls back to a placeholder when the row isn't
   // resolvable (e.g., offline + ex-friend + historic round).
-  const scorers = currentRound.playerIds.map((pid) => {
-    const resolved = resolver.get(pid);
-    const name = resolved?.displayName || 'Player';
-    const color = resolved?.avatarColor || colors.primary;
-    return {
-      id: pid,
-      name,
-      color,
-      members: [{ id: pid, name, color }],
-    };
-  });
+  //
+  // In scramble: one Scorer per team. The team's `id` is the
+  // opaque scorerId used for score writes (one DB row per team per
+  // hole), and `members` is every team member resolved through the
+  // resolver so the row's avatar cluster renders both initials.
+  //
+  // In stroke: one Scorer per participant. `members` is a singleton.
+  const isScramble =
+    currentRound.scoringRule === 'scramble' &&
+    (currentRound.teams?.length ?? 0) > 0;
+  const scorers = isScramble
+    ? currentRound.teams!.map((team) => {
+        const members: AvatarMember[] = team.playerIds.map((pid) => {
+          const r = resolver.get(pid);
+          return {
+            id: pid,
+            name: r?.displayName || 'Player',
+            color: r?.avatarColor || colors.primary,
+          };
+        });
+        return {
+          id: team.id,
+          name: team.name,
+          color: team.color,
+          members,
+        };
+      })
+    : currentRound.playerIds.map((pid) => {
+        const resolved = resolver.get(pid);
+        const name = resolved?.displayName || 'Player';
+        const color = resolved?.avatarColor || colors.primary;
+        return {
+          id: pid,
+          name,
+          color,
+          members: [{ id: pid, name, color }],
+        };
+      });
   const isSingleScorer = scorers.length === 1;
 
   const currentIdxInRange = inRangeHoles.findIndex(
@@ -194,12 +233,19 @@ export default function ScoringScreen() {
       ? inRangeHoles[currentIdxInRange + 1].number
       : null;
 
-  // "You"-tee yardage for the HoleNavBar — find the "you" participant
-  // and read their teeId from the round's snapshot, then look up the
-  // yardage in the hole. Falls back to the hole's single-tee default.
-  const selfTeeId = currentRound.participants.find(
-    (p) => p.participantKey === currentRound.playerIds[0]
-  )?.teeId;
+  // "Self"-tee yardage for the HoleNavBar — find the signed-in user's
+  // participant entry and read their teeId. Falls back to the first
+  // participant's tee when the user isn't a participant (the edge
+  // case where they scored a round for friends without playing
+  // themselves — the player picker still allows this). Previously
+  // used `playerIds[0]` which assumed self was always first; that
+  // held by coincidence for stroke but broke in scramble where
+  // `playerIds` is `teams.flatMap(t => t.playerIds)`.
+  const selfKey = userId ? userParticipantKey(userId) : undefined;
+  const selfTeeId =
+    (selfKey
+      ? currentRound.participants.find((p) => p.participantKey === selfKey)?.teeId
+      : undefined) ?? currentRound.participants[0]?.teeId;
   const headerYardage = yardageForHole(
     currentRound.course,
     currentHole.number,
@@ -222,7 +268,9 @@ export default function ScoringScreen() {
         <View style={styles.titleBlock}>
           <View style={styles.pillRow}>
             <View style={styles.formatPill}>
-              <Text style={styles.formatPillText}>STROKE</Text>
+              <Text style={styles.formatPillText}>
+                {isScramble ? 'SCRAMBLE' : 'STROKE'}
+              </Text>
             </View>
             {currentRound.course.holes.length >= 18 && (
               <Pressable
@@ -353,6 +401,16 @@ export default function ScoringScreen() {
         tees={currentRound.course.tees ?? []}
         selectedTeeId={(() => {
           if (!teeEditTarget) return undefined;
+          if (isScramble) {
+            // Team id → look up any member's teeId (they all share).
+            const team = currentRound.teams?.find((t) => t.id === teeEditTarget);
+            const firstMember = team?.playerIds[0];
+            if (!firstMember) return undefined;
+            const p = currentRound.participants.find(
+              (q) => q.participantKey === firstMember
+            );
+            return p?.teeId;
+          }
           const p = currentRound.participants.find(
             (q) => q.participantKey === teeEditTarget
           );
@@ -361,7 +419,24 @@ export default function ScoringScreen() {
         onCancel={() => setTeeEditTarget(null)}
         onPick={(teeId) => {
           if (teeEditTarget) {
-            setParticipantTee(teeEditTarget, teeId);
+            if (isScramble) {
+              // Fan out to every team member so the whole team
+              // continues to share a tee. Single batched UPDATE so
+              // the JSON snapshot lands atomically (looping
+              // setParticipantTee would silently drop earlier
+              // updates because each call uses the same render-time
+              // participants snapshot).
+              const team = currentRound.teams?.find(
+                (t) => t.id === teeEditTarget
+              );
+              const updates = (team?.playerIds ?? []).map((pid) => ({
+                participantKey: pid,
+                teeId,
+              }));
+              void setParticipantTees(updates);
+            } else {
+              setParticipantTee(teeEditTarget, teeId);
+            }
           }
           setTeeEditTarget(null);
         }}

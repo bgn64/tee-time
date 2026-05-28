@@ -26,6 +26,7 @@ import type {
   RoundParticipant,
   RoundScore,
   ScoringRule,
+  Team,
 } from '@/types/golf';
 
 export type ScorecardRowShape = {
@@ -36,6 +37,7 @@ export type ScorecardRowShape = {
   scoring_rule: string | null;
   player_ids: string | null;
   participants: string | null;
+  teams: string | null;
   hole_range: string | null;
   started_at: string | null;
   completed_at: string | null;
@@ -75,6 +77,7 @@ export function projectScorecardRow(
     'scorecards.participants'
   );
   const playerIds = safeParse<string[]>(row.player_ids, [], 'scorecards.player_ids');
+  const teams = safeParse<Team[]>(row.teams, [], 'scorecards.teams');
   return {
     id: row.id,
     ownerUserId: row.owner_user_id,
@@ -82,6 +85,7 @@ export function projectScorecardRow(
     scoringRule: (row.scoring_rule as ScoringRule) ?? 'stroke',
     playerIds,
     participants,
+    teams,
     holeRange: (row.hole_range as HoleRange) ?? 'all',
     currentHoleNumber: 1,
     scores: scoresForThisScorecard,

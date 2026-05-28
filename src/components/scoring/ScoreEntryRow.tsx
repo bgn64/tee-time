@@ -1,7 +1,7 @@
 /**
- * Score-entry row — one per scorer (one per player in stroke-only
- * mode; the destination's scramble variant which clustered N players
- * has been omitted from this port).
+ * Score-entry row — one per scorer. In stroke mode that's one per
+ * player; in scramble mode that's one per team, and the avatar
+ * cluster renders all team members.
  *
  * Layout: avatar-cluster · optional name · optional running-score chip
  * · quick-pick chip row.

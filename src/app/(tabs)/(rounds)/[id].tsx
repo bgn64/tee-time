@@ -202,7 +202,9 @@ export default function RoundDetailScreen() {
           <View style={styles.metaRow}>
             <Text style={styles.date}>{formatDay(date)}, {date.getFullYear()}</Text>
             <View style={styles.tag}>
-              <Text style={styles.tagText}>STROKE</Text>
+              <Text style={styles.tagText}>
+                {round.scoringRule === 'scramble' ? 'SCRAMBLE' : 'STROKE'}
+              </Text>
             </View>
             <View style={styles.tag}>
               <Text style={styles.tagText}>

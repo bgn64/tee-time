@@ -2,12 +2,12 @@
  * FeedCardLarge — large social-style card for one friend's round on
  * the feed.
  *
- * Layout (ported from the destination tee-time app, stroke-only):
+ * Layout (ported from the destination tee-time app):
  *
  *   ┌──── colored band (owner's avatar_color gradient) ─────────┐
  *   │ <Course Name>                                             │
  *   │ <City, State>                                             │
- *   │ [STROKE] [18 HOLES] [● IN PROGRESS]?                      │
+ *   │ [STROKE|SCRAMBLE] [18 HOLES] [● IN PROGRESS]?             │
  *   │ <handle> · <relative time>          <±score>  THRU N?     │
  *   └───────────────────────────────────────────────────────────┘
  *   ReadOnlyScorecard (with FinalTotals hidden on live cards)
@@ -40,6 +40,7 @@ import {
   getRoundTotalRelative,
   getScorerProgress,
   holeRangeLabel,
+  scorerIdForUser,
 } from '@/library/golf/scoring';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useProfile } from '@/library/social/FriendsContext';
@@ -91,11 +92,16 @@ export function FeedCardLarge({ round, onPressParticipant }: Props) {
   const ownerColor = ownerProfile?.avatarColor ?? DEFAULT_BAND;
 
   const isInProgress = !round.completedAt;
+  const isScramble =
+    round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
 
   // Owner-perspective scorer: the band's big chip shows the owner's
-  // own running total. For our stroke-only model the scorer id IS
-  // the participantKey, which is `user:{ownerUserId}`.
-  const ownerScorerId = userParticipantKey(ownerUserId);
+  // own running total. In stroke that's the owner's participantKey;
+  // in scramble it's the id of the team the owner is on. Falls back
+  // to the participantKey if the owner can't be located on any team
+  // (defensive — shouldn't happen given startRound validation).
+  const ownerScorerId =
+    scorerIdForUser(round, ownerUserId) ?? userParticipantKey(ownerUserId);
 
   const totalRel = getRoundTotalRelative(round, ownerScorerId);
   let totalStrokes = 0;
@@ -161,7 +167,9 @@ export function FeedCardLarge({ round, onPressParticipant }: Props) {
         ) : null}
         <View style={styles.bandPillRow}>
           <View style={styles.bandPill}>
-            <Text style={styles.bandPillText}>STROKE</Text>
+            <Text style={styles.bandPillText}>
+              {isScramble ? 'SCRAMBLE' : 'STROKE'}
+            </Text>
           </View>
           <View style={styles.bandPill}>
             <Text style={styles.bandPillText}>{holesLabel}</Text>

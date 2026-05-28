@@ -7,11 +7,12 @@ export const FRIENDSHIPS_TABLE = 'friendships';
 export const FRIEND_REQUESTS_TABLE = 'friend_requests';
 export const CUSTOM_PLAYERS_TABLE = 'custom_players';
 
-// JSON-shaped columns (course_snapshot, participants, player_ids) are
-// declared as `column.text` here because PowerSync's local SQLite only
-// supports TEXT/INTEGER/REAL. Serialization happens at the read/write
-// boundary inside `RoundContext`; the upload connector also re-parses
-// these columns before forwarding to Supabase (where they're jsonb).
+// JSON-shaped columns (course_snapshot, participants, player_ids,
+// teams) are declared as `column.text` here because PowerSync's local
+// SQLite only supports TEXT/INTEGER/REAL. Serialization happens at the
+// read/write boundary inside `RoundContext`; the upload connector also
+// re-parses these columns before forwarding to Supabase (where they're
+// jsonb).
 const scorecards = new Table(
   {
     owner_user_id: column.text,
@@ -20,6 +21,7 @@ const scorecards = new Table(
     scoring_rule: column.text,
     player_ids: column.text,
     participants: column.text,
+    teams: column.text,
     hole_range: column.text,
     started_at: column.text,
     completed_at: column.text,

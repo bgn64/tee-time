@@ -4,9 +4,9 @@
  * Used wherever we want to identify a scorer (a single player in
  * stroke, or a team of players in scramble) without leaning on
  * arbitrarily-assigned team colors or hard-to-fit team-name strings.
- * In stroke-only mode we always pass `members.length === 1`, so only
- * one circle ever renders — the multi-member layout is kept for
- * parity with the destination component's API.
+ * Stroke callers pass `members.length === 1` so only one circle
+ * renders; scramble callers pass the team roster so every member's
+ * initial appears in an overlapping stack.
  *
  * Pure display: the caller supplies the resolved {name, color}
  * entries. Identity resolution happens upstream.

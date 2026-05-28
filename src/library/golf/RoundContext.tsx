@@ -58,6 +58,7 @@ import type {
   RoundParticipant,
   RoundScore,
   ScoringRule,
+  Team,
 } from '@/types/golf';
 
 type RoundContextValue = {
@@ -71,11 +72,24 @@ type RoundContextValue = {
     holeRange?: HoleRange;
     /** Optional map of participantKey → teeId. Missing entries fall back to the course's first tee. */
     teeIds?: Record<string, string | undefined>;
+    /** Defaults to 'stroke'. When 'scramble', `teams` must be supplied. */
+    scoringRule?: ScoringRule;
+    /** Required when `scoringRule === 'scramble'`. Used to set `teamId` on participants. */
+    teams?: Team[];
   }) => Promise<string>;
   setCustomHoleScore: (scorerId: string, holeNumber: number, strokes: number) => Promise<void>;
   setCurrentHole: (holeNumber: number) => Promise<void>;
   setHoleRange: (range: HoleRange) => Promise<void>;
   setParticipantTee: (participantKey: string, teeId: string | undefined) => Promise<void>;
+  /**
+   * Batched variant of `setParticipantTee` — applies every update in
+   * a single UPDATE so all changes land in the same JSON snapshot.
+   * Required by scramble's "rebind every team member's tee" flow:
+   * looping `setParticipantTee` would silently drop earlier updates
+   * because each call re-serialises `currentRound.participants` from
+   * a render-time snapshot, not from the latest DB state.
+   */
+  setParticipantTees: (updates: { participantKey: string; teeId: string | undefined }[]) => Promise<void>;
   completeCurrentRound: () => Promise<void>;
   abandonCurrentRound: () => Promise<void>;
   /** Deletes a completed (or in-flight) scorecard owned by the signed-in
@@ -209,6 +223,11 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       [],
       'scorecards.player_ids'
     );
+    const teams = safeParse<Team[]>(
+      scorecardRow.teams,
+      [],
+      'scorecards.teams'
+    );
     const scores: RoundScore[] = scoreRows.map((r) => ({
       scorerId: r.scorer_id ?? '',
       holeNumber: Number(r.hole_number ?? 0),
@@ -221,6 +240,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       scoringRule: (scorecardRow.scoring_rule as ScoringRule) ?? 'stroke',
       playerIds,
       participants,
+      teams,
       holeRange: (scorecardRow.hole_range as HoleRange) ?? 'all',
       currentHoleNumber: currentHole,
       scores,
@@ -237,14 +257,35 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   });
 
   const startRound = useCallback<RoundContextValue['startRound']>(
-    async ({ course, playerIds, holeRange = 'all', teeIds }) => {
+    async ({ course, playerIds, holeRange = 'all', teeIds, scoringRule = 'stroke', teams }) => {
       if (!userId) {
         throw new Error('You must be signed in to start a round.');
       }
       if (playerIds.length === 0) {
         throw new Error('Pick at least one player before starting a round.');
       }
+      if (scoringRule === 'scramble') {
+        if (!teams || teams.length === 0) {
+          throw new Error('Scramble rounds need at least one team.');
+        }
+        if (teams.some((t) => t.playerIds.length === 0)) {
+          throw new Error('Every scramble team needs at least one player.');
+        }
+      }
       const defaultTee = defaultTeeIdForCourse(course);
+
+      // Map participantKey → teamId for scramble rounds so each
+      // participant carries the team they're scoring under. Lets
+      // downstream callers (scoring screen, feed card) translate a
+      // user → team scorerId without re-scanning teams[].playerIds.
+      const teamIdByParticipant = new Map<string, string>();
+      if (scoringRule === 'scramble' && teams) {
+        for (const team of teams) {
+          for (const pid of team.playerIds) {
+            teamIdByParticipant.set(pid, team.id);
+          }
+        }
+      }
 
       // Snapshot custom-player nicknames + colors into the round
       // participants so a friend viewing the round in their feed
@@ -275,17 +316,18 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       const participants: RoundParticipant[] = playerIds.map((pid) => {
         const parsed = parseParticipantKey(pid);
         const teeId = teeIds && pid in teeIds ? teeIds[pid] : defaultTee;
+        const teamId = teamIdByParticipant.get(pid);
+        const base: RoundParticipant = { participantKey: pid, teeId };
+        if (teamId) base.teamId = teamId;
         if (parsed.kind === 'custom') {
           const snap = customSnapshots.get(parsed.customPlayerId);
-          return {
-            participantKey: pid,
-            teeId,
-            localDisplayName: snap?.name,
-            localDisplayColor: snap?.color,
-          };
+          base.localDisplayName = snap?.name;
+          base.localDisplayColor = snap?.color;
         }
-        return { participantKey: pid, teeId };
+        return base;
       });
+
+      const teamsToPersist: Team[] = scoringRule === 'scramble' && teams ? teams : [];
 
       const id = newRoundId();
       const now = new Date().toISOString();
@@ -293,16 +335,17 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         await tx.execute(
           `INSERT INTO ${SCORECARDS_TABLE}
              (id, owner_user_id, course_id, course_snapshot, scoring_rule,
-              player_ids, participants, hole_range, started_at, completed_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+              player_ids, participants, teams, hole_range, started_at, completed_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
           [
             id,
             userId,
             course.id,
             JSON.stringify(course),
-            'stroke',
+            scoringRule,
             JSON.stringify(playerIds),
             JSON.stringify(participants),
+            JSON.stringify(teamsToPersist),
             holeRange,
             now,
             now,
@@ -414,6 +457,25 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     [system, currentRound]
   );
 
+  const setParticipantTees = useCallback<RoundContextValue['setParticipantTees']>(
+    async (updates) => {
+      const id = scorecardIdRef.current;
+      if (!id || !currentRound || updates.length === 0) return;
+      const updateByKey = new Map(updates.map((u) => [u.participantKey, u.teeId]));
+      const nextParticipants = currentRound.participants.map((p) =>
+        updateByKey.has(p.participantKey)
+          ? { ...p, teeId: updateByKey.get(p.participantKey) }
+          : p
+      );
+      const now = new Date().toISOString();
+      await system.powersync.execute(
+        `UPDATE ${SCORECARDS_TABLE} SET participants = ?, updated_at = ? WHERE id = ?`,
+        [JSON.stringify(nextParticipants), now, id]
+      );
+    },
+    [system, currentRound]
+  );
+
   const completeCurrentRound = useCallback<RoundContextValue['completeCurrentRound']>(
     async () => {
       const id = scorecardIdRef.current;
@@ -487,6 +549,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       setCurrentHole,
       setHoleRange,
       setParticipantTee,
+      setParticipantTees,
       completeCurrentRound,
       abandonCurrentRound,
       deleteRound,
@@ -501,6 +564,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       setCurrentHole,
       setHoleRange,
       setParticipantTee,
+      setParticipantTees,
       completeCurrentRound,
       abandonCurrentRound,
       deleteRound,
