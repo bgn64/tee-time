@@ -183,15 +183,13 @@ export function FeedCardLarge({ round, onPressParticipant }: Props) {
         </View>
       </LinearGradient>
 
-      {round.scores.length > 0 ? (
-        <View style={styles.body}>
-          <ReadOnlyScorecard
-            round={round}
-            hideFinalTotals={isInProgress}
-            onPressParticipant={onPressParticipant}
-          />
-        </View>
-      ) : null}
+      <View style={styles.body}>
+        <ReadOnlyScorecard
+          round={round}
+          hideFinalTotals={isInProgress}
+          onPressParticipant={onPressParticipant}
+        />
+      </View>
     </View>
   );
 }
