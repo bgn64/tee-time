@@ -168,8 +168,13 @@ export function useFeedRounds(): FeedRoundsResult {
   }, [scorecardRows]);
 
   const liveRounds = React.useMemo(() => {
+    // No `scores.length > 0` gate — a friend who's just started a
+    // round (no scores entered yet) appears in the feed immediately
+    // as a band-only card. The card itself gates the embedded
+    // scorecard body on `round.scores.length > 0`, so it degrades
+    // gracefully until the first score arrives.
     return projected
-      .filter((r) => !r.completedAt && r.scores.length > 0)
+      .filter((r) => !r.completedAt)
       .sort((a, b) => {
         const at = new Date(updatedAtById.get(a.id) ?? a.startedAt).getTime();
         const bt = new Date(updatedAtById.get(b.id) ?? b.startedAt).getTime();
