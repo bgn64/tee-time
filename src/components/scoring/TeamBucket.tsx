@@ -12,10 +12,12 @@
  *     teammate to switch selection.
  *   - `isDestination` (a chip is selected and this row isn't its
  *     source): the entire row renders with an accent dashed border
- *     and becomes a Pressable. Everything inside (chips + tee pill)
- *     is dimmed and non-interactive via `pointerEvents: 'none'` on
- *     the wrapping flex container — taps fall through to the
- *     bucket-level handler.
+ *     and becomes a Pressable. Chips are rendered with
+ *     `onPress={undefined}` (PlayerChip falls back to a plain View)
+ *     and the tee pill is rendered as a static View — so no
+ *     `<button>` lives inside the outer Pressable on react-native-web
+ *     (which would be invalid HTML). Contents are dimmed to 0.55
+ *     opacity so the user reads the row as one tap target.
  */
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -66,16 +68,46 @@ export function TeamBucket({
     isDestination && styles.rowDestination,
   ];
 
-  // The chips + tee pill content. In destination mode this whole
-  // block is non-interactive (pointerEvents: 'none' via style) so
-  // taps fall through to the outer Pressable.
+  // The chips + tee pill content. In destination mode we render
+  // chips with `onPress={undefined}` (they fall back to plain Views)
+  // and the tee pill as a static View — so no `<button>` lives
+  // inside the outer Pressable on react-native-web. Visual cue is
+  // the opacity-0.55 dimming on the wrapper.
+  const teePill =
+    isDestination && tee ? (
+      <View style={[styles.teePill, { backgroundColor: colors.chipBg }]}>
+        <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee) }]} />
+        <Text style={[styles.teeText, { color: colors.textTitle }]} numberOfLines={1}>
+          {tee.name}
+        </Text>
+      </View>
+    ) : !isDestination && onPickTee ? (
+      <Pressable
+        onPress={onPickTee}
+        style={[
+          styles.teePill,
+          tee
+            ? { backgroundColor: colors.chipBg }
+            : { borderWidth: 1, borderColor: colors.border, backgroundColor: 'transparent' },
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={tee ? `Change tee from ${tee.name}` : 'Pick a tee'}>
+        {tee ? (
+          <>
+            <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee) }]} />
+            <Text style={[styles.teeText, { color: colors.textTitle }]} numberOfLines={1}>
+              {tee.name}
+            </Text>
+          </>
+        ) : (
+          <Text style={[styles.teeTextEmpty, { color: colors.textMuted }]}>+ Tee</Text>
+        )}
+        <Text style={[styles.teeChev, { color: colors.textMuted }]}>▾</Text>
+      </Pressable>
+    ) : null;
+
   const inner = (
-    <View
-      style={[
-        styles.inner,
-        isDestination && styles.innerDimmed,
-        isDestination && { pointerEvents: 'none' as const },
-      ]}>
+    <View style={[styles.inner, isDestination && styles.innerDimmed]}>
       <View style={styles.chipList}>
         {members.length === 0 ? (
           <Text style={[styles.emptyHint, { color: colors.textMuted }]}>
@@ -88,40 +120,12 @@ export function TeamBucket({
               name={m.name}
               color={m.color}
               active={selectedPlayerId === m.id}
-              onPress={() => onTapChip(m.id)}
+              onPress={isDestination ? undefined : () => onTapChip(m.id)}
             />
           ))
         )}
       </View>
-      {onPickTee ? (
-        <Pressable
-          onPress={onPickTee}
-          style={[
-            styles.teePill,
-            tee
-              ? { backgroundColor: colors.chipBg }
-              : { borderWidth: 1, borderColor: colors.border, backgroundColor: 'transparent' },
-          ]}
-          accessibilityRole="button"
-          accessibilityLabel={tee ? `Change tee from ${tee.name}` : 'Pick a tee'}>
-          {tee ? (
-            <>
-              <View
-                style={[
-                  styles.teeDot,
-                  { backgroundColor: teeSwatch(tee) },
-                ]}
-              />
-              <Text style={[styles.teeText, { color: colors.textTitle }]} numberOfLines={1}>
-                {tee.name}
-              </Text>
-            </>
-          ) : (
-            <Text style={[styles.teeTextEmpty, { color: colors.textMuted }]}>+ Tee</Text>
-          )}
-          <Text style={[styles.teeChev, { color: colors.textMuted }]}>▾</Text>
-        </Pressable>
-      ) : null}
+      {teePill}
     </View>
   );
 
