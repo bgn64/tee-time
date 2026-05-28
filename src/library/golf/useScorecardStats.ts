@@ -1,29 +1,32 @@
 /**
- * useScorecardStats — derive simple participant counts from local
- * PowerSync scorecards.
+ * useScorecardStats — derive simple participant counts from the
+ * signed-in user's OWN scorecards.
  *
- * Two counts, both computed entirely from the rows already synced
- * to the signed-in user's local SQLite (no extra Supabase fetches,
- * no new sync streams):
+ * Two counts, both scoped strictly to scorecards the user owns
+ * (`owner_user_id = me`). Scorecards are owned by exactly one
+ * player — adding another player as a participant in a round means
+ * their name appears on YOUR scorecard, not that they share
+ * ownership. The stats reflect that mental model:
  *
  *   roundsPlayed:
- *     count of completed scorecards whose `player_ids` array
- *     contains the signed-in user's `user:{me}` participantKey.
- *     Shown on the user's own profile.
+ *     count of completed scorecards I OWN whose `player_ids` array
+ *     contains my `user:{me}` participantKey. ("Scorecards I wrote
+ *     in rounds I was playing.") Shown on the user's own profile.
  *
  *   roundsTogether(targetUserId):
- *     count of completed scorecards whose `player_ids` array
- *     contains BOTH `user:{me}` AND `user:{target}`. Shown on
+ *     count of completed scorecards I OWN whose `player_ids` array
+ *     contains BOTH `user:{me}` AND `user:{target}`. ("Rounds I
+ *     scored where target was also a participant.") Shown on
  *     other people's profiles.
  *
  * KNOWN ACCURACY CEILING — both counts undercount whenever the
- * counterparty's device originated the scorecard. PowerSync's
- * `scorecards` sync rule scopes by `owner_user_id`, so a round
- * Bob created with me in it never reaches my local DB. The fix
- * (broaden the sync rule to include participants) is well-scoped
- * and easy to add later when we want truthful totals; for v1 the
- * label "Rounds played" / "Rounds together" plus the local-only
- * data is acceptable.
+ * counterparty's device originated the scorecard. If Bob scored a
+ * round with me in it, Bob's scorecard is now synced to my device
+ * via the `friend_scorecards` stream — but we deliberately ignore
+ * those rows here because they're Bob's, not mine. Trading a richer
+ * "rounds together" count for the simpler "the stats reflect MY
+ * scorecards" mental model; future versions could optionally
+ * broaden the count to include shared rounds.
  */
 
 import React from 'react';
@@ -59,10 +62,14 @@ export function useScorecardStats(): ScorecardStats {
   const account = useRequiredAccount();
   const myKey = userParticipantKey(account.userId);
 
-  // Only completed scorecards count toward stats — in-flight rounds
-  // shouldn't bump the number until they're finished.
+  // Scope strictly to scorecards I OWN. Without the owner filter,
+  // friends' scorecards (now in local SQLite via the friend_scorecards
+  // sync stream) would leak into the count whenever I appeared as a
+  // participant on one of their rounds.
   const { data: rows, isLoading } = useQuery<ScorecardPlayerIdsRow>(
-    `SELECT id, player_ids FROM ${SCORECARDS_TABLE} WHERE completed_at IS NOT NULL`
+    `SELECT id, player_ids FROM ${SCORECARDS_TABLE}
+     WHERE completed_at IS NOT NULL AND owner_user_id = ?`,
+    [account.userId]
   );
 
   // Pre-parse every scorecard's player_ids into a Set for O(1)

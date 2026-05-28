@@ -82,11 +82,25 @@ type RoundContextValue = {
 
 const RoundContext = createContext<RoundContextValue | null>(null);
 
+// The signed-in user's currently-open scorecard (at most one — completing
+// or abandoning closes it). Filtered by `owner_user_id` so a friend's
+// in-flight round (now synced via the `friend_scorecards` stream for the
+// feed) NEVER lands here as our "current round." Without the filter, a
+// friend tapping a score on their own device would suddenly make their
+// scorecard appear as our open round on the Score tab — broken UX and
+// every write would fail at RLS anyway. While `userId` is null (pre-auth
+// or mid-rehydration) we substitute a tautologically-false query so the
+// hook stays well-formed.
 const SELECT_OPEN_SCORECARD_SQL = `
   SELECT * FROM ${SCORECARDS_TABLE}
   WHERE completed_at IS NULL
+    AND owner_user_id = ?
   ORDER BY started_at DESC
   LIMIT 1
+`;
+
+const SELECT_NO_SCORECARD_SQL = `
+  SELECT * FROM ${SCORECARDS_TABLE} WHERE 1 = 0
 `;
 
 function safeParse<T>(raw: string | null | undefined, fallback: T, label: string): T {
@@ -130,7 +144,8 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   }, [system]);
 
   const { data: scorecardRows, isLoading: scorecardLoading } = useQuery<ScorecardRecord>(
-    SELECT_OPEN_SCORECARD_SQL
+    userId ? SELECT_OPEN_SCORECARD_SQL : SELECT_NO_SCORECARD_SQL,
+    userId ? [userId] : []
   );
   const scorecardRow = scorecardRows[0] ?? null;
   const scorecardId = scorecardRow?.id ?? null;
