@@ -138,9 +138,6 @@ export default function RoundsHubScreen() {
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.topHeader}>
-          <Text style={styles.topHeaderLabel}>ROUNDS</Text>
-        </View>
         <View style={styles.titleBlock}>
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.title}>{title}</Text>
@@ -348,18 +345,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     content: {
       padding: 14,
-      paddingTop: 14,
+      paddingTop: 20,
       paddingBottom: 32,
-    },
-    topHeader: {
-      paddingHorizontal: 2,
-      paddingBottom: 14,
-    },
-    topHeaderLabel: {
-      fontSize: 11,
-      fontWeight: '800',
-      letterSpacing: 0.8,
-      color: colors.textMuted,
     },
     titleBlock: {
       marginBottom: 14,

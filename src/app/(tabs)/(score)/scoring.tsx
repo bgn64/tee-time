@@ -5,7 +5,8 @@
  * State ② of the four-state round-detail model (in-progress +
  * editing). Composes:
  *
- *   - Pinned top bar with SCORE label, optional range pill, Finish.
+ *   - Pinned top bar with back-to-hub chevron + SCORE label,
+ *     optional range pill, and Finish.
  *   - <RoundDetailView isEditing> for the band + HoleNavBar +
  *     ScorerStack + ReadOnlyScorecard + CommentsSection, with the
  *     Abandon button passed in via `footerActions`.
@@ -17,11 +18,16 @@
  * wiring (setCustomHoleScore, setHoleRange, setParticipantTees,
  * etc). The shared component handles the scrollable content.
  *
- * Hardware back is intercepted on Android — round exits only happen
- * through Finish or Abandon. Stack-level `gestureEnabled: false`
- * handles iOS swipe-back.
+ * The back-to-hub chevron dismisses the screen without ending the
+ * round — the round stays in flight and "Continue" on the hub
+ * brings the user right back. Round-ending exits still flow only
+ * through Finish or Abandon. Hardware back is intercepted on
+ * Android, and stack-level `gestureEnabled: false` handles iOS
+ * swipe-back; both prevent accidental round-loss, while the
+ * deliberate chevron tap is allowed.
  */
 
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -180,6 +186,13 @@ export default function ScoringScreen() {
     <View style={styles.container}>
       <View style={styles.topBar}>
         <View style={styles.topBarLeft}>
+          <Pressable
+            onPress={() => router.dismissTo('/(tabs)/(score)' as never)}
+            hitSlop={8}
+            style={styles.backBtn}
+            accessibilityLabel="Back to Rounds hub">
+            <Ionicons name="chevron-back" size={22} color={colors.textTitle} />
+          </Pressable>
           <Text style={styles.topBarLabel}>SCORE</Text>
           {round.course.holes.length >= 18 ? (
             <Pressable
@@ -329,6 +342,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
+    },
+    backBtn: {
+      marginLeft: -4,
+      paddingRight: 2,
     },
     topBarLabel: {
       fontSize: 11,

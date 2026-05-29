@@ -49,7 +49,10 @@ export default function ScoreLayout() {
         headerTintColor: colors.textTitle,
         contentStyle: { backgroundColor: colors.background }
       }}>
-      <Stack.Screen name="index" />
+      <Stack.Screen
+        name="index"
+        options={{ headerShown: true, title: 'Rounds' }}
+      />
       <Stack.Screen name="new/index" />
       <Stack.Screen name="players" />
       <Stack.Screen name="format" />
