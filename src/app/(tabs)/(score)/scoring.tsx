@@ -5,29 +5,32 @@
  * State ② of the four-state round-detail model (in-progress +
  * editing). Composes:
  *
- *   - Pinned top bar with back-to-hub chevron + SCORE label,
- *     optional range pill, and Finish.
+ *   - Native stack header with Finish in headerRight; back arrow
+ *     reaches the hub naturally because format.tsx's Start handler
+ *     calls navigation.reset to make the stack [hub, scoring]
+ *     regardless of entry path.
+ *   - Optional sub-toolbar below the header (range pill, only on
+ *     18-hole courses) — kept out of the header so it can own its
+ *     dropdown state.
  *   - <RoundDetailView isEditing> for the band + HoleNavBar +
  *     ScorerStack + ReadOnlyScorecard + CommentsSection, with the
  *     Abandon button passed in via `footerActions`.
  *   - Modals: ConfirmAbandonSheet, RangeDropdown, TeePickerSheet.
  *
  * Why this screen isn't *just* <RoundDetailView>: it owns the
- * pinned top bar (so SCORE + Finish stay visible during long
+ * pinned sub-toolbar (so the range pill stays visible during long
  * scrolls), the modal stack, and the RoundContext write-handler
  * wiring (setCustomHoleScore, setHoleRange, setParticipantTees,
  * etc). The shared component handles the scrollable content.
  *
- * The back-to-hub chevron dismisses the screen without ending the
- * round — the round stays in flight and "Continue" on the hub
- * brings the user right back. Round-ending exits still flow only
- * through Finish or Abandon. Hardware back is intercepted on
- * Android, and stack-level `gestureEnabled: false` handles iOS
- * swipe-back; both prevent accidental round-loss, while the
- * deliberate chevron tap is allowed.
+ * Round-ending exits flow only through Finish or Abandon. Hardware
+ * back is intercepted on Android, and stack-level
+ * `gestureEnabled: false` handles iOS swipe-back; both prevent
+ * accidental round-loss. The header back arrow simply pops to the
+ * hub — the round stays in flight and "Continue" brings the user
+ * right back.
  */
 
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -116,6 +119,23 @@ export default function ScoringScreen() {
   // remote completion, and direct-URL loads with no active round.
   // Replace (not dismissAll) to avoid POP_TO_TOP on a freshly-loaded
   // stack with no entries beneath.
+  //
+  // Mount-grace window: format.tsx's "Start round" handler calls
+  // navigation.reset to scoring immediately after startRound's
+  // local PowerSync write resolves. There's a brief tick between
+  // that write landing and RoundProvider's useQuery subscription
+  // firing to surface the new currentRound. Without the grace
+  // window, scoring would mount, see currentRound=null while
+  // roundHydrated=true (from a prior session), and bounce back
+  // to the hub before the subscription caught up. 120ms is well
+  // under perceptible latency and well over the subscription's
+  // typical settle time.
+  const [mountGraceExpired, setMountGraceExpired] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setMountGraceExpired(true), 120);
+    return () => clearTimeout(t);
+  }, []);
+
   const hasBouncedRef = useRef(false);
   useEffect(() => {
     if (!roundHydrated) return;
@@ -123,10 +143,11 @@ export default function ScoringScreen() {
       hasBouncedRef.current = false;
       return;
     }
+    if (!mountGraceExpired) return;
     if (hasBouncedRef.current) return;
     hasBouncedRef.current = true;
     router.replace('/(tabs)/(score)' as never);
-  }, [roundHydrated, currentRound]);
+  }, [roundHydrated, currentRound, mountGraceExpired]);
 
   if (!roundHydrated || !currentHoleHydrated) {
     return (
@@ -187,17 +208,6 @@ export default function ScoringScreen() {
       <Stack.Screen
         options={{
           title: 'Round',
-          headerBackVisible: false,
-          headerLeft: () => (
-            <Pressable
-              onPress={() => router.dismissTo('/(tabs)/(score)' as never)}
-              hitSlop={8}
-              style={styles.headerBackBtn}
-              accessibilityLabel="Back to Rounds">
-              <Ionicons name="chevron-back" size={26} color={colors.textTitle} />
-              <Text style={styles.headerBackText}>Rounds</Text>
-            </Pressable>
-          ),
           headerRight: () => (
             <Pressable onPress={() => handleFinish()} style={styles.finishBtn}>
               <Text style={styles.finishBtnText}>Finish</Text>
@@ -335,18 +345,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    headerBackBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 0,
-      paddingRight: 4,
-      marginLeft: -8,
-    },
-    headerBackText: {
-      fontSize: 17,
-      color: colors.textTitle,
-      fontWeight: '500',
     },
     subToolbar: {
       flexDirection: 'row',

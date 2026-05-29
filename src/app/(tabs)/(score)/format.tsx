@@ -5,12 +5,18 @@
  * no live-share toggle. Reads `courseId` + comma-separated `playerIds`
  * from the URL, lets the user pick a tee per player (stroke) or
  * configure teams + per-team tees (scramble), then calls
- * `startRound(...)`. Once the round becomes visible in the
- * RoundProvider's `useQuery`, the `<Redirect>` gate below carries the
- * user into the locked scoring screen automatically.
+ * `startRound(...)`.
+ *
+ * Post-start navigation: after `startRound` resolves, the handler
+ * uses `navigation.reset` to atomically rebuild the stack as
+ * `[hub, scoring]` so back behavior on the scoring screen is
+ * identical to the path you'd take via the hub's "Continue" card
+ * (back arrow naturally pops to hub; no manual `headerLeft`
+ * override required on scoring).
  *
  * Redirect gate: bounces to `/scoring` if a round is already in
- * flight so a stale push of this screen can't kick off a second one.
+ * flight when this screen mounts — covers deep links + stale pushes
+ * so a second round can't be kicked off in parallel.
  *
  * Scramble state ownership: groups/teamIds/teeIdByTeam live here (not
  * in `<ScrambleBody />`) so toggling stroke ↔ scramble preserves the
@@ -19,7 +25,7 @@
  * the same shape regardless of where the user toggled last.
  */
 
-import { Redirect, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -50,6 +56,7 @@ export default function FormatScreen() {
     playerIds?: string;
   }>();
   const { currentRound, roundHydrated, startRound, userId } = useRound();
+  const navigation = useNavigation();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const playerIds = useMemo<string[]>(
@@ -205,13 +212,27 @@ export default function FormatScreen() {
           teeIds,
         });
       }
-      // No explicit navigation — once `currentRound` becomes
-      // non-null in the RoundProvider, the `<Redirect>` gate at the
-      // top of this screen sends us to `/scoring`. This avoids racing
-      // PowerSync's `useQuery` subscription with `router.replace`,
-      // which previously caused scoring.tsx to mount before the round
-      // was visible and trigger the defensive "round disappeared"
-      // bounce.
+      // Atomically rebuild the Rounds-tab stack as [hub, scoring].
+      // Without this, the leftover new-round-flow screens (new,
+      // players, format) would sit beneath scoring; the natural
+      // back arrow on scoring would land on `players`, which has a
+      // redirect-when-currentRound gate that would bounce the user
+      // straight back to scoring. After reset, scoring's natural
+      // back arrow simply pops to the hub like it does after a
+      // Continue from the hub.
+      //
+      // Race note: there's a brief window between this write
+      // resolving and RoundProvider's useQuery subscription firing
+      // to surface the new currentRound. Scoring's bounce effect
+      // tolerates that window via a 120ms mount-grace; see the
+      // useEffect block in scoring.tsx for the rationale.
+      navigation.reset({
+        index: 1,
+        routes: [
+          { name: 'index' as never },
+          { name: 'scoring' as never },
+        ],
+      });
     } catch (e) {
       setStartError(e instanceof Error ? e.message : String(e));
       setStarting(false);
