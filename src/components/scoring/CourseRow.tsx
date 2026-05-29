@@ -30,9 +30,11 @@ export function CourseRow({ course, onPress }: Props) {
         <Text style={styles.name} numberOfLines={1}>
           {course.name}
         </Text>
-        <Text style={styles.meta} numberOfLines={1}>
-          {course.location}  ·  {course.holes.length} holes
-        </Text>
+        {course.location ? (
+          <Text style={styles.meta} numberOfLines={1}>
+            {course.location}
+          </Text>
+        ) : null}
       </View>
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
     </Pressable>

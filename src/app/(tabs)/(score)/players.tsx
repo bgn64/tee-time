@@ -46,7 +46,6 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { SEED_COURSES } from '@/data/courses';
 import {
   createCustomPlayer,
   softDeleteCustomPlayer,
@@ -56,6 +55,7 @@ import {
   userParticipantKey,
 } from '@/library/golf/participantKey';
 import { useRound } from '@/library/golf/RoundContext';
+import { useCourse } from '@/library/golf/useCourses';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import {
   CUSTOM_PLAYERS_TABLE,
@@ -124,6 +124,7 @@ export default function PlayersScreen() {
     return Array.from(set);
   }, [selfKey, friends, customRows, selectedKeys]);
   const resolver = useParticipantResolver(resolverKeys);
+  const { course } = useCourse(courseId);
 
   if (!roundHydrated) {
     return (
@@ -137,7 +138,6 @@ export default function PlayersScreen() {
     return <Redirect href="/(tabs)/(score)/scoring" />;
   }
 
-  const course = SEED_COURSES.find((c) => c.id === courseId);
   const atCap = selectedKeys.length >= MAX_PLAYERS;
   const trimmedQuery = query.trim();
   const searchActive = trimmedQuery.length > 0;

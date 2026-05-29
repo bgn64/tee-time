@@ -42,6 +42,14 @@ logs.txt
 supabase/.temp/
 supabase/.branches/
 
+# OpenGolfAPI bulk CSV cache (downloaded by scripts/ingest-opengolf.ts)
+.cache/
+
+# Local convenience scripts and notes — keep on disk, off the repo
+Deploy-Migrations.ps1
+Deploy-SyncStreams.ps1
+plan.md
+
 # typescript
 *.tsbuildinfo
 

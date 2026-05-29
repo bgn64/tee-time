@@ -38,11 +38,11 @@ import {
 
 import { ScrambleBody } from '@/components/scoring/ScrambleBody';
 import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
-import { SEED_COURSES } from '@/data/courses';
 import { defaultTeeIdForCourse } from '@/library/golf/courseHelpers';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRound } from '@/library/golf/RoundContext';
 import { buildInitialScrambleState, buildTeamsFromGroups } from '@/library/golf/teams';
+import { useCourse } from '@/library/golf/useCourses';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ScoringRule, Tee, Team } from '@/types/golf';
@@ -64,7 +64,7 @@ export default function FormatScreen() {
     [rawPlayerIds]
   );
 
-  const course = SEED_COURSES.find((c) => c.id === courseId);
+  const { course, loading: courseLoading, enriching: courseEnriching, error: courseError } = useCourse(courseId);
 
   const [scoringRule, setScoringRule] = useState<ScoringRule>('stroke');
   const [teeIds, setTeeIds] = useState<Record<string, string | undefined>>(
@@ -164,11 +164,26 @@ export default function FormatScreen() {
     return <Redirect href="/(tabs)/(score)/scoring" />;
   }
 
+  // Distinguish "still loading the course" from "course truly missing".
+  // While the REST fetch or the lazy enrichment is in flight we show a
+  // spinner with helper text; only after both resolve do we treat a
+  // null `course` as a hard error.
+  if (courseLoading || courseEnriching) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={colors.primary} />
+        <Text style={[styles.errorText, { color: colors.textMuted, marginTop: 8 }]}>
+          {courseEnriching ? 'Loading scorecard…' : 'Loading course…'}
+        </Text>
+      </View>
+    );
+  }
+
   if (!course || playerIds.length === 0) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.errorText, { color: colors.textBody }]}>
-          Missing course or players. Go back and try again.
+          {courseError ?? 'Missing course or players. Go back and try again.'}
         </Text>
       </View>
     );

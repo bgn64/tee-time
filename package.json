@@ -44,8 +44,10 @@
   "devDependencies": {
     "@babel/plugin-transform-async-generator-functions": "^7.29.7",
     "@types/react": "~19.2.2",
+    "dotenv": "^17.4.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~56.0.4",
+    "tsx": "^4.21.0",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -55,6 +57,7 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint",
+    "ingest:opengolf": "tsx scripts/ingest-opengolf.ts",
     "postinstall": "powersync-web copy-assets"
   },
   "private": true

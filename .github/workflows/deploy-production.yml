@@ -1,0 +1,120 @@
+name: Deploy to production
+
+# Single-trigger production deploy:
+#   1. Pre-push backup of prod Supabase (uploaded as a 30-day artifact)
+#   2. Apply any pending DB migrations from supabase/migrations/
+#   3. Deploy PowerSync sync rules (`powersync/sync-config.yaml`) to the prod slot
+#
+# Vercel handles the web-app build separately on the same push.
+#
+# Required GitHub configuration on bgn64/tee-time:
+#
+#   Repository-level secrets:
+#     - SUPABASE_ACCESS_TOKEN          Personal access token for the Supabase CLI
+#
+#   Production environment (Settings → Environments → production):
+#     Secrets:
+#       - DB_PASSWORD                  Production Supabase Postgres password
+#       - POWERSYNC_PS_ADMIN_TOKEN     PowerSync personal access token (PAT)
+#     Variables:
+#       - PROJECT_ID                   Production Supabase project ref (e.g. bamdgmmhwcancdpppbzr)
+#       - POWERSYNC_PROD_INSTANCE_ID   Production PowerSync instance ID
+#       - POWERSYNC_PROD_PROJECT_ID    Production PowerSync project (slot) ID
+#       - POWERSYNC_PROD_ORG_ID        (optional) PowerSync org ID — only needed
+#                                       if your PAT spans multiple orgs
+#
+#   The `production` environment also gates this workflow behind a manual
+#   approval — a reviewer clicks Approve in the Actions UI before any
+#   step runs.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy migrations + sync rules to production
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.PROJECT_ID }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # =====================================================
+      # Supabase migrations
+      # =====================================================
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link to production Supabase project
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Show pending migrations
+        run: supabase migration list --linked
+
+      # Pre-push backup so we always have a 30-day rollback point.
+      # `data.sql` is allowed to fail (e.g. on very large DBs); the
+      # schema dump is the critical artifact.
+      - name: Dump production database
+        run: |
+          mkdir -p backup
+          supabase db dump --linked --data-only -f backup/data.sql || true
+          supabase db dump --linked -f backup/schema.sql
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-backup-${{ github.sha }}
+          path: backup/
+          retention-days: 30
+
+      - name: Push migrations
+        run: supabase db push --linked
+
+      # =====================================================
+      # PowerSync sync rules (prod slot)
+      # =====================================================
+      #
+      # `powersync deploy sync-config` deploys ONLY sync-config.yaml,
+      # leaving the prod slot's service.yaml (DB connection, auth)
+      # intact. Service config was set up manually in the PowerSync
+      # dashboard during the May 2026 cutover and is owned there for
+      # now. If we want to bring it under version control later, add
+      # `powersync-prod/service.yaml` with `!env` substitution and
+      # call `powersync deploy` (no scope) from that directory.
+      #
+      # INSTANCE_ID / PROJECT_ID / ORG_ID env vars target the prod
+      # slot (overriding whatever the committed `powersync/cli.yaml`
+      # points at, which is the dev/staging instance).
+
+      - name: Install PowerSync CLI
+        run: npm install -g powersync@latest
+
+      - name: Validate sync rules
+        env:
+          PS_ADMIN_TOKEN: ${{ secrets.POWERSYNC_PS_ADMIN_TOKEN }}
+          INSTANCE_ID:    ${{ vars.POWERSYNC_PROD_INSTANCE_ID }}
+          PROJECT_ID:     ${{ vars.POWERSYNC_PROD_PROJECT_ID }}
+          ORG_ID:         ${{ vars.POWERSYNC_PROD_ORG_ID }}
+        run: powersync validate --sync-config-file-path=powersync/sync-config.yaml
+
+      - name: Deploy sync rules to prod slot
+        env:
+          PS_ADMIN_TOKEN: ${{ secrets.POWERSYNC_PS_ADMIN_TOKEN }}
+          INSTANCE_ID:    ${{ vars.POWERSYNC_PROD_INSTANCE_ID }}
+          PROJECT_ID:     ${{ vars.POWERSYNC_PROD_PROJECT_ID }}
+          ORG_ID:         ${{ vars.POWERSYNC_PROD_ORG_ID }}
+        run: powersync deploy sync-config --sync-config-file-path=powersync/sync-config.yaml
