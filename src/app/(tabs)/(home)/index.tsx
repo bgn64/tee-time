@@ -31,7 +31,7 @@ import {
   View
 } from 'react-native';
 
-import { FeedCardLarge } from '@/components/feed/FeedCardLarge';
+import { RoundListCard } from '@/components/round/RoundListCard';
 import { IncomingRequestsBanner } from '@/components/social/IncomingRequestsBanner';
 import { useFeedRounds } from '@/library/golf/useFeedRounds';
 import { useFriends } from '@/library/social/FriendsContext';
@@ -48,15 +48,6 @@ export default function HomeFeedScreen() {
   const feedRounds = React.useMemo(
     () => [...liveRounds, ...completedRounds],
     [liveRounds, completedRounds]
-  );
-
-  // Tap-through wires every scorecard cell to a Home-stack push so
-  // the back stack stays inside the Home tab.
-  const onPressParticipant = React.useCallback(
-    (userId: string) => {
-      router.push(`/(tabs)/(home)/profile/${userId}` as never);
-    },
-    [router]
   );
 
   // Don't decide between empty/populated states until BOTH the friend
@@ -77,7 +68,11 @@ export default function HomeFeedScreen() {
     );
   }
 
-  if (friends.length === 0) {
+  // Friend-less welcome screen — only when the user has neither
+  // friends NOR any own completed rounds to show. The feed includes
+  // own completed rounds, so a friendless user with a finished round
+  // still sees their own card and skips this CTA.
+  if (friends.length === 0 && feedRounds.length === 0) {
     return (
       <ScrollView
         style={styles.scroll}
@@ -88,7 +83,8 @@ export default function HomeFeedScreen() {
           <Text style={styles.emptyTitle}>Find friends to see their rounds</Text>
           <Text style={styles.emptyBody}>
             Search for friends by their <Text style={styles.codeChip}>@handle</Text> and add
-            them. Their rounds will show up here.
+            them. Their rounds — and your own completed rounds —
+            will show up here.
           </Text>
           <Pressable
             style={styles.primaryCta}
@@ -108,10 +104,12 @@ export default function HomeFeedScreen() {
         <IncomingRequestsBanner style={styles.banner} />
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>⛳</Text>
-          <Text style={styles.emptyTitle}>No friend rounds yet</Text>
+          <Text style={styles.emptyTitle}>No rounds yet</Text>
           <Text style={styles.emptyBody}>
-            You&apos;re connected with friends, but no one has scored a round you can see yet.
-            Your own rounds live on the <Text style={styles.emptyBodyEm}>Score</Text> tab.
+            You&apos;re connected with friends, but no one has scored a
+            round you can see yet. Your in-progress rounds live on the{' '}
+            <Text style={styles.emptyBodyEm}>Score</Text> tab; finished
+            rounds will show up here.
           </Text>
         </View>
       </ScrollView>
@@ -124,10 +122,12 @@ export default function HomeFeedScreen() {
       contentContainerStyle={styles.content}>
       <IncomingRequestsBanner style={styles.banner} />
       {feedRounds.map((round) => (
-        <FeedCardLarge
+        <RoundListCard
           key={round.id}
           round={round}
-          onPressParticipant={onPressParticipant}
+          onPress={() =>
+            router.push(`/(tabs)/(home)/round/${round.id}` as never)
+          }
         />
       ))}
     </ScrollView>

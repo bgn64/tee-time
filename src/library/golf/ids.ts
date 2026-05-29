@@ -35,3 +35,8 @@ export function newCustomPlayerId(): string {
 export function newTeamId(): string {
   return uuid();
 }
+
+/** Stable id for a new round comment row (server-side `comments.id`). */
+export function newCommentId(): string {
+  return uuid();
+}

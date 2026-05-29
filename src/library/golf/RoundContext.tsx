@@ -78,6 +78,19 @@ type RoundContextValue = {
     teams?: Team[];
   }) => Promise<string>;
   setCustomHoleScore: (scorerId: string, holeNumber: number, strokes: number) => Promise<void>;
+  /**
+   * Same as `setCustomHoleScore` but targets an arbitrary round id.
+   * Used by the edit-completed-round flow (state ③) which operates
+   * on a non-current scorecard. Calls share the same underlying
+   * writer + parent `updated_at` bump as `setCustomHoleScore` —
+   * see the inline comments there for the durability rationale.
+   */
+  setScoreForRound: (
+    roundId: string,
+    scorerId: string,
+    holeNumber: number,
+    strokes: number
+  ) => Promise<void>;
   setCurrentHole: (holeNumber: number) => Promise<void>;
   setHoleRange: (range: HoleRange) => Promise<void>;
   setParticipantTee: (participantKey: string, teeId: string | undefined) => Promise<void>;
@@ -90,6 +103,17 @@ type RoundContextValue = {
    * a render-time snapshot, not from the latest DB state.
    */
   setParticipantTees: (updates: { participantKey: string; teeId: string | undefined }[]) => Promise<void>;
+  /**
+   * Same as `setParticipantTees` but targets an arbitrary round id.
+   * Reads the round's `participants` JSON straight from local SQLite
+   * inside a write transaction (rather than from React state) so
+   * concurrent rapid updates don't lose each other. Used by the
+   * edit-completed-round flow.
+   */
+  setParticipantTeesForRound: (
+    roundId: string,
+    updates: { participantKey: string; teeId: string | undefined }[]
+  ) => Promise<void>;
   completeCurrentRound: () => Promise<void>;
   abandonCurrentRound: () => Promise<void>;
   /** Deletes a completed (or in-flight) scorecard owned by the signed-in
@@ -359,10 +383,9 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     [system, userId]
   );
 
-  const setCustomHoleScore = useCallback<RoundContextValue['setCustomHoleScore']>(
-    async (scorerId, holeNumber, strokes) => {
-      const id = scorecardIdRef.current;
-      if (!id) return;
+  const setScoreForRound = useCallback<RoundContextValue['setScoreForRound']>(
+    async (roundId, scorerId, holeNumber, strokes) => {
+      if (!roundId) return;
       if (!userId) return;
       if (!Number.isFinite(strokes) || strokes < 1) return;
       const now = new Date().toISOString();
@@ -370,7 +393,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         const existing = await tx.getOptional<{ id: string }>(
           `SELECT id FROM ${SCORECARD_SCORES_TABLE}
            WHERE scorecard_id = ? AND scorer_id = ? AND hole_number = ?`,
-          [id, scorerId, holeNumber]
+          [roundId, scorerId, holeNumber]
         );
         if (existing) {
           await tx.execute(
@@ -384,7 +407,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
             `INSERT INTO ${SCORECARD_SCORES_TABLE}
                (id, scorecard_id, scorer_id, hole_number, strokes, owner_user_id, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [newScoreId(), id, scorerId, holeNumber, strokes, userId, now]
+            [newScoreId(), roundId, scorerId, holeNumber, strokes, userId, now]
           );
         }
         // Bump the parent scorecard's updated_at so it serves as
@@ -392,6 +415,12 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         // sort live feed cards by this value (most-recently-active
         // bubbles to the top) without needing a derived
         // MAX(scorecard_scores.updated_at) aggregate.
+        //
+        // For edits to completed rounds the bump is observationally
+        // a no-op — feed + rounds list both sort completed rounds by
+        // completedAt, not updated_at — but keeping the same write
+        // path means edits can't silently miss any of the side
+        // effects live scoring has.
         //
         // Yes, this re-replicates the full scorecards row (including
         // the multi-KB course_snapshot) on every tap. For ≤ a handful
@@ -401,11 +430,20 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         // mobile data.
         await tx.execute(
           `UPDATE ${SCORECARDS_TABLE} SET updated_at = ? WHERE id = ?`,
-          [now, id]
+          [now, roundId]
         );
       });
     },
     [system, userId]
+  );
+
+  const setCustomHoleScore = useCallback<RoundContextValue['setCustomHoleScore']>(
+    async (scorerId, holeNumber, strokes) => {
+      const id = scorecardIdRef.current;
+      if (!id) return;
+      await setScoreForRound(id, scorerId, holeNumber, strokes);
+    },
+    [setScoreForRound]
   );
 
   const setCurrentHole = useCallback<RoundContextValue['setCurrentHole']>(
@@ -457,23 +495,49 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     [system, currentRound]
   );
 
+  const setParticipantTeesForRound = useCallback<
+    RoundContextValue['setParticipantTeesForRound']
+  >(
+    async (roundId, updates) => {
+      if (!roundId || updates.length === 0) return;
+      const updateByKey = new Map(updates.map((u) => [u.participantKey, u.teeId]));
+      const now = new Date().toISOString();
+      // Read-modify-write inside a single transaction so concurrent
+      // rapid tee updates (e.g. two team members getting reassigned
+      // in quick succession) don't lose each other to a stale
+      // participants snapshot.
+      await system.powersync.writeTransaction(async (tx) => {
+        const row = await tx.getOptional<{ participants: string | null }>(
+          `SELECT participants FROM ${SCORECARDS_TABLE} WHERE id = ?`,
+          [roundId]
+        );
+        if (!row) return;
+        const participants = safeParse<RoundParticipant[]>(
+          row.participants,
+          [],
+          'scorecards.participants'
+        );
+        const nextParticipants = participants.map((p) =>
+          updateByKey.has(p.participantKey)
+            ? { ...p, teeId: updateByKey.get(p.participantKey) }
+            : p
+        );
+        await tx.execute(
+          `UPDATE ${SCORECARDS_TABLE} SET participants = ?, updated_at = ? WHERE id = ?`,
+          [JSON.stringify(nextParticipants), now, roundId]
+        );
+      });
+    },
+    [system]
+  );
+
   const setParticipantTees = useCallback<RoundContextValue['setParticipantTees']>(
     async (updates) => {
       const id = scorecardIdRef.current;
-      if (!id || !currentRound || updates.length === 0) return;
-      const updateByKey = new Map(updates.map((u) => [u.participantKey, u.teeId]));
-      const nextParticipants = currentRound.participants.map((p) =>
-        updateByKey.has(p.participantKey)
-          ? { ...p, teeId: updateByKey.get(p.participantKey) }
-          : p
-      );
-      const now = new Date().toISOString();
-      await system.powersync.execute(
-        `UPDATE ${SCORECARDS_TABLE} SET participants = ?, updated_at = ? WHERE id = ?`,
-        [JSON.stringify(nextParticipants), now, id]
-      );
+      if (!id) return;
+      await setParticipantTeesForRound(id, updates);
     },
-    [system, currentRound]
+    [setParticipantTeesForRound]
   );
 
   const completeCurrentRound = useCallback<RoundContextValue['completeCurrentRound']>(
@@ -546,10 +610,12 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       userId,
       startRound,
       setCustomHoleScore,
+      setScoreForRound,
       setCurrentHole,
       setHoleRange,
       setParticipantTee,
       setParticipantTees,
+      setParticipantTeesForRound,
       completeCurrentRound,
       abandonCurrentRound,
       deleteRound,
@@ -561,10 +627,12 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       userId,
       startRound,
       setCustomHoleScore,
+      setScoreForRound,
       setCurrentHole,
       setHoleRange,
       setParticipantTee,
       setParticipantTees,
+      setParticipantTeesForRound,
       completeCurrentRound,
       abandonCurrentRound,
       deleteRound,

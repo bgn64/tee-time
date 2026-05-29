@@ -1,39 +1,31 @@
 /**
- * FeedCardLarge — large social-style card for one friend's round on
- * the feed.
+ * RoundCardHeader — the gradient band shared between the lean feed
+ * card and the round-detail view. Carries everything a viewer needs
+ * to identify the round at a glance: course + location, format /
+ * hole-range / live pills, owner avatar + handle + relative time,
+ * and the owner's score block.
  *
- * Layout (ported from the destination tee-time app):
- *
- *   ┌──── colored band (owner's avatar_color gradient) ─────────┐
- *   │ <Course Name>                                             │
- *   │ <City, State>                                             │
- *   │ [STROKE|SCRAMBLE] [18 HOLES] [● IN PROGRESS]?             │
- *   │ <handle> · <relative time>          <±score>  THRU N?     │
- *   └───────────────────────────────────────────────────────────┘
- *   ReadOnlyScorecard (with FinalTotals hidden on live cards)
+ * Extracted from the original `FeedCardLarge` band so the feed
+ * preview and the detail view share the exact same layout — per
+ * design feedback, the elements shouldn't get rearranged across
+ * surfaces.
  *
  * Live cards (no `completedAt`):
- *   - A pulsing "● IN PROGRESS" pill on the band pill row.
- *   - The big chip shows the owner's running ±score with a "THRU N"
+ *   - Pulsing "● IN PROGRESS" pill on the pill row.
+ *   - Score block shows the owner's running ±score with a "THRU N"
  *     subline.
- *   - FinalTotals are hidden (they'd be misleading mid-round).
  *   - The "X ago" label reflects the time **this device** last
- *     received an update for the round, not the time the scorer
- *     wrote it. If you're offline, the label keeps ticking forward
- *     ("3m ago" → "1h ago" → "Yesterday") honestly reflecting that
- *     your data is stale.
+ *     received an update for the round — honest staleness, never
+ *     the scorer's wall-clock time.
  *
- * The tap-to-profile navigation is owned by the caller via
- * `onPressParticipant`. The scorecard surfaces tap targets in both
- * the main grid's avatar column (so live cards have a target even
- * with FinalTotals hidden) and the FinalTotals row.
+ * Completed cards: the relative-time label is the round's
+ * `completedAt` (an immutable, meaningful moment).
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useMemo, useState } from 'react';
 import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
 
-import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
 import {
   formatRelativeTime,
   formatScore,
@@ -49,7 +41,14 @@ import type { Round } from '@/types/golf';
 
 type Props = {
   round: Round;
-  onPressParticipant?: (userId: string) => void;
+  /**
+   * Whether to render the big score block on the bottom-right of
+   * the band. The lean feed card defaults this to true (the band
+   * is the only score affordance there); detail views pass false
+   * since the per-scorer rows below already carry every scorer's
+   * score, making the band score redundant.
+   */
+  showScoreBlock?: boolean;
 };
 
 const DEFAULT_BAND = '#7cb342';
@@ -79,7 +78,7 @@ function shade(hex: string, amount: number): string {
   return `#${hh(r)}${hh(g)}${hh(b)}`;
 }
 
-export function FeedCardLarge({ round, onPressParticipant }: Props) {
+export function RoundCardHeader({ round, showScoreBlock = true }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -97,9 +96,7 @@ export function FeedCardLarge({ round, onPressParticipant }: Props) {
 
   // Owner-perspective scorer: the band's big chip shows the owner's
   // own running total. In stroke that's the owner's participantKey;
-  // in scramble it's the id of the team the owner is on. Falls back
-  // to the participantKey if the owner can't be located on any team
-  // (defensive — shouldn't happen given startRound validation).
+  // in scramble it's the id of the team the owner is on.
   const ownerScorerId =
     scorerIdForUser(round, ownerUserId) ?? userParticipantKey(ownerUserId);
 
@@ -117,15 +114,12 @@ export function FeedCardLarge({ round, onPressParticipant }: Props) {
   const { thruCount } = getScorerProgress(round, ownerScorerId);
 
   // Device-local sync-arrival stamp: bump it whenever the round's
-  // identity (its scores or completion state) changes on this
-  // device. Used for the live-card "X ago" label so the relative
-  // time honestly reflects when WE last heard about the round —
-  // never the scorer's clock time, which would imply data
-  // freshness we can't guarantee.
-  //
-  // Uses the "adjust state during render" pattern instead of a
-  // useEffect setter so we don't trigger a cascading re-render
-  // every time the identity ticks.
+  // identity (scores or completion state) changes on this device.
+  // Used for the live-card "X ago" label so the relative time
+  // honestly reflects when WE last heard about the round — never
+  // the scorer's clock time, which would imply data freshness we
+  // can't guarantee. Adjust-state-during-render pattern avoids the
+  // cascading re-render of a useEffect setter.
   const identity = round.scores.length + '|' + (round.completedAt ?? '');
   const [prevIdentity, setPrevIdentity] = useState(identity);
   const [lastReceivedAt, setLastReceivedAt] = useState(() =>
@@ -136,10 +130,6 @@ export function FeedCardLarge({ round, onPressParticipant }: Props) {
     setLastReceivedAt(new Date().toISOString());
   }
 
-  // For completed rounds we surface the scorer's completion time
-  // (an immutable, meaningful moment — "this round was finished
-  // at HH:MM"). For in-progress rounds we use the device-local
-  // arrival stamp so the label tracks data staleness honestly.
   const dateLabel = formatRelativeTime(
     isInProgress ? lastReceivedAt : (round.completedAt ?? round.startedAt)
   );
@@ -151,35 +141,35 @@ export function FeedCardLarge({ round, onPressParticipant }: Props) {
   const gradientEnd = shade(ownerColor, 0.05);
 
   return (
-    <View style={styles.card}>
-      <LinearGradient
-        colors={[gradientStart, gradientEnd]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.band}>
-        <Text style={styles.bandCourse} numberOfLines={2}>
-          {round.course.name}
+    <LinearGradient
+      colors={[gradientStart, gradientEnd]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.band}>
+      <Text style={styles.bandCourse} numberOfLines={2}>
+        {round.course.name}
+      </Text>
+      {location ? (
+        <Text style={styles.bandLocation} numberOfLines={1}>
+          {location}
         </Text>
-        {location ? (
-          <Text style={styles.bandLocation} numberOfLines={1}>
-            {location}
+      ) : null}
+      <View style={styles.bandPillRow}>
+        <View style={styles.bandPill}>
+          <Text style={styles.bandPillText}>
+            {isScramble ? 'SCRAMBLE' : 'STROKE'}
           </Text>
-        ) : null}
-        <View style={styles.bandPillRow}>
-          <View style={styles.bandPill}>
-            <Text style={styles.bandPillText}>
-              {isScramble ? 'SCRAMBLE' : 'STROKE'}
-            </Text>
-          </View>
-          <View style={styles.bandPill}>
-            <Text style={styles.bandPillText}>{holesLabel}</Text>
-          </View>
-          {isInProgress ? <InProgressPill /> : null}
         </View>
-        <View style={styles.bandBottomRow}>
-          <Text style={styles.bandByLine} numberOfLines={1}>
-            {ownerHandle} · {dateLabel}
-          </Text>
+        <View style={styles.bandPill}>
+          <Text style={styles.bandPillText}>{holesLabel}</Text>
+        </View>
+        {isInProgress ? <InProgressPill /> : null}
+      </View>
+      <View style={styles.bandBottomRow}>
+        <Text style={styles.bandByLine} numberOfLines={1}>
+          {ownerHandle} · {dateLabel}
+        </Text>
+        {showScoreBlock ? (
           <View style={styles.bandScoreBlock}>
             <Text style={styles.bandRel}>
               {totalStrokes > 0 ? formatScore(totalRel) : '—'}
@@ -188,33 +178,20 @@ export function FeedCardLarge({ round, onPressParticipant }: Props) {
               <Text style={styles.bandThru}>THRU {thruCount}</Text>
             ) : null}
           </View>
-        </View>
-      </LinearGradient>
-
-      <View style={styles.body}>
-        <ReadOnlyScorecard
-          round={round}
-          hideFinalTotals={isInProgress}
-          onPressParticipant={onPressParticipant}
-        />
+        ) : null}
       </View>
-    </View>
+    </LinearGradient>
   );
 }
 
 /**
- * Small pulsing-dot pill rendered in the gradient band when a round is
- * still in progress. The dot opacity loops between 0.45 and 1.0 on the
- * native driver so it stays smooth during scroll.
+ * Small pulsing-dot pill rendered when a round is still in progress.
+ * Opacity loops between 0.45 and 1.0 on the native driver so it
+ * stays smooth during scroll.
  */
 function InProgressPill() {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  // useState's lazy initializer gives us a stable Animated.Value
-  // without the "ref read during render" lint warning that
-  // useRef(...).current triggers. The Value object itself is the
-  // same identity across renders; only its internal numeric state
-  // ticks via Animated.
   const [opacity] = useState(() => new Animated.Value(1));
 
   useEffect(() => {
@@ -246,17 +223,8 @@ function InProgressPill() {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+function makeStyles(_colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
-    card: {
-      backgroundColor: colors.cardBg,
-      borderRadius: 18,
-      borderWidth: 1,
-      borderColor: colors.border,
-      overflow: 'hidden',
-      marginBottom: 14,
-    },
-
     band: {
       paddingHorizontal: 16,
       paddingTop: 14,
@@ -330,12 +298,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
       letterSpacing: 0.4,
       color: 'rgba(255,255,255,0.85)',
-    },
-
-    body: {
-      paddingHorizontal: 14,
-      paddingTop: 14,
-      paddingBottom: 14,
     },
   });
 }

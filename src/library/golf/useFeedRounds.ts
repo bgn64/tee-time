@@ -1,28 +1,33 @@
 /**
- * useFeedRounds — friend-feed projection over local PowerSync rows.
+ * useFeedRounds — feed projection over local PowerSync rows.
  *
- * Returns the signed-in user's friends' rounds projected as `Round`
- * objects, bucketed into:
+ * Returns rounds bucketed into:
  *
- *   liveRounds      — completedAt null, scores.length >= 1, sorted
- *                     by scorecards.updated_at desc (most recently
- *                     active bubbles to the top).
- *   completedRounds — completedAt set, sorted by completedAt desc.
+ *   liveRounds      — friends' in-progress rounds (completedAt null,
+ *                     scores.length >= 0), sorted by
+ *                     scorecards.updated_at desc. **Own live round is
+ *                     excluded** — the scoring tab covers it.
+ *   completedRounds — friends' completed rounds AND the signed-in
+ *                     user's own completed rounds, sorted by
+ *                     completedAt desc.
  *
- * Filters by JOINing the **local** `friendships` table — not just
- * `owner_user_id <> me` — so an unfriend hides cards from the feed
- * the instant the friendship row is gone, even if PowerSync hasn't
- * yet pruned the cached scorecard rows from local SQLite.
+ * Friend rounds come via a JOIN on the local `friendships` table so
+ * an unfriend hides cards from the feed the instant the friendship
+ * row is gone, even before PowerSync has pruned the cached
+ * scorecard rows from local SQLite.
+ *
+ * Own completed rounds are pulled by a second pair of queries
+ * filtered on `owner_user_id = ?` and `completed_at IS NOT NULL`.
+ * They land in `completedRounds` so the user can tap into their
+ * own past round from the feed to read / post comments. The two
+ * source queries are partitioned by owner (friend self-friending
+ * is forbidden), so the merged result has no duplicates by
+ * construction — we still dedupe scorecards by id defensively.
  *
  * Sort key contract: `RoundContext.setCustomHoleScore` bumps
- * `scorecards.updated_at` on every score tap. That makes the column
- * a faithful "last activity" timestamp; the feed sorts by it
- * directly with no client-side aggregate over score rows.
- *
- * Score hydration uses a `JOIN scorecards JOIN friendships` query so
- * we don't run into SQLite's 999-parameter limit when many friends
- * have many rounds (a dynamic `IN (?, ?, ?, ...)` list would break
- * at the limit).
+ * `scorecards.updated_at` on every score tap, so the live-feed
+ * order tracks activity faithfully without a client-side
+ * MAX(scorecard_scores.updated_at) aggregate.
  */
 
 import React from 'react';
@@ -33,6 +38,7 @@ import {
   SCORECARDS_TABLE,
   SCORECARD_SCORES_TABLE,
 } from '@/library/powersync/AppSchema';
+import { useAccount } from '@/library/social/AccountContext';
 import {
   projectScorecardRow,
   type ScorecardRowShape,
@@ -66,12 +72,62 @@ const SELECT_FEED_SCORES_SQL = `
   JOIN ${FRIENDSHIPS_TABLE} f ON f.friend_user_id = sc.owner_user_id
 `;
 
+const SELECT_OWN_COMPLETED_SCORECARDS_SQL = `
+  SELECT * FROM ${SCORECARDS_TABLE}
+  WHERE owner_user_id = ? AND completed_at IS NOT NULL
+`;
+
+const SELECT_OWN_COMPLETED_SCORES_SQL = `
+  SELECT ss.scorecard_id, ss.scorer_id, ss.hole_number, ss.strokes
+  FROM ${SCORECARD_SCORES_TABLE} ss
+  JOIN ${SCORECARDS_TABLE} sc ON sc.id = ss.scorecard_id
+  WHERE sc.owner_user_id = ? AND sc.completed_at IS NOT NULL
+`;
+
+const NO_ROWS_SCORECARDS_SQL = `SELECT * FROM ${SCORECARDS_TABLE} WHERE 1 = 0`;
+const NO_ROWS_SCORES_SQL = `SELECT * FROM ${SCORECARD_SCORES_TABLE} WHERE 1 = 0`;
+
 export function useFeedRounds(): FeedRoundsResult {
-  const { data: scorecardRows, isLoading: scorecardLoading } =
+  const { account } = useAccount();
+  const userId = account?.userId ?? null;
+
+  const { data: friendScorecardRows, isLoading: friendScorecardLoading } =
     useQuery<ScorecardRowShape>(SELECT_FEED_SCORECARDS_SQL);
 
-  const { data: scoreRows, isLoading: scoresLoading } =
+  const { data: friendScoreRows, isLoading: friendScoresLoading } =
     useQuery<ScoreRow>(SELECT_FEED_SCORES_SQL);
+
+  const { data: ownCompletedScorecardRows, isLoading: ownScorecardLoading } =
+    useQuery<ScorecardRowShape>(
+      userId ? SELECT_OWN_COMPLETED_SCORECARDS_SQL : NO_ROWS_SCORECARDS_SQL,
+      userId ? [userId] : []
+    );
+
+  const { data: ownCompletedScoreRows, isLoading: ownScoresLoading } =
+    useQuery<ScoreRow>(
+      userId ? SELECT_OWN_COMPLETED_SCORES_SQL : NO_ROWS_SCORES_SQL,
+      userId ? [userId] : []
+    );
+
+  // Concatenate the two sources; dedupe scorecards by id defensively
+  // (the two queries are partitioned by owner so duplicates shouldn't
+  // happen, but it's cheap protection against a future change that
+  // breaks the partition).
+  const scorecardRows = React.useMemo(() => {
+    const seen = new Set<string>();
+    const out: ScorecardRowShape[] = [];
+    for (const r of [...friendScorecardRows, ...ownCompletedScorecardRows]) {
+      if (!r.id || seen.has(r.id)) continue;
+      seen.add(r.id);
+      out.push(r);
+    }
+    return out;
+  }, [friendScorecardRows, ownCompletedScorecardRows]);
+
+  const scoreRows = React.useMemo(
+    () => [...friendScoreRows, ...ownCompletedScoreRows],
+    [friendScoreRows, ownCompletedScoreRows]
+  );
 
   // Bucket per-cell scores by scorecard_id in one pass so the
   // projection step stays O(N) instead of O(N²).
@@ -119,6 +175,10 @@ export function useFeedRounds(): FeedRoundsResult {
     // as a band-only card. The card itself gates the embedded
     // scorecard body on `round.scores.length > 0`, so it degrades
     // gracefully until the first score arrives.
+    //
+    // Own live rounds are NOT in this list: the own-rounds query is
+    // gated on `completed_at IS NOT NULL`, so own live rounds never
+    // enter `projected`. The scoring tab covers that surface.
     return projected
       .filter((r) => !r.completedAt)
       .sort((a, b) => {
@@ -141,6 +201,10 @@ export function useFeedRounds(): FeedRoundsResult {
   return {
     liveRounds,
     completedRounds,
-    isLoading: scorecardLoading || scoresLoading,
+    isLoading:
+      friendScorecardLoading ||
+      friendScoresLoading ||
+      ownScorecardLoading ||
+      ownScoresLoading,
   };
 }

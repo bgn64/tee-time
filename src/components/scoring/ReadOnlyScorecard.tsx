@@ -1,45 +1,47 @@
 /**
- * Read-only scorecard grid (holes × scorers).
+ * Read-only scorecard grid (vertical layout — v4 redesign).
  *
- * Drastically simplified port of the destination tee-time app's
- * `ReadOnlyScorecard`:
- *   - Stroke + scramble: in scramble the "scorers" are teams (one row
- *     per team; team members share a tee that's read off the first
- *     member's participant entry; the team id is what `RoundScore`
- *     rows are keyed by). In stroke each participant is one scorer.
- *   - No friend-graph / profile cache / live name resolution — names
- *     come from the round's `participants[]` snapshot + the seed
- *     player list, with no linked-friend tap-through.
- *   - No HCP row (handicap_index isn't tracked in the simplified
- *     `Hole` type).
- *   - Final-box tee pill stays editable when `onEditTee` is supplied
- *     (consumer fans out per-member writes in scramble).
+ * Rotated from the previous horizontal layout: rows are holes,
+ * columns are scorers. Saves horizontal space on mobile so each
+ * cell is comfortably tappable.
  *
- * Jump-to-hole pattern: when `onHolePress` is set, every cell in the
- * grid wraps a Pressable that calls back with the hole number, so the
- * caller (live scoring screen) can drive `setCurrentHole`.
+ * Columns: `[Hole] [Par] [Scorer 1] [Scorer 2] …`. Header row shows
+ * just the scorer's avatar cluster (no name — the entry-row up top
+ * carries identification, the grid only needs identity at a glance).
+ * Inline OUT / IN / TOT totals rows replace the previous
+ * `FinalTotals` box; partial totals render as `—` (no asterisk).
+ *
+ * Stroke vs scramble: in scramble the "scorers" are teams (one
+ * column per team; the team id is what `RoundScore` rows are keyed
+ * by, and the column header shows every team member as an
+ * overlapping avatar cluster). In stroke each participant is one
+ * scorer.
+ *
+ * Resolution: participant display info comes from PowerSync local
+ * (profiles + custom_players) with the round's `participants[]`
+ * snapshot as a fallback for the friend-feed case (the owner's
+ * custom_players rows don't sync to a friend's device).
+ *
+ * Tap-to-jump: when `onHolePress` is set, every cell in a hole row
+ * is wrapped in a Pressable that calls back with the hole number.
+ * Tap-to-profile: when `onPressParticipant` is set, the column-header
+ * avatar becomes a Pressable for stroke scorers whose userId resolved.
  */
 
-import { Fragment, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { TeamAvatarCluster, type AvatarMember } from './TeamAvatarCluster';
-import { teeSwatch } from './TeePickerSheet';
 import { formatScore } from '@/library/golf/scoring';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
-import type { Hole, Round, RoundScore, Tee } from '@/types/golf';
+import type { Hole, Round, RoundScore } from '@/types/golf';
 
 type Scorer = {
   id: string;
   name: string;
-  color: string;
-  teeId?: string;
   members: AvatarMember[];
-  /** Present for `user:` participants — drives tap-to-profile from the
-   * final-totals row. The component itself is navigation-agnostic;
-   * the consumer wires `onPressParticipant` to push onto whichever
-   * tab's stack is appropriate. */
+  /** Present for `user:` participants — drives tap-to-profile from the column header. */
   userId?: string;
 };
 
@@ -47,11 +49,7 @@ type Props = {
   round: Round;
   currentHoleNumber?: number;
   onHolePress?: (holeNumber: number) => void;
-  hideFinalTotals?: boolean;
-  onEditTee?: (scorerId: string) => void;
-  /** Fired when a `user:` participant's name is tapped in the
-   * Final-totals row. Caller owns the navigation so this component
-   * stays usable from any tab's stack. */
+  /** Fired when a `user:` participant's column-header avatar is tapped. */
   onPressParticipant?: (userId: string) => void;
 };
 
@@ -59,37 +57,10 @@ export function ReadOnlyScorecard({
   round,
   currentHoleNumber,
   onHolePress,
-  hideFinalTotals,
-  onEditTee,
   onPressParticipant,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  // Tees that have at least one per-hole yardage on this course — these
-  // get their own yardage row. We further filter to tees actually
-  // assigned to a participant so an unused tee doesn't add noise.
-  const teeIdsInPlay = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of round.participants ?? []) {
-      if (p.teeId) set.add(p.teeId);
-    }
-    return [...set];
-  }, [round.participants]);
-
-  const teesInPlay = useMemo(() => {
-    const courseTees = round.course.tees ?? [];
-    const byId = new Map(courseTees.map((t) => [t.id, t]));
-    const tees = teeIdsInPlay
-      .map((id) => byId.get(id))
-      .filter((t): t is Tee => !!t)
-      .filter((t) =>
-        round.course.holes.some(
-          (h) => h.yardages && Number.isFinite(h.yardages[t.id])
-        )
-      );
-    return tees.sort((a, b) => (b.totalYardage ?? -1) - (a.totalYardage ?? -1));
-  }, [teeIdsInPlay, round.course.tees, round.course.holes]);
 
   // Resolve participant display info from PowerSync local
   // (profiles + custom_players) with a direct-fetch fallback for
@@ -124,17 +95,10 @@ export function ReadOnlyScorecard({
       round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
 
     if (isScramble) {
-      // One row per team. Tee is shared by every team member, so we
-      // read it from the first member's participant entry. `userId`
-      // is intentionally not set — taps on a team row don't have a
-      // single profile target (the team owns the row, not any one
-      // member).
+      // One column per team. `userId` is intentionally not set —
+      // a team column doesn't have a single profile to tap into.
       const list: Scorer[] = [];
       for (const team of round.teams ?? []) {
-        const firstMember = team.playerIds[0];
-        const firstParticipant = firstMember
-          ? round.participants.find((p) => p.participantKey === firstMember)
-          : undefined;
         const members: AvatarMember[] = team.playerIds.map((pid) => {
           const r = resolver.get(pid);
           return {
@@ -146,8 +110,6 @@ export function ReadOnlyScorecard({
         list.push({
           id: team.id,
           name: team.name,
-          color: team.color,
-          teeId: firstParticipant?.teeId,
           members,
         });
       }
@@ -162,8 +124,6 @@ export function ReadOnlyScorecard({
       list.push({
         id: p.participantKey,
         name,
-        color,
-        teeId: p.teeId,
         members: [{ id: p.participantKey, name, color }],
         userId: resolved?.userId,
       });
@@ -179,7 +139,6 @@ export function ReadOnlyScorecard({
         list.push({
           id: pid,
           name,
-          color,
           members: [{ id: pid, name, color }],
           userId: resolved?.userId,
         });
@@ -203,7 +162,8 @@ export function ReadOnlyScorecard({
     () => round.course.holes.filter((h) => h.number > 9),
     [round.course.holes]
   );
-  const hasBack9 = back9.length > 0;
+  const hasFront = front9.length > 0;
+  const hasBack = back9.length > 0;
 
   const [visibleNine, setVisibleNine] = useState<'front' | 'back'>(
     currentHoleNumber && currentHoleNumber > 9 ? 'back' : 'front'
@@ -215,19 +175,21 @@ export function ReadOnlyScorecard({
   const [lastSyncedHole, setLastSyncedHole] = useState<number | null>(
     currentHoleNumber ?? null
   );
-  if (hasBack9 && currentHoleNumber != null && currentHoleNumber !== lastSyncedHole) {
+  if (hasBack && currentHoleNumber != null && currentHoleNumber !== lastSyncedHole) {
     setLastSyncedHole(currentHoleNumber);
     setVisibleNine(currentHoleNumber > 9 ? 'back' : 'front');
   }
 
   const rangeRestricted = round.holeRange === 'front9' || round.holeRange === 'back9';
-  const showTabs = hasBack9 && !rangeRestricted;
+  const showTabs = hasBack && !rangeRestricted;
   const forcedSection: 'front' | 'back' | null =
     round.holeRange === 'front9' ? 'front' : round.holeRange === 'back9' ? 'back' : null;
   const effectiveSection: 'front' | 'back' = forcedSection ?? visibleNine;
 
-  const visibleHoles = !hasBack9 ? front9 : effectiveSection === 'front' ? front9 : back9;
-  const visibleTotalLabel = effectiveSection === 'front' ? 'OUT' : 'IN';
+  const visibleHoles = !hasBack ? front9 : effectiveSection === 'front' ? front9 : back9;
+  const sectionLabel = effectiveSection === 'front' ? 'OUT' : 'IN';
+  const showTotRow = effectiveSection === 'back' && hasFront && hasBack;
+  const allHoles = round.course.holes;
 
   return (
     <View>
@@ -251,359 +213,251 @@ export function ReadOnlyScorecard({
           </Pressable>
         </View>
       )}
-      <NineSection
+      <VerticalGrid
         styles={styles}
         holes={visibleHoles}
         scorers={scorers}
         scores={round.scores}
-        totalLabel={visibleTotalLabel}
+        sectionLabel={sectionLabel}
+        showTotRow={showTotRow}
+        allHoles={allHoles}
         currentHoleNumber={currentHoleNumber}
         onHolePress={onHolePress}
-        teesInPlay={teesInPlay}
-        courseTees={round.course.tees ?? []}
-        ringColor={colors.cardBg}
         onPressParticipant={onPressParticipant}
+        ringColor={colors.cardBg}
       />
-      {!hideFinalTotals && (
-        <View style={{ marginTop: 14 }}>
-          <FinalTotals
-            styles={styles}
-            allHoles={round.course.holes}
-            scorers={scorers}
-            scores={round.scores}
-            ringColor={colors.cardBg}
-            courseTees={round.course.tees ?? []}
-            onEditTee={onEditTee}
-            onPressParticipant={onPressParticipant}
-          />
-        </View>
-      )}
     </View>
   );
 }
 
-type SectionProps = {
+type GridProps = {
   styles: ReturnType<typeof makeStyles>;
   holes: Hole[];
   scorers: Scorer[];
   scores: RoundScore[];
-  totalLabel: string;
+  /** "OUT" or "IN" — the section totals label. */
+  sectionLabel: 'OUT' | 'IN';
+  /** True when we should also render a TOT row below the section totals. */
+  showTotRow: boolean;
+  /** Every hole in the round (used for the TOT row sum). */
+  allHoles: Hole[];
   currentHoleNumber?: number;
   onHolePress?: (holeNumber: number) => void;
-  teesInPlay: Tee[];
-  courseTees: Tee[];
-  ringColor: string;
-  /** When set, the per-scorer avatar in the main grid becomes a tap
-   *  target that pushes onto the host stack's profile route. Lets the
-   *  feed's live cards (which hide FinalTotals) still surface
-   *  tap-to-profile. */
   onPressParticipant?: (userId: string) => void;
+  ringColor: string;
 };
 
-function NineSection({
+function VerticalGrid({
   styles,
   holes,
   scorers,
   scores,
-  totalLabel,
+  sectionLabel,
+  showTotRow,
+  allHoles,
   currentHoleNumber,
   onHolePress,
-  teesInPlay,
-  courseTees,
-  ringColor,
   onPressParticipant,
-}: SectionProps) {
-  const parTotal = holes.reduce((t, h) => t + h.par, 0);
+  ringColor,
+}: GridProps) {
+  const sectionPar = holes.reduce((t, h) => t + h.par, 0);
+  const totalPar = allHoles.reduce((t, h) => t + h.par, 0);
 
-  function CellWrap({
-    holeNumber,
-    children,
-  }: {
-    holeNumber: number;
-    children: React.ReactNode;
-  }) {
-    if (!onHolePress) return <Fragment>{children}</Fragment>;
-    return (
-      <Pressable style={styles.cellPressable} onPress={() => onHolePress(holeNumber)}>
-        {children}
-      </Pressable>
-    );
-  }
+  // Per-scorer aggregates for the section + the whole round. Tracked
+  // inline so we don't re-walk `scores` once per scorer per totals
+  // row. Initialise to zero counts; emit "—" downstream when scored
+  // < total.
+  const sectionAgg = scorers.map((s) => aggregateFor(s.id, holes, scores));
+  const totalAgg = showTotRow
+    ? scorers.map((s) => aggregateFor(s.id, allHoles, scores))
+    : null;
 
   return (
-    <View style={styles.section}>
+    <View style={styles.grid}>
+      {/* Header: Hole | Par | avatars. Uses the same column wrappers
+          as the hole + totals rows so widths line up to the pixel. */}
       <View style={[styles.row, styles.headRow]}>
-        <Text style={[styles.cellName, styles.headText]}>Hole</Text>
-        {holes.map((h) => {
-          const isCurrent = h.number === currentHoleNumber;
+        <View style={styles.holeCol}>
+          <Text style={[styles.headLabel, styles.cellTextCenter]}>Hole</Text>
+        </View>
+        <View style={[styles.parCol, styles.colBorder]}>
+          <Text style={[styles.headLabel, styles.cellTextCenter]}>Par</Text>
+        </View>
+        {scorers.map((s) => {
+          const cluster = (
+            <TeamAvatarCluster members={s.members} size="sm" ringColor={ringColor} />
+          );
           return (
-            <CellWrap key={h.number} holeNumber={h.number}>
-              <Text
-                style={[
-                  styles.cellNum,
-                  styles.headText,
-                  isCurrent && styles.headTextCurrent,
-                ]}>
-                {h.number}
-              </Text>
-            </CellWrap>
-          );
-        })}
-        <Text style={[styles.cellTotal, styles.headText]}>{totalLabel}</Text>
-      </View>
-
-      {teesInPlay.map((tee) => {
-        const sectionTotal = holes.reduce((t, h) => {
-          const y = h.yardages?.[tee.id];
-          return Number.isFinite(y as number) ? t + (y as number) : t;
-        }, 0);
-        return (
-          <View key={`yd-${tee.id}`} style={[styles.row, styles.tintedRow]}>
-            <View style={[styles.teeBar, { backgroundColor: teeSwatch(tee) }]} />
-            <View style={[styles.cellName, styles.teeNameCell, styles.cellNameWithBar]}>
-              <Text style={styles.teeNameText} numberOfLines={1}>
-                {tee.name}
-              </Text>
-            </View>
-            {holes.map((h) => {
-              const y = h.yardages?.[tee.id];
-              const isCurrent = h.number === currentHoleNumber;
-              return (
-                <CellWrap key={h.number} holeNumber={h.number}>
-                  <Text
-                    style={[
-                      styles.cellNum,
-                      styles.yardText,
-                      isCurrent && styles.cellColCurrent,
-                    ]}>
-                    {Number.isFinite(y as number) ? y : '—'}
-                  </Text>
-                </CellWrap>
-              );
-            })}
-            <Text style={[styles.cellTotal, styles.yardText]}>
-              {sectionTotal > 0 ? sectionTotal.toLocaleString() : '—'}
-            </Text>
-          </View>
-        );
-      })}
-
-      {scorers.map((scorer) => {
-        const scorerTee = scorer.teeId ? courseTees.find((t) => t.id === scorer.teeId) : undefined;
-        let nineRel = 0;
-        let holesScored = 0;
-        const cells = holes.map((h) => {
-          const score = scores.find(
-            (s) => s.scorerId === scorer.id && s.holeNumber === h.number
-          );
-          if (!score) return { strokes: null as number | null, rel: null as number | null };
-          const rel = score.strokes - h.par;
-          nineRel += rel;
-          holesScored++;
-          return { strokes: score.strokes, rel };
-        });
-
-        const hasAnyScore = holesScored > 0;
-        const sectionTotalText = hasAnyScore
-          ? holesScored === holes.length
-            ? formatScore(nineRel)
-            : `${formatScore(nineRel)}*`
-          : '—';
-
-        return (
-          <View key={scorer.id} style={styles.row}>
-            {scorerTee ? (
-              <View style={[styles.teeBar, { backgroundColor: teeSwatch(scorerTee) }]} />
-            ) : null}
-            <View style={[styles.cellName, scorerTee && styles.cellNameWithBar]}>
-              {scorer.userId && onPressParticipant ? (
+            <View key={s.id} style={[styles.scoreCol, styles.colBorder, styles.scoreColCentered]}>
+              {s.userId && onPressParticipant ? (
                 <Pressable
-                  onPress={() => onPressParticipant(scorer.userId!)}
+                  onPress={() => onPressParticipant(s.userId!)}
                   hitSlop={4}
-                  accessibilityLabel={`View ${scorer.name}'s profile`}>
-                  <TeamAvatarCluster members={scorer.members} size="sm" ringColor={ringColor} />
+                  accessibilityLabel={`View ${s.name}'s profile`}>
+                  {cluster}
                 </Pressable>
               ) : (
-                <TeamAvatarCluster members={scorer.members} size="sm" ringColor={ringColor} />
+                cluster
               )}
             </View>
-            {cells.map((c, i) => {
-              const holeNumber = holes[i].number;
-              const isCurrent = holeNumber === currentHoleNumber;
+          );
+        })}
+      </View>
+
+      {/* Hole rows */}
+      {holes.map((h) => {
+        const isCurrent = h.number === currentHoleNumber;
+        return (
+          <View
+            key={h.number}
+            style={[styles.row, styles.holeRow, isCurrent && styles.holeRowCurrent]}>
+            <HoleCell
+              style={styles.holeCol}
+              holeNumber={h.number}
+              onHolePress={onHolePress}>
+              <Text style={[styles.holeNumText, styles.cellTextCenter]}>{h.number}</Text>
+            </HoleCell>
+            <HoleCell
+              style={[styles.parCol, styles.colBorder]}
+              holeNumber={h.number}
+              onHolePress={onHolePress}>
+              <Text style={[styles.parNumText, styles.cellTextCenter]}>{h.par}</Text>
+            </HoleCell>
+            {scorers.map((s) => {
+              const score = scores.find(
+                (sc) => sc.scorerId === s.id && sc.holeNumber === h.number
+              );
+              const rel = score ? score.strokes - h.par : null;
               return (
-                <CellWrap key={holeNumber} holeNumber={holeNumber}>
+                <HoleCell
+                  key={s.id}
+                  style={[
+                    styles.scoreCol,
+                    styles.colBorder,
+                    rel !== null && rel > 0 && styles.scoreOverBg,
+                    rel !== null && rel < 0 && styles.scoreUnderBg,
+                  ]}
+                  holeNumber={h.number}
+                  onHolePress={onHolePress}>
                   <Text
                     style={[
-                      styles.cellNum,
-                      c.rel !== null && c.rel > 0 && styles.cellOver,
-                      c.rel !== null && c.rel < 0 && styles.cellUnder,
-                      c.strokes === null && styles.cellEmpty,
-                      isCurrent && styles.cellColCurrent,
+                      styles.scoreText,
+                      styles.cellTextCenter,
+                      rel !== null && rel > 0 && styles.scoreOver,
+                      rel !== null && rel < 0 && styles.scoreUnder,
+                      rel === null && styles.scoreEmpty,
                     ]}>
-                    {c.rel !== null ? formatScore(c.rel) : '—'}
+                    {rel !== null ? formatScore(rel) : '—'}
                   </Text>
-                </CellWrap>
+                </HoleCell>
               );
             })}
-            <Text
-              style={[
-                styles.cellTotal,
-                hasAnyScore && nineRel > 0 && styles.cellOver,
-                hasAnyScore && nineRel < 0 && styles.cellUnder,
-              ]}>
-              {sectionTotalText}
-            </Text>
           </View>
         );
       })}
 
-      <View style={[styles.row, styles.parRow]}>
-        <Text style={[styles.cellName, styles.parText]}>Par</Text>
-        {holes.map((h) => {
-          const isCurrent = h.number === currentHoleNumber;
-          return (
-            <CellWrap key={h.number} holeNumber={h.number}>
-              <Text
-                style={[styles.cellNum, styles.parText, isCurrent && styles.cellColCurrent]}>
-                {h.par}
-              </Text>
-            </CellWrap>
-          );
-        })}
-        <Text style={[styles.cellTotal, styles.parText]}>{parTotal}</Text>
+      {/* OUT / IN totals */}
+      <View style={[styles.row, styles.totalsRow]}>
+        <View style={styles.holeCol}>
+          <Text style={[styles.totalsLabelText, styles.cellTextCenter]}>{sectionLabel}</Text>
+        </View>
+        <View style={[styles.parCol, styles.colBorder]}>
+          <Text style={[styles.totalsParText, styles.cellTextCenter]}>{sectionPar}</Text>
+        </View>
+        {sectionAgg.map((agg, i) => (
+          <View key={scorers[i].id} style={[styles.scoreCol, styles.colBorder]}>
+            <TotalsCellInner styles={styles} agg={agg} />
+          </View>
+        ))}
       </View>
+
+      {/* TOT row when both nines exist */}
+      {showTotRow && totalAgg ? (
+        <View style={[styles.row, styles.totalsRow]}>
+          <View style={styles.holeCol}>
+            <Text style={[styles.totalsLabelText, styles.cellTextCenter]}>TOT</Text>
+          </View>
+          <View style={[styles.parCol, styles.colBorder]}>
+            <Text style={[styles.totalsParText, styles.cellTextCenter]}>{totalPar}</Text>
+          </View>
+          {totalAgg.map((agg, i) => (
+            <View key={scorers[i].id} style={[styles.scoreCol, styles.colBorder]}>
+              <TotalsCellInner styles={styles} agg={agg} />
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
 
-type FinalProps = {
-  styles: ReturnType<typeof makeStyles>;
-  allHoles: Hole[];
-  scorers: Scorer[];
-  scores: RoundScore[];
-  ringColor: string;
-  courseTees: Tee[];
-  onEditTee?: (scorerId: string) => void;
-  onPressParticipant?: (userId: string) => void;
+type Aggregate = {
+  rel: number;
+  scored: number;
+  total: number;
 };
 
-function FinalTotals({
+function aggregateFor(scorerId: string, holes: Hole[], scores: RoundScore[]): Aggregate {
+  let rel = 0;
+  let scored = 0;
+  for (const h of holes) {
+    const s = scores.find((sc) => sc.scorerId === scorerId && sc.holeNumber === h.number);
+    if (!s) continue;
+    rel += s.strokes - h.par;
+    scored++;
+  }
+  return { rel, scored, total: holes.length };
+}
+
+function TotalsCellInner({
   styles,
-  allHoles,
-  scorers,
-  scores,
-  ringColor,
-  courseTees,
-  onEditTee,
-  onPressParticipant,
-}: FinalProps) {
-  const parTotal = allHoles.reduce((t, h) => t + h.par, 0);
-  const teeById = useMemo(() => {
-    const m = new Map<string, Tee>();
-    for (const t of courseTees) m.set(t.id, t);
-    return m;
-  }, [courseTees]);
-
+  agg,
+}: {
+  styles: ReturnType<typeof makeStyles>;
+  agg: Aggregate;
+}) {
+  const complete = agg.scored === agg.total;
+  if (!complete) {
+    return (
+      <Text style={[styles.totalsText, styles.cellTextCenter, styles.scoreEmpty]}>—</Text>
+    );
+  }
   return (
-    <View style={styles.section}>
-      <View style={[styles.row, styles.totalHead]}>
-        <Text style={styles.totalHeadText}>FINAL · Par {parTotal}</Text>
-      </View>
-      {scorers.map((scorer) => {
-        let totalRel = 0;
-        let holesScored = 0;
-        for (const h of allHoles) {
-          const s = scores.find(
-            (sc) => sc.scorerId === scorer.id && sc.holeNumber === h.number
-          );
-          if (s) {
-            totalRel += s.strokes - h.par;
-            holesScored++;
-          }
-        }
-        const hasAnyScore = holesScored > 0;
-        const status = !hasAnyScore
-          ? 'No scores yet'
-          : holesScored === allHoles.length
-          ? formatScore(totalRel)
-          : `${formatScore(totalRel)} · ${holesScored}/${allHoles.length}`;
+    <Text
+      style={[
+        styles.totalsText,
+        styles.cellTextCenter,
+        agg.rel > 0 && styles.scoreOver,
+        agg.rel < 0 && styles.scoreUnder,
+      ]}>
+      {formatScore(agg.rel)}
+    </Text>
+  );
+}
 
-        const scorerTee = scorer.teeId ? teeById.get(scorer.teeId) : undefined;
-        const pillEditable = !!onEditTee;
-        const showPill = !!scorerTee || pillEditable;
-
-        let pillNode: React.ReactNode = null;
-        if (showPill) {
-          const swatch = scorerTee ? teeSwatch(scorerTee) : null;
-          const pillContent = scorerTee ? (
-            <>
-              <View style={[styles.finalTeePillDot, { backgroundColor: swatch! }]} />
-              <Text style={styles.finalTeePillText} numberOfLines={1}>
-                {scorerTee.name}
-              </Text>
-              {pillEditable ? <Text style={styles.finalTeePillChev}>▾</Text> : null}
-            </>
-          ) : (
-            <>
-              <Text style={styles.finalTeePillPlaceholder} numberOfLines={1}>
-                + Tee
-              </Text>
-              <Text style={styles.finalTeePillChev}>▾</Text>
-            </>
-          );
-          pillNode = pillEditable ? (
-            <Pressable
-              style={[styles.finalTeePill, !scorerTee && styles.finalTeePillEmpty]}
-              onPress={() => onEditTee!(scorer.id)}>
-              {pillContent}
-            </Pressable>
-          ) : (
-            <View style={styles.finalTeePill}>{pillContent}</View>
-          );
-        }
-
-        return (
-          <View key={scorer.id} style={styles.totalRow}>
-            <TeamAvatarCluster members={scorer.members} size="md" ringColor={ringColor} />
-            {scorer.userId && onPressParticipant ? (
-              <Pressable
-                style={styles.totalNameWrap}
-                onPress={() => onPressParticipant(scorer.userId!)}
-                hitSlop={4}>
-                <Text style={[styles.totalName, styles.totalNameLink]} numberOfLines={1}>
-                  {scorer.name}
-                </Text>
-              </Pressable>
-            ) : (
-              <Text style={styles.totalName} numberOfLines={1}>
-                {scorer.name}
-              </Text>
-            )}
-            {pillNode}
-            <Text
-              style={[
-                styles.totalScore,
-                hasAnyScore && totalRel > 0 && styles.cellOver,
-                hasAnyScore && totalRel < 0 && styles.cellUnder,
-              ]}>
-              {status}
-            </Text>
-          </View>
-        );
-      })}
-    </View>
+function HoleCell({
+  style,
+  holeNumber,
+  onHolePress,
+  children,
+}: {
+  style: import('react-native').StyleProp<import('react-native').ViewStyle>;
+  holeNumber: number;
+  onHolePress?: (holeNumber: number) => void;
+  children: React.ReactNode;
+}) {
+  if (!onHolePress) {
+    return <View style={style}>{children}</View>;
+  }
+  return (
+    <Pressable style={style} onPress={() => onHolePress(holeNumber)}>
+      {children}
+    </Pressable>
   );
 }
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
-    section: {
-      backgroundColor: colors.cardBg,
-      borderColor: colors.border,
-      borderRadius: 10,
-      borderWidth: 1,
-      padding: 8,
-    },
     tabs: {
       flexDirection: 'row',
       gap: 4,
@@ -634,141 +488,122 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       letterSpacing: 0.4,
     },
     tabTextActive: { color: colors.primaryDark },
+
+    grid: {
+      backgroundColor: colors.cardBg,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      overflow: 'hidden',
+    },
     row: {
       flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingVertical: 4,
-      borderBottomColor: colors.border,
+      alignItems: 'stretch',
+    },
+    headRow: {
+      backgroundColor: colors.chipBg,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      position: 'relative',
-    },
-    tintedRow: { backgroundColor: colors.chipBg },
-    headRow: { borderBottomColor: colors.border, borderBottomWidth: 1 },
-    cellName: {
-      width: 60,
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    cellPressable: { flex: 1 },
-    cellNum: {
-      flex: 1,
-      textAlign: 'center',
-      fontSize: 11,
-      color: colors.textBody,
-    },
-    cellEmpty: { color: colors.textMuted, opacity: 0.55 },
-    cellOver: { color: colors.accent, fontWeight: '800' },
-    cellUnder: { color: colors.primaryDark, fontWeight: '800' },
-    cellColCurrent: {
-      backgroundColor: 'rgba(124,179,66,0.18)',
-      borderRadius: 4,
-    },
-    cellTotal: {
-      width: 36,
-      textAlign: 'right',
-      fontSize: 11,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
-    headText: {
-      color: colors.textMuted,
-      fontWeight: '800',
-      fontSize: 10,
-      letterSpacing: 0.4,
-    },
-    headTextCurrent: {
-      color: colors.primaryDark,
-      backgroundColor: 'rgba(124,179,66,0.25)',
-      borderRadius: 4,
-    },
-    parText: { color: colors.textMuted, fontWeight: '700' },
-    parRow: {
-      backgroundColor: colors.chipBg,
-      borderTopWidth: 1,
-      borderTopColor: colors.border,
-      borderBottomWidth: 0,
-    },
-    teeNameCell: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-    teeBar: {
-      position: 'absolute',
-      left: 0,
-      top: 3,
-      bottom: 3,
-      width: 3,
-      borderRadius: 2,
-    },
-    cellNameWithBar: { paddingLeft: 7 },
-    teeNameText: {
-      fontSize: 10,
-      fontWeight: '700',
-      color: colors.textMuted,
-    },
-    yardText: {
-      color: colors.textMuted,
-      fontSize: 9.5,
-      fontWeight: '700',
-    },
-    totalHead: {
       borderBottomColor: colors.border,
-      borderBottomWidth: 1,
-      paddingVertical: 5,
     },
-    totalHeadText: {
-      flex: 1,
-      fontSize: 10,
-      fontWeight: '800',
-      letterSpacing: 0.6,
-      color: colors.textMuted,
+    holeRow: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.border,
     },
-    totalRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingVertical: 6,
+    holeRowCurrent: {
+      backgroundColor: 'rgba(47, 125, 75, 0.06)',
     },
-    totalName: {
-      flex: 1,
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.textTitle,
-    },
-    totalNameWrap: {
-      flex: 1,
-    },
-    totalNameLink: {
-      color: colors.primaryDark,
-      textDecorationLine: 'underline',
-    },
-    finalTeePill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
+    totalsRow: {
       backgroundColor: colors.chipBg,
-      borderRadius: 7,
-      paddingHorizontal: 9,
-      paddingVertical: 5,
+      borderTopWidth: 1.5,
+      borderTopColor: colors.border,
     },
-    finalTeePillEmpty: {
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderStyle: 'dashed',
-      borderColor: colors.border,
+    // Column wrappers — applied as the OUTER style of every cell in
+    // every row (header, hole rows, totals) so all rows agree on
+    // column widths to the pixel. Padding lives on the wrapper too
+    // so background tints (over/under) fill the cell.
+    holeCol: {
+      width: 50,
+      paddingVertical: 10,
+      paddingHorizontal: 6,
+      justifyContent: 'center',
     },
-    finalTeePillDot: { width: 8, height: 8, borderRadius: 4 },
-    finalTeePillText: {
-      fontSize: 11,
+    parCol: {
+      width: 38,
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      justifyContent: 'center',
+    },
+    scoreCol: {
+      flex: 1,
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      justifyContent: 'center',
+    },
+    // Center variant for the header's avatar slot (which lays out
+    // its child horizontally, not via text alignment).
+    scoreColCentered: {
+      alignItems: 'center',
+      paddingVertical: 8,
+    },
+    colBorder: {
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderLeftColor: colors.border,
+    },
+    // Text alignment applied at the cell content level so text-based
+    // cells render the same regardless of wrapper.
+    cellTextCenter: { textAlign: 'center' },
+    // Per-cell text styles. Width / padding are on the column wrapper.
+    holeNumText: {
+      fontSize: 12,
       fontWeight: '800',
       color: colors.textTitle,
     },
-    finalTeePillPlaceholder: {
-      fontSize: 11,
+    parNumText: {
+      fontSize: 12,
       fontWeight: '700',
       color: colors.textMuted,
     },
-    finalTeePillChev: { fontSize: 11, color: colors.textMuted },
-    totalScore: {
+    headLabel: {
+      fontSize: 9.5,
+      fontWeight: '800',
+      color: colors.textMuted,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+    },
+    scoreText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    scoreOver: {
+      color: colors.accent,
+    },
+    scoreUnder: {
+      color: colors.primaryDark,
+    },
+    scoreEmpty: {
+      color: colors.textMuted,
+      opacity: 0.55,
+    },
+    scoreOverBg: {
+      backgroundColor: 'rgba(217, 72, 53, 0.10)',
+    },
+    scoreUnderBg: {
+      backgroundColor: 'rgba(47, 125, 75, 0.10)',
+    },
+    // Totals row text.
+    totalsLabelText: {
       fontSize: 12,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    totalsParText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
+    totalsText: {
+      fontSize: 13,
       fontWeight: '800',
       color: colors.textTitle,
     },

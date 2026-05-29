@@ -1,5 +1,5 @@
 /**
- * Custom-score sheet — opened from the ✕ chip on ScoreEntryRow when
+ * Custom-score sheet — opened from the ✕ chip on ScorerRow when
  * the user needs a value outside the −2…+2 quick-pick range. Shows a
  * large relative-to-par display with − / + steppers, the implied raw
  * stroke count, and a Done button to commit.

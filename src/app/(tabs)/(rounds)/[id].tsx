@@ -8,10 +8,9 @@
  * to render a "Round not available" empty state cleanly when a
  * stale link or a mid-navigation delete lands here.
  *
- * Edit-mode score corrections (the destination app's feature) are
- * intentionally out of scope. If the user needs to fix a score they
- * can delete the round and re-score it. Adding edit mode later
- * reuses the existing live-scoring components and is well-scoped.
+ * Renders the shared `<RoundDetailView />` so the visual identity
+ * matches `(home)/round/[id]` — only the Delete button is
+ * route-specific (rounds-tab owner-of-the-round flow).
  */
 
 import React from 'react';
@@ -28,17 +27,11 @@ import {
 } from 'react-native';
 import { useQuery } from '@powersync/react';
 
-import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
+import { RoundDetailView } from '@/components/round/RoundDetailView';
 import {
   SCORECARDS_TABLE,
   SCORECARD_SCORES_TABLE
 } from '@/library/powersync/AppSchema';
-import {
-  formatDay,
-  formatScore,
-  holeRangeLabel,
-  scoreForRoundsList
-} from '@/library/golf/scoring';
 import {
   projectScorecardRow,
   type ScorecardRowShape
@@ -181,8 +174,33 @@ export default function RoundDetailScreen() {
     );
   }
 
-  const date = new Date(round.completedAt ?? round.startedAt);
-  const totalRel = scoreForRoundsList(round, account.userId);
+  const deleteButton = (
+    <Pressable
+      style={[styles.deleteBtn, isDeleting && styles.deleteBtnDisabled]}
+      onPress={onPressDelete}
+      disabled={isDeleting}>
+      <Text style={styles.deleteBtnText}>
+        {isDeleting ? 'Deleting…' : 'Delete this round'}
+      </Text>
+    </Pressable>
+  );
+
+  // Owner-only Edit button. Pushes into the nested `[id]/edit`
+  // route under the rounds-tab stack so back-nav returns here.
+  // The query above is owner-scoped already (so reaching this
+  // branch implies the user is the owner), but the explicit
+  // account check guards against future refactors.
+  const editButton =
+    account.userId === round.ownerUserId ? (
+      <View style={styles.topRow}>
+        <Pressable
+          style={styles.editBtn}
+          onPress={() => router.push(`/(tabs)/(rounds)/${round.id}/edit` as never)}
+          accessibilityLabel="Edit this round">
+          <Text style={styles.editBtnText}>Edit</Text>
+        </Pressable>
+      </View>
+    ) : null;
 
   return (
     <>
@@ -190,55 +208,12 @@ export default function RoundDetailScreen() {
       <ScrollView
         style={styles.container}
         contentContainerStyle={styles.content}>
-        <View style={styles.head}>
-          <Text style={styles.courseName} numberOfLines={2}>
-            {round.course.name}
-          </Text>
-          {round.course.location ? (
-            <Text style={styles.location} numberOfLines={1}>
-              {round.course.location}
-            </Text>
-          ) : null}
-          <View style={styles.metaRow}>
-            <Text style={styles.date}>{formatDay(date)}, {date.getFullYear()}</Text>
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>
-                {round.scoringRule === 'scramble' ? 'SCRAMBLE' : 'STROKE'}
-              </Text>
-            </View>
-            <View style={styles.tag}>
-              <Text style={styles.tagText}>
-                {holeRangeLabel(round.course.holes, round.holeRange).toUpperCase()}
-              </Text>
-            </View>
-            <Text
-              style={[
-                styles.totalScore,
-                totalRel > 0 && styles.scoreOver,
-                totalRel < 0 && styles.scoreUnder
-              ]}>
-              {formatScore(totalRel)}
-            </Text>
-          </View>
-        </View>
-
-        <View style={styles.scorecardSection}>
-          <ReadOnlyScorecard
-            round={round}
-            onPressParticipant={(userId) =>
-              router.push(`/(tabs)/(rounds)/profile/${userId}` as never)
-            }
-          />
-        </View>
-
-        <Pressable
-          style={[styles.deleteBtn, isDeleting && styles.deleteBtnDisabled]}
-          onPress={onPressDelete}
-          disabled={isDeleting}>
-          <Text style={styles.deleteBtnText}>
-            {isDeleting ? 'Deleting…' : 'Delete this round'}
-          </Text>
-        </Pressable>
+        <RoundDetailView
+          round={round}
+          profileRoutePrefix="/(tabs)/(rounds)/profile"
+          topActions={editButton}
+          footerActions={deleteButton}
+        />
       </ScrollView>
     </>
   );
@@ -251,135 +226,77 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: colors.background
     },
     content: {
-      padding: 16,
+      padding: 14,
       paddingBottom: 40
     },
-
-    head: {
-      backgroundColor: colors.cardBg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 14,
-      padding: 14,
-      marginBottom: 12
-    },
-    courseName: {
-      fontSize: 19,
-      fontWeight: '800',
-      color: colors.textTitle,
-      lineHeight: 23
-    },
-    location: {
-      fontSize: 12.5,
-      color: colors.textMuted,
-      marginTop: 2,
-      fontWeight: '500'
-    },
-    metaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginTop: 10,
-      flexWrap: 'wrap'
-    },
-    date: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.textMuted
-    },
-    tag: {
-      paddingHorizontal: 7,
-      paddingVertical: 3,
-      borderRadius: 5,
-      backgroundColor: colors.chipBg,
-      borderWidth: 1,
-      borderColor: colors.border
-    },
-    tagText: {
-      fontSize: 9.5,
-      fontWeight: '800',
-      letterSpacing: 0.5,
-      color: colors.textTitle
-    },
-    totalScore: {
-      marginLeft: 'auto',
-      fontSize: 24,
-      fontWeight: '800',
-      color: colors.textTitle
-    },
-    scoreOver: {
-      color: colors.accent
-    },
-    scoreUnder: {
-      color: colors.primary
-    },
-
-    scorecardSection: {
-      backgroundColor: colors.cardBg,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 14,
-      padding: 12,
-      marginBottom: 16
-    },
-
-    deleteBtn: {
-      backgroundColor: colors.cardBg,
-      borderWidth: 1,
-      borderColor: colors.accent,
-      borderRadius: 10,
-      paddingVertical: 12,
-      alignItems: 'center'
-    },
-    deleteBtnDisabled: {
-      opacity: 0.6
-    },
-    deleteBtnText: {
-      color: colors.accent,
-      fontWeight: '800',
-      fontSize: 13
-    },
-
     fallback: {
       flex: 1,
-      backgroundColor: colors.background,
       alignItems: 'center',
       justifyContent: 'center',
-      padding: 32,
-      gap: 10
-    },
-    fallbackIcon: {
-      fontSize: 40,
-      opacity: 0.5
-    },
-    fallbackTitle: {
-      fontSize: 15,
-      fontWeight: '800',
-      color: colors.textTitle,
-      textAlign: 'center'
-    },
-    fallbackBody: {
-      fontSize: 13,
-      color: colors.textMuted,
-      textAlign: 'center',
-      maxWidth: 270,
-      lineHeight: 19
+      padding: 24,
+      gap: 8,
+      backgroundColor: colors.background
     },
     fallbackText: {
       color: colors.textBody,
-      fontSize: 14
+      fontSize: 14,
+      fontWeight: '600'
+    },
+    fallbackIcon: { fontSize: 36 },
+    fallbackTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: colors.textTitle
+    },
+    fallbackBody: {
+      fontSize: 13,
+      color: colors.textBody,
+      textAlign: 'center',
+      maxWidth: 260
     },
     backCta: {
-      marginTop: 10,
+      marginTop: 14,
+      backgroundColor: colors.primary,
       paddingHorizontal: 18,
       paddingVertical: 10,
-      borderRadius: 10,
-      backgroundColor: colors.primary
+      borderRadius: 999
     },
     backCtaText: {
-      color: '#ffffff',
+      color: '#fff',
       fontWeight: '800',
-      fontSize: 13
+      fontSize: 13,
+      letterSpacing: 0.4
+    },
+    deleteBtn: {
+      borderWidth: 1,
+      borderColor: '#f5cccc',
+      borderRadius: 11,
+      paddingVertical: 11,
+      alignItems: 'center'
+    },
+    deleteBtnDisabled: { opacity: 0.5 },
+    deleteBtnText: {
+      color: '#d54848',
+      fontWeight: '800',
+      fontSize: 12
+    },
+    topRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+    },
+    editBtn: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBg,
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 999,
+    },
+    editBtnText: {
+      color: colors.textTitle,
+      fontWeight: '800',
+      fontSize: 12,
+      letterSpacing: 0.4,
     }
   });
 }

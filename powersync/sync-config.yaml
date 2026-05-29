@@ -161,3 +161,40 @@ streams:
       JOIN friendships ON friendships.friend_user_id = scorecard_scores.owner_user_id
       WHERE friendships.user_id = auth.user_id()
     auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Round comments (added with migration 007_round_comments.sql).
+  #
+  # One stream per visibility scope (own rounds, friend rounds),
+  # mirroring the scorecards / friend_scorecards split. JOINs use
+  # single-equality matches only — PowerSync rejects more complex
+  # JOIN ON predicates.
+  #
+  # Tombstoned rows (`deleted_at IS NOT NULL`) sync down too;
+  # the UI filters them client-side. That keeps the soft-delete
+  # behaviour consistent across devices (the row's PK stays
+  # synced — disappearing it from the stream would look like a
+  # hard delete to other viewers, and other viewers' local caches
+  # would still hold the old version until the next full sync).
+  #
+  # PowerSync dedups across streams; if the user's own round has a
+  # comment they authored, it appears once locally even though both
+  # streams would match.
+  # ---------------------------------------------------------------
+
+  own_round_comments:
+    query: |
+      SELECT comments.*
+      FROM comments
+      JOIN scorecards ON scorecards.id = comments.round_id
+      WHERE scorecards.owner_user_id = auth.user_id()
+    auto_subscribe: true
+
+  friend_round_comments:
+    query: |
+      SELECT comments.*
+      FROM comments
+      JOIN scorecards ON scorecards.id = comments.round_id
+      JOIN friendships ON friendships.friend_user_id = scorecards.owner_user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true

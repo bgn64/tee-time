@@ -1,17 +1,20 @@
 /**
  * Live scoring screen — root of the Score tab once a round is active.
  *
- * Trimmed port of the destination `scoring.tsx`:
- *   - HoleNavBar at top (prev/next + par/yardage for the scorer's tee)
- *   - One ScoreEntryRow per participant (avatar · name · running ·
- *     quick-pick chips · custom score)
- *   - ReadOnlyScorecard below (tap any cell to jump)
- *   - Inline "Finish" button at top-right (we don't have the
- *     destination's global header slots, so we render Finish ourselves)
- *   - Range dropdown for front 9 / back 9 / all 18 mid-round flip
- *   - Tap a player's tee swatch in the scorecard's Final box to swap
- *     tees mid-round via TeePickerSheet
- *   - Danger "Abandon round" button below the grid
+ * State ② of the four-state round-detail model (in-progress +
+ * editing). Composes:
+ *
+ *   - Pinned top bar with SCORE label, optional range pill, Finish.
+ *   - <RoundDetailView isEditing> for the band + HoleNavBar +
+ *     ScorerStack + ReadOnlyScorecard + CommentsSection, with the
+ *     Abandon button passed in via `footerActions`.
+ *   - Modals: ConfirmAbandonSheet, RangeDropdown, TeePickerSheet.
+ *
+ * Why this screen isn't *just* <RoundDetailView>: it owns the
+ * pinned top bar (so SCORE + Finish stay visible during long
+ * scrolls), the modal stack, and the RoundContext write-handler
+ * wiring (setCustomHoleScore, setHoleRange, setParticipantTees,
+ * etc). The shared component handles the scrollable content.
  *
  * Hardware back is intercepted on Android — round exits only happen
  * through Finish or Abandon. Stack-level `gestureEnabled: false`
@@ -31,21 +34,11 @@ import {
 } from 'react-native';
 
 import { ConfirmAbandonSheet } from '@/components/scoring/ConfirmAbandonSheet';
-import { HoleNavBar } from '@/components/scoring/HoleNavBar';
 import { RangeDropdown, rangeLabel } from '@/components/scoring/RangeDropdown';
-import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
-import { ScoreEntryRow } from '@/components/scoring/ScoreEntryRow';
-import type { AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
-import { yardageForHole } from '@/library/golf/courseHelpers';
-import { userParticipantKey } from '@/library/golf/participantKey';
+import { RoundDetailView } from '@/components/round/RoundDetailView';
 import { useRound } from '@/library/golf/RoundContext';
-import {
-  formatScore,
-  holesInRange,
-  playerProgress,
-} from '@/library/golf/scoring';
-import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { holesInRange } from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
 import { confirmAsync } from '@/library/utils/alert';
 
@@ -55,7 +48,6 @@ export default function ScoringScreen() {
     currentRound,
     roundHydrated,
     currentHoleHydrated,
-    userId,
     setCustomHoleScore,
     setCurrentHole,
     setHoleRange,
@@ -70,17 +62,6 @@ export default function ScoringScreen() {
   const [teeEditTarget, setTeeEditTarget] = useState<string | null>(null);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  // Resolve display name / avatar color for every participant in
-  // the round. Called unconditionally (before the early-return
-  // branches below) so the hook order is stable. Returns an empty
-  // map when there's no round yet — that's fine; the consumer code
-  // is also gated on currentRound.
-  const participantKeys = useMemo(
-    () => currentRound?.playerIds ?? [],
-    [currentRound]
-  );
-  const resolver = useParticipantResolver(participantKeys);
-
   // Stash handlers in refs so background-back / focus listeners hold
   // the freshest closures (Android back fires after a render snapshot
   // already captured the prior value).
@@ -93,9 +74,6 @@ export default function ScoringScreen() {
     const round = currentRoundRef.current;
     if (!round) return;
     const inRange = holesInRange(round.course.holes, round.holeRange);
-    // In scramble, each team is one scorer (one score row per hole),
-    // so the "every scorer × every hole" gate uses team ids. In
-    // stroke each participant is a scorer.
     const isScramble =
       round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
     const requiredScorerIds = isScramble
@@ -115,11 +93,6 @@ export default function ScoringScreen() {
       );
       if (!ok) return;
     }
-    // Navigation is handled by the defensive bounce effect below
-    // once `currentRound` flips to null — using a single nav site
-    // avoids the dismissAll-after-dismissAll race that fires
-    // POP_TO_TOP on web (where the stack may only contain scoring
-    // after a page reload).
     await completeCurrentRound();
   }, [completeCurrentRound]);
 
@@ -132,24 +105,10 @@ export default function ScoringScreen() {
   );
 
   // Bounce back to the score-tab root when there is no active round
-  // and PowerSync's local cache has been read. Covers three paths:
-  //
-  //   · User taps Finish or Abandon → currentRound flips to null →
-  //     this effect navigates them out.
-  //   · Another device deletes / completes the round → same trigger.
-  //   · User reloads the page while parked on /scoring with no
-  //     active round (or lands on the URL fresh) → same trigger.
-  //
-  // We use `router.replace('/(tabs)/(score)')` instead of
-  // `router.dismissAll()` because the Stack may have no entries
-  // beneath scoring (e.g. immediately after a web reload), and
-  // `dismissAll` fires POP_TO_TOP in that case. Replace works
-  // regardless of stack history.
-  //
-  // `hasBouncedRef` guards against re-firing on every render after
-  // the round disappears — the navigation only needs to happen once.
-  // It resets when a new round arrives so a future
-  // round-then-abandon cycle still triggers.
+  // and PowerSync's local cache has been read. Covers Finish, Abandon,
+  // remote completion, and direct-URL loads with no active round.
+  // Replace (not dismissAll) to avoid POP_TO_TOP on a freshly-loaded
+  // stack with no entries beneath.
   const hasBouncedRef = useRef(false);
   useEffect(() => {
     if (!roundHydrated) return;
@@ -172,58 +131,19 @@ export default function ScoringScreen() {
 
   if (!currentRound) return null;
 
-  const currentHole = currentRound.course.holes.find(
-    (h) => h.number === currentRound.currentHoleNumber
+  const round = currentRound;
+  const currentHole = round.course.holes.find(
+    (h) => h.number === round.currentHoleNumber
   );
   if (!currentHole) return null;
 
-  const maxHole = currentRound.course.holes.length;
-  const inRangeHoles = holesInRange(currentRound.course.holes, currentRound.holeRange);
-
-  // Resolve display name + avatar color for each scorer via the
-  // participant resolver (PowerSync watches over profiles +
-  // custom_players, with a direct-fetch fallback for unfriended
-  // ex-friends). Falls back to a placeholder when the row isn't
-  // resolvable (e.g., offline + ex-friend + historic round).
-  //
-  // In scramble: one Scorer per team. The team's `id` is the
-  // opaque scorerId used for score writes (one DB row per team per
-  // hole), and `members` is every team member resolved through the
-  // resolver so the row's avatar cluster renders both initials.
-  //
-  // In stroke: one Scorer per participant. `members` is a singleton.
+  const inRangeHoles = holesInRange(round.course.holes, round.holeRange);
   const isScramble =
-    currentRound.scoringRule === 'scramble' &&
-    (currentRound.teams?.length ?? 0) > 0;
-  const scorers = isScramble
-    ? currentRound.teams!.map((team) => {
-        const members: AvatarMember[] = team.playerIds.map((pid) => {
-          const r = resolver.get(pid);
-          return {
-            id: pid,
-            name: r?.displayName || 'Player',
-            color: r?.avatarColor || colors.primary,
-          };
-        });
-        return {
-          id: team.id,
-          name: team.name,
-          color: team.color,
-          members,
-        };
-      })
-    : currentRound.playerIds.map((pid) => {
-        const resolved = resolver.get(pid);
-        const name = resolved?.displayName || 'Player';
-        const color = resolved?.avatarColor || colors.primary;
-        return {
-          id: pid,
-          name,
-          color,
-          members: [{ id: pid, name, color }],
-        };
-      });
-  const isSingleScorer = scorers.length === 1;
+    round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
+  const scorerCount = isScramble
+    ? (round.teams?.length ?? 0)
+    : round.playerIds.length;
+  const isSingleScorer = scorerCount === 1;
 
   const currentIdxInRange = inRangeHoles.findIndex(
     (h) => h.number === currentHole.number
@@ -233,137 +153,74 @@ export default function ScoringScreen() {
       ? inRangeHoles[currentIdxInRange + 1].number
       : null;
 
-  // "Self"-tee yardage for the HoleNavBar — find the signed-in user's
-  // participant entry and read their teeId. Falls back to the first
-  // participant's tee when the user isn't a participant (the edge
-  // case where they scored a round for friends without playing
-  // themselves — the player picker still allows this). Previously
-  // used `playerIds[0]` which assumed self was always first; that
-  // held by coincidence for stroke but broke in scramble where
-  // `playerIds` is `teams.flatMap(t => t.playerIds)`.
-  const selfKey = userId ? userParticipantKey(userId) : undefined;
-  const selfTeeId =
-    (selfKey
-      ? currentRound.participants.find((p) => p.participantKey === selfKey)?.teeId
-      : undefined) ?? currentRound.participants[0]?.teeId;
-  const headerYardage = yardageForHole(
-    currentRound.course,
-    currentHole.number,
-    selfTeeId
+  // Score-change handler wired into ScorerStack. On every entry it
+  // upserts the score, then auto-advances to the next in-range hole
+  // when there's only one scorer (matches the prior solo-flow UX).
+  const handleChangeScore = (
+    scorerId: string,
+    holeNumber: number,
+    strokes: number
+  ) => {
+    void setCustomHoleScore(scorerId, holeNumber, strokes);
+    if (isSingleScorer && nextInRangeHoleNumber !== null) {
+      void setCurrentHole(nextInRangeHoleNumber);
+    }
+  };
+
+  const abandonButton = (
+    <Pressable
+      style={styles.abandonBtn}
+      onPress={() => setAbandonConfirmVisible(true)}>
+      <Text style={styles.abandonBtnText}>Abandon round</Text>
+    </Pressable>
   );
 
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.topBarLabel}>SCORE</Text>
-        <Pressable
-          onPress={() => {
-            handleFinish();
-          }}
-          style={styles.finishBtn}>
+        <View style={styles.topBarLeft}>
+          <Text style={styles.topBarLabel}>SCORE</Text>
+          {round.course.holes.length >= 18 ? (
+            <Pressable
+              style={[
+                styles.rangePill,
+                rangeMenuOpen && styles.rangePillActive,
+              ]}
+              onPress={() => setRangeMenuOpen(true)}
+              hitSlop={4}>
+              <Text
+                style={[
+                  styles.rangePillText,
+                  rangeMenuOpen && styles.rangePillTextActive,
+                ]}>
+                {rangeLabel(round.holeRange)}
+              </Text>
+              <Text
+                style={[
+                  styles.rangePillChev,
+                  rangeMenuOpen && styles.rangePillChevActive,
+                ]}>
+                {rangeMenuOpen ? '▴' : '▾'}
+              </Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <Pressable onPress={() => handleFinish()} style={styles.finishBtn}>
           <Text style={styles.finishBtnText}>Finish</Text>
         </Pressable>
       </View>
+
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.titleBlock}>
-          <View style={styles.pillRow}>
-            <View style={styles.formatPill}>
-              <Text style={styles.formatPillText}>
-                {isScramble ? 'SCRAMBLE' : 'STROKE'}
-              </Text>
-            </View>
-            {currentRound.course.holes.length >= 18 && (
-              <Pressable
-                style={[
-                  styles.rangePill,
-                  rangeMenuOpen && styles.rangePillActive,
-                ]}
-                onPress={() => setRangeMenuOpen(true)}
-                hitSlop={4}>
-                <Text
-                  style={[
-                    styles.rangePillText,
-                    rangeMenuOpen && styles.rangePillTextActive,
-                  ]}>
-                  {rangeLabel(currentRound.holeRange)}
-                </Text>
-                <Text
-                  style={[
-                    styles.rangePillChev,
-                    rangeMenuOpen && styles.rangePillChevActive,
-                  ]}>
-                  {rangeMenuOpen ? '▴' : '▾'}
-                </Text>
-              </Pressable>
-            )}
-          </View>
-          <Text style={styles.title} numberOfLines={1}>
-            {currentRound.course.name}
-          </Text>
-        </View>
-
-        <HoleNavBar
-          holeNumber={currentHole.number}
-          par={currentHole.par}
-          yardage={headerYardage}
-          maxHole={maxHole}
-          onChange={setCurrentHole}
-        />
-
-        <View style={styles.entryCard}>
-          {scorers.map((s, i) => {
-            const score = currentRound.scores.find(
-              (sc) => sc.scorerId === s.id && sc.holeNumber === currentHole.number
-            );
-            const progress = playerProgress(currentRound, s.id);
-            const runningValue =
-              progress.thru === 0 ? 'E' : formatScore(progress.rel);
-            const tone: 'over' | 'under' | 'even' =
-              progress.thru === 0
-                ? 'even'
-                : progress.rel > 0
-                ? 'over'
-                : progress.rel < 0
-                ? 'under'
-                : 'even';
-            return (
-              <View key={s.id} style={i > 0 ? styles.entryRowSep : undefined}>
-                <ScoreEntryRow
-                  members={s.members}
-                  name={s.name}
-                  runningText={`${runningValue} · thru ${progress.thru}`}
-                  runningTone={tone}
-                  holeNumber={currentHole.number}
-                  par={currentHole.par}
-                  strokes={score ? score.strokes : null}
-                  onChange={(strokes) => {
-                    setCustomHoleScore(s.id, currentHole.number, strokes);
-                    if (isSingleScorer && nextInRangeHoleNumber !== null) {
-                      setCurrentHole(nextInRangeHoleNumber);
-                    }
-                  }}
-                />
-              </View>
-            );
-          })}
-        </View>
-
-        <Text style={styles.gridHint}>Tap any hole to jump</Text>
-        <ReadOnlyScorecard
-          round={currentRound}
+        <RoundDetailView
+          round={round}
+          isEditing
           currentHoleNumber={currentHole.number}
-          onHolePress={setCurrentHole}
-          onEditTee={setTeeEditTarget}
-          onPressParticipant={(userId) =>
-            router.push(`/(tabs)/(score)/profile/${userId}` as never)
-          }
+          onChangeCurrentHole={(n) => void setCurrentHole(n)}
+          onChangeScore={handleChangeScore}
+          onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
+          profileRoutePrefix="/(tabs)/(score)/profile"
+          footerActions={abandonButton}
         />
-
-        <Pressable
-          style={styles.abandonBtn}
-          onPress={() => setAbandonConfirmVisible(true)}>
-          <Text style={styles.abandonBtnText}>Abandon round</Text>
-        </Pressable>
       </ScrollView>
 
       <ConfirmAbandonSheet
@@ -373,8 +230,7 @@ export default function ScoringScreen() {
           setAbandonConfirmVisible(false);
           // Same pattern as handleFinish: trigger the round deletion
           // and let the defensive bounce effect handle navigation
-          // once `currentRound` becomes null. Single nav site → no
-          // POP_TO_TOP race.
+          // once `currentRound` becomes null.
           setTimeout(() => {
             void abandonCurrentRound();
           }, 0);
@@ -383,11 +239,11 @@ export default function ScoringScreen() {
 
       <RangeDropdown
         visible={rangeMenuOpen}
-        current={currentRound.holeRange}
+        current={round.holeRange}
         onCancel={() => setRangeMenuOpen(false)}
         onPick={(next) => {
           setRangeMenuOpen(false);
-          setHoleRange(next);
+          void setHoleRange(next);
         }}
       />
 
@@ -395,23 +251,29 @@ export default function ScoringScreen() {
         visible={teeEditTarget != null}
         scorerName={(() => {
           if (!teeEditTarget) return '';
-          const s = scorers.find((x) => x.id === teeEditTarget);
-          return s?.name ?? '';
+          if (isScramble) {
+            const team = round.teams?.find((t) => t.id === teeEditTarget);
+            return team?.name ?? '';
+          }
+          // Stroke: scorerId IS the participantKey; the team-avatar
+          // cluster carries the name, but for the picker title we
+          // just look up the first member's resolver name. Keeping
+          // simple — TeePickerSheet's scorerName is informational.
+          return '';
         })()}
-        tees={currentRound.course.tees ?? []}
+        tees={round.course.tees ?? []}
         selectedTeeId={(() => {
           if (!teeEditTarget) return undefined;
           if (isScramble) {
-            // Team id → look up any member's teeId (they all share).
-            const team = currentRound.teams?.find((t) => t.id === teeEditTarget);
+            const team = round.teams?.find((t) => t.id === teeEditTarget);
             const firstMember = team?.playerIds[0];
             if (!firstMember) return undefined;
-            const p = currentRound.participants.find(
+            const p = round.participants.find(
               (q) => q.participantKey === firstMember
             );
             return p?.teeId;
           }
-          const p = currentRound.participants.find(
+          const p = round.participants.find(
             (q) => q.participantKey === teeEditTarget
           );
           return p?.teeId;
@@ -426,16 +288,14 @@ export default function ScoringScreen() {
               // setParticipantTee would silently drop earlier
               // updates because each call uses the same render-time
               // participants snapshot).
-              const team = currentRound.teams?.find(
-                (t) => t.id === teeEditTarget
-              );
+              const team = round.teams?.find((t) => t.id === teeEditTarget);
               const updates = (team?.playerIds ?? []).map((pid) => ({
                 participantKey: pid,
                 teeId,
               }));
               void setParticipantTees(updates);
             } else {
-              setParticipantTee(teeEditTarget, teeId);
+              void setParticipantTee(teeEditTarget, teeId);
             }
           }
           setTeeEditTarget(null);
@@ -464,6 +324,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingTop: 10,
       paddingBottom: 4,
     },
+    topBarLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
     topBarLabel: {
       fontSize: 11,
       fontWeight: '800',
@@ -481,36 +346,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '800',
       fontSize: 12,
       letterSpacing: 0.4,
-    },
-    content: {
-      padding: 14,
-      paddingBottom: 32,
-    },
-    titleBlock: {
-      marginBottom: 12,
-    },
-    title: {
-      fontSize: 22,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
-    pillRow: {
-      flexDirection: 'row',
-      gap: 6,
-      alignItems: 'center',
-      marginBottom: 4,
-    },
-    formatPill: {
-      backgroundColor: colors.chipBg,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-    },
-    formatPillText: {
-      fontSize: 9.5,
-      fontWeight: '800',
-      letterSpacing: 0.6,
-      color: colors.primaryDark,
     },
     rangePill: {
       flexDirection: 'row',
@@ -537,30 +372,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '800',
     },
     rangePillChevActive: { color: '#fff' },
-    entryCard: {
-      backgroundColor: colors.cardBg,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
-      padding: 10,
-      marginBottom: 12,
-    },
-    entryRowSep: {
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.border,
-      marginTop: 3,
-      paddingTop: 3,
-    },
-    gridHint: {
-      fontSize: 10,
-      fontWeight: '700',
-      letterSpacing: 0.5,
-      color: colors.textMuted,
-      marginBottom: 6,
-      marginLeft: 4,
+    content: {
+      padding: 14,
+      paddingBottom: 40,
     },
     abandonBtn: {
-      marginTop: 18,
       borderWidth: 1,
       borderColor: '#f5cccc',
       borderRadius: 11,

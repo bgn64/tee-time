@@ -40,7 +40,6 @@ import {
   View
 } from 'react-native';
 
-import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
   countActiveFilters,
   DEFAULT_ROUNDS_FILTERS,
@@ -50,12 +49,10 @@ import {
   type RoundsRangeFilter
 } from '@/components/rounds/RoundsFilterSheet';
 import { SortDropdown, type SortOption } from '@/components/rounds/SortDropdown';
+import { RoundListCard } from '@/components/round/RoundListCard';
 import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import {
-  formatDay,
-  formatScore,
-  holeRangeLabel,
   monthKey,
   scoreForRoundsList
 } from '@/library/golf/scoring';
@@ -339,13 +336,9 @@ export default function RoundsListScreen() {
             <View key={group.key ?? `flat-${gi}`}>
               {group.key ? <Text style={styles.monthLabel}>{group.key}</Text> : null}
               {group.rounds.map((round) => (
-                <RoundCard
+                <RoundListCard
                   key={round.id}
                   round={round}
-                  resolver={resolver}
-                  myUserId={account.userId}
-                  styles={styles}
-                  colors={colors}
                   onPress={() =>
                     router.push(`/(tabs)/(rounds)/${round.id}` as never)
                   }
@@ -374,78 +367,6 @@ export default function RoundsListScreen() {
         }}
       />
     </View>
-  );
-}
-
-type RoundCardProps = {
-  round: Round;
-  resolver: ReturnType<typeof useParticipantResolver>;
-  myUserId: string;
-  styles: ReturnType<typeof makeStyles>;
-  colors: ReturnType<typeof useTheme>['colors'];
-  onPress: () => void;
-};
-
-const MAX_AVATARS = 4;
-
-function RoundCard({ round, resolver, myUserId, styles, colors, onPress }: RoundCardProps) {
-  const date = getRoundEndDate(round);
-
-  const members: AvatarMember[] = round.playerIds
-    .map((pid) => {
-      const r = resolver.get(pid);
-      return {
-        id: pid,
-        name: r?.displayName || 'Player',
-        color: r?.avatarColor || colors.primary
-      };
-    });
-  const visible = members.slice(0, MAX_AVATARS);
-  const hiddenCount = Math.max(0, members.length - MAX_AVATARS);
-
-  const totalRel = scoreForRoundsList(round, myUserId);
-
-  return (
-    <Pressable
-      style={[styles.card, { borderLeftColor: colors.primary }]}
-      onPress={onPress}>
-      <View style={styles.cardTop}>
-        <Text style={styles.courseName} numberOfLines={1}>
-          {round.course.name}
-        </Text>
-        <Text style={styles.date}>{formatDay(date)}</Text>
-      </View>
-      <View style={styles.cardBottom}>
-        <View style={styles.avatars}>
-          <TeamAvatarCluster members={visible} size="sm" ringColor={colors.cardBg} />
-          {hiddenCount > 0 ? (
-            <View style={styles.overflowChip}>
-              <Text style={styles.overflowChipText}>{`+${hiddenCount}`}</Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={styles.metaRight}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>
-              {round.scoringRule === 'scramble' ? 'SCRAMBLE' : 'STROKE'}
-            </Text>
-          </View>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>
-              {holeRangeLabel(round.course.holes, round.holeRange).toUpperCase()}
-            </Text>
-          </View>
-          <Text
-            style={[
-              styles.score,
-              totalRel > 0 && styles.scoreOver,
-              totalRel < 0 && styles.scoreUnder
-            ]}>
-            {formatScore(totalRel)}
-          </Text>
-        </View>
-      </View>
-    </Pressable>
   );
 }
 

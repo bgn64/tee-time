@@ -6,6 +6,7 @@ export const PROFILES_TABLE = 'profiles';
 export const FRIENDSHIPS_TABLE = 'friendships';
 export const FRIEND_REQUESTS_TABLE = 'friend_requests';
 export const CUSTOM_PLAYERS_TABLE = 'custom_players';
+export const COMMENTS_TABLE = 'comments';
 
 // JSON-shaped columns (course_snapshot, participants, player_ids,
 // teams) are declared as `column.text` here because PowerSync's local
@@ -103,13 +104,31 @@ const custom_players = new Table(
   { indexes: { by_owner: ['owner_user_id'] } }
 );
 
+// Round comments — flat thread keyed to a scorecard. Anyone with
+// scorecard visibility (owner or friend-of-owner) can read and
+// write per the RLS policies in migration 007. Soft-deleted via
+// `deleted_at`; the row stays in sync so other viewers don't see
+// stale local copies, but the UI filters `deleted_at IS NOT NULL`.
+const comments = new Table(
+  {
+    round_id: column.text,
+    author_user_id: column.text,
+    body: column.text,
+    created_at: column.text,
+    updated_at: column.text,
+    deleted_at: column.text
+  },
+  { indexes: { by_round: ['round_id'] } }
+);
+
 export const AppSchema = new Schema({
   scorecards,
   scorecard_scores,
   profiles,
   friendships,
   friend_requests,
-  custom_players
+  custom_players,
+  comments
 });
 
 export type Database = (typeof AppSchema)['types'];
@@ -119,3 +138,4 @@ export type ProfileRecord = Database['profiles'];
 export type FriendshipRecord = Database['friendships'];
 export type FriendRequestRecord = Database['friend_requests'];
 export type CustomPlayerRecord = Database['custom_players'];
+export type CommentRecord = Database['comments'];
