@@ -186,7 +186,7 @@ export default function ScoringScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: round.course.name,
+          title: 'Round',
           headerBackVisible: false,
           headerLeft: () => (
             <Pressable
