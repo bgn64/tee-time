@@ -186,7 +186,8 @@ export default function ScoringScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Round',
+          title: round.course.name,
+          headerBackVisible: false,
           headerLeft: () => (
             <Pressable
               onPress={() => router.dismissTo('/(tabs)/(score)' as never)}
