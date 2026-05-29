@@ -1,6 +1,6 @@
 /**
- * Edit a completed round — `(tabs)/(rounds)/[id]/edit`. State ③ of
- * the four-state round-detail model.
+ * Edit a completed round — `(tabs)/(score)/previous/[id]/edit`.
+ * State ③ of the four-state round-detail model.
  *
  * Same composition as the live-scoring screen (state ②): pinned
  * top bar (here: "EDITING" label + "Done"), then
@@ -147,7 +147,7 @@ export default function EditRoundScreen() {
           </Text>
           <Pressable
             style={styles.backCta}
-            onPress={() => router.replace('/(tabs)/(rounds)' as never)}>
+            onPress={() => router.replace('/(tabs)/(score)/previous' as never)}>
             <Text style={styles.backCtaText}>Back to Rounds</Text>
           </Pressable>
         </View>
@@ -208,7 +208,7 @@ export default function EditRoundScreen() {
             onChangeCurrentHole={setCurrentHoleNumber}
             onChangeScore={handleChangeScore}
             onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
-            profileRoutePrefix="/(tabs)/(rounds)/profile"
+            profileRoutePrefix="/(tabs)/(score)/profile"
           />
         </ScrollView>
 

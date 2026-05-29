@@ -60,20 +60,6 @@ export default function TabLayout() {
             <Tabs.Screen
               name="(score)"
               options={{
-                title: 'Score',
-                headerShown: false,
-                tabBarIcon: ({ color, focused }) => (
-                  <Ionicons
-                    name={focused ? 'pencil-sharp' : 'pencil-outline'}
-                    color={color}
-                    size={24}
-                  />
-                )
-              }}
-            />
-            <Tabs.Screen
-              name="(rounds)"
-              options={{
                 title: 'Rounds',
                 headerShown: false,
                 tabBarIcon: ({ color, focused }) => (

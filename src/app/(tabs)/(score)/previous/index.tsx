@@ -1,11 +1,13 @@
 /**
- * Rounds tab list — the user's completed rounds.
+ * Previous rounds list — the user's completed rounds (absorbed from
+ * the old standalone Rounds tab; now reachable via the Rounds-tab
+ * hub's "Previous rounds" card).
  *
  * Owner-scoped via `useCompletedRounds` (filters by `owner_user_id`)
  * so a friend's scorecard — which now syncs to local SQLite via the
  * `friend_scorecards` stream for the feed — never shows up here.
- * The Rounds tab is "rounds I scored." Friends' rounds live on the
- * Home feed instead.
+ * This list is "rounds I scored." Friends' rounds live on the Home
+ * feed instead.
  *
  * Toolbar:
  *   - Search bar (course name OR any participant's resolved display
@@ -321,7 +323,7 @@ export default function RoundsListScreen() {
             </Text>
             <Pressable
               style={styles.cta}
-              onPress={() => router.push('/(tabs)/(score)' as never)}>
+              onPress={() => router.push('/(tabs)/(score)/new' as never)}>
               <Text style={styles.ctaText}>Score a round</Text>
             </Pressable>
           </View>
@@ -340,7 +342,7 @@ export default function RoundsListScreen() {
                   key={round.id}
                   round={round}
                   onPress={() =>
-                    router.push(`/(tabs)/(rounds)/${round.id}` as never)
+                    router.push(`/(tabs)/(score)/previous/${round.id}` as never)
                   }
                 />
               ))}

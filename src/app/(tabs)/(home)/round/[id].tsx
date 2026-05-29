@@ -3,8 +3,8 @@
  *
  * The home-tab destination when a feed card is tapped. Renders the
  * shared `<RoundDetailView />` so the visual identity matches the
- * rounds-tab `/(rounds)/[id]` view exactly — only the back stack
- * differs (this route stays inside the home tab).
+ * Rounds-tab `(score)/previous/[id]` view exactly — only the back
+ * stack differs (this route stays inside the home tab).
  *
  * Query is intentionally NOT scoped to `owner_user_id = me`: the
  * home tab shows friends' rounds too. The PowerSync streams
@@ -12,8 +12,8 @@
  * counterparts) only sync rows the user is allowed to see, so any
  * id we receive via tap is something the local cache can render.
  *
- * Empty state mirrors the rounds-tab pattern for stale links and
- * mid-navigation deletes / unfriends.
+ * Empty state mirrors the Previous-rounds detail pattern for stale
+ * links and mid-navigation deletes / unfriends.
  */
 
 import React from 'react';

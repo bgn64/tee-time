@@ -1,5 +1,5 @@
 /**
- * Round detail screen — `(tabs)/(rounds)/[id]`.
+ * Round detail screen — `(tabs)/(score)/previous/[id]`.
  *
  * Read-only view of one of the user's completed scorecards, plus a
  * Delete button. The list is owner-scoped, so any id reachable from
@@ -10,7 +10,7 @@
  *
  * Renders the shared `<RoundDetailView />` so the visual identity
  * matches `(home)/round/[id]` — only the Delete button is
- * route-specific (rounds-tab owner-of-the-round flow).
+ * route-specific (owner-of-the-round flow).
  */
 
 import React from 'react';
@@ -111,7 +111,7 @@ export default function RoundDetailScreen() {
         // replace, not back — avoids stale-detail flash if the local
         // query takes a tick to re-emit, and avoids a "back to a
         // deleted round" entry in the history.
-        router.replace('/(tabs)/(rounds)' as never);
+        router.replace('/(tabs)/(score)/previous' as never);
       } catch (e) {
         setIsDeleting(false);
         console.warn('[RoundDetail] delete failed', e);
@@ -166,7 +166,7 @@ export default function RoundDetailScreen() {
           </Text>
           <Pressable
             style={styles.backCta}
-            onPress={() => router.replace('/(tabs)/(rounds)' as never)}>
+            onPress={() => router.replace('/(tabs)/(score)/previous' as never)}>
             <Text style={styles.backCtaText}>Back to Rounds</Text>
           </Pressable>
         </View>
@@ -186,16 +186,15 @@ export default function RoundDetailScreen() {
   );
 
   // Owner-only Edit button. Pushes into the nested `[id]/edit`
-  // route under the rounds-tab stack so back-nav returns here.
-  // The query above is owner-scoped already (so reaching this
-  // branch implies the user is the owner), but the explicit
-  // account check guards against future refactors.
+  // route so back-nav returns here. The query above is owner-scoped
+  // already (so reaching this branch implies the user is the owner),
+  // but the explicit account check guards against future refactors.
   const editButton =
     account.userId === round.ownerUserId ? (
       <View style={styles.topRow}>
         <Pressable
           style={styles.editBtn}
-          onPress={() => router.push(`/(tabs)/(rounds)/${round.id}/edit` as never)}
+          onPress={() => router.push(`/(tabs)/(score)/previous/${round.id}/edit` as never)}
           accessibilityLabel="Edit this round">
           <Text style={styles.editBtnText}>Edit</Text>
         </Pressable>
@@ -210,7 +209,7 @@ export default function RoundDetailScreen() {
         contentContainerStyle={styles.content}>
         <RoundDetailView
           round={round}
-          profileRoutePrefix="/(tabs)/(rounds)/profile"
+          profileRoutePrefix="/(tabs)/(score)/profile"
           topActions={editButton}
           footerActions={deleteButton}
         />

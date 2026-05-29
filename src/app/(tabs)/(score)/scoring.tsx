@@ -1,5 +1,6 @@
 /**
- * Live scoring screen — root of the Score tab once a round is active.
+ * Live scoring screen — the Rounds tab's scoring surface, reached
+ * from the hub's "Continue" action whenever a round is in flight.
  *
  * State ② of the four-state round-detail model (in-progress +
  * editing). Composes:

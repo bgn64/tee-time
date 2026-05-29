@@ -4,10 +4,10 @@
  * Owns:
  *   index            — the friend-rounds feed.
  *   round/[id]       — round detail (tapped through from a feed card).
- *                      Mirrors the rounds-tab detail; both routes
- *                      render the shared `<RoundDetailView />`. Lives
- *                      in this stack so back navigation returns to
- *                      the feed.
+ *                      Mirrors the Previous-rounds detail in the
+ *                      Rounds tab; both routes render the shared
+ *                      `<RoundDetailView />`. Lives in this stack so
+ *                      back navigation returns to the feed.
  *   profile/[userId] — drill-ins from any participant tap on a feed
  *                      card. Mirrors (you) / (search) — each tab that
  *                      can reach a profile owns its own copy of the

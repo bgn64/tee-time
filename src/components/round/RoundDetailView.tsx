@@ -2,10 +2,10 @@
  * RoundDetailView — full detail render for a single round, shared
  * by every detail-view state in the app:
  *
- *   ① Completed + viewing  (feed / rounds tab read-only)
+ *   ① Completed + viewing  (feed / Previous-rounds read-only)
  *   ② In-progress + editing (scoring tab — wires `isEditing=true`
  *      + handlers + topActions + footerActions)
- *   ③ Completed + editing  (future Rounds-tab Edit route)
+ *   ③ Completed + editing  (Previous-rounds Edit route)
  *   ④ In-progress + viewing (feed live round)
  *
  * The component is the same in all four; what differs is the
