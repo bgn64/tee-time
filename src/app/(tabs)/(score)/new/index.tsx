@@ -11,16 +11,14 @@
  * straight to `/scoring` so they can't deep-link to the picker and
  * start a second round.
  *
- * Header: a manual back affordance returns to the hub. Matches the
- * pattern used by `players.tsx` further down the flow.
+ * Native stack header (configured in `(score)/_layout.tsx`) supplies
+ * the title and "< Rounds" back affordance.
  */
 
-import Ionicons from '@expo/vector-icons/Ionicons';
 import { Redirect, router } from 'expo-router';
 import { useMemo } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -58,12 +56,6 @@ export default function CourseSelectionScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} hitSlop={8} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color={colors.textTitle} />
-          <Text style={styles.backText}>Rounds</Text>
-        </Pressable>
-      </View>
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.greeting}>{getGreeting()}</Text>
         <Text style={styles.title}>Where are you teeing it up?</Text>
@@ -99,25 +91,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     content: {
       padding: 14,
-      paddingTop: 8,
+      paddingTop: 18,
       paddingBottom: 32,
-    },
-    headerRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingTop: 14,
-      paddingBottom: 4,
-    },
-    backBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 2,
-    },
-    backText: {
-      fontSize: 15,
-      fontWeight: '600',
-      color: colors.textTitle,
     },
     greeting: {
       fontSize: 13,

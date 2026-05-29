@@ -19,7 +19,7 @@
  * the same shape regardless of where the user toggled last.
  */
 
-import { Redirect, router, useLocalSearchParams } from 'expo-router';
+import { Redirect, useLocalSearchParams } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -29,7 +29,6 @@ import {
   Text,
   View,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 
 import { ScrambleBody } from '@/components/scoring/ScrambleBody';
 import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
@@ -224,16 +223,6 @@ export default function FormatScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Pressable
-          onPress={() => router.back()}
-          hitSlop={8}
-          style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color={colors.textTitle} />
-          <Text style={styles.backText}>Players</Text>
-        </Pressable>
-      </View>
-
       <ScrollView contentContainerStyle={styles.content}>
         <Text style={styles.greeting} numberOfLines={1}>
           {course.name} ·{' '}
@@ -401,24 +390,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     errorText: {
       fontSize: 13,
       textAlign: 'center',
-    },
-    headerRow: {
-      paddingHorizontal: 10,
-      paddingTop: 8,
-      paddingBottom: 4,
-    },
-    backBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 2,
-      alignSelf: 'flex-start',
-      paddingVertical: 6,
-      paddingRight: 8,
-    },
-    backText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.textTitle,
     },
     content: {
       padding: 14,

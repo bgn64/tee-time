@@ -43,36 +43,21 @@ export default function ScoreLayout() {
   return (
     <Stack
       screenOptions={{
-        headerShown: false,
+        headerShown: true,
         headerStyle: { backgroundColor: colors.tabBar },
         headerShadowVisible: false,
         headerTintColor: colors.textTitle,
         contentStyle: { backgroundColor: colors.background }
       }}>
-      <Stack.Screen
-        name="index"
-        options={{ headerShown: true, title: 'Rounds' }}
-      />
-      <Stack.Screen name="new/index" />
-      <Stack.Screen name="players" />
-      <Stack.Screen name="format" />
+      <Stack.Screen name="index" options={{ title: 'Rounds' }} />
+      <Stack.Screen name="new/index" options={{ title: 'New round' }} />
+      <Stack.Screen name="players" options={{ title: 'Players' }} />
+      <Stack.Screen name="format" options={{ title: 'Format' }} />
       <Stack.Screen name="scoring" options={{ gestureEnabled: false }} />
-      <Stack.Screen
-        name="previous/index"
-        options={{ headerShown: true, title: 'Previous rounds' }}
-      />
-      <Stack.Screen
-        name="previous/[id]"
-        options={{ headerShown: true, title: 'Round' }}
-      />
-      <Stack.Screen
-        name="previous/[id]/edit"
-        options={{ headerShown: true, title: 'Edit Round' }}
-      />
-      <Stack.Screen
-        name="profile/[userId]"
-        options={{ headerShown: true, title: 'Profile' }}
-      />
+      <Stack.Screen name="previous/index" options={{ title: 'Previous rounds' }} />
+      <Stack.Screen name="previous/[id]" options={{ title: 'Round' }} />
+      <Stack.Screen name="previous/[id]/edit" options={{ title: 'Edit Round' }} />
+      <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
     </Stack>
   );
 }

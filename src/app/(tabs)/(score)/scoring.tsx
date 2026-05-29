@@ -28,7 +28,7 @@
  */
 
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router, useFocusEffect } from 'expo-router';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -184,45 +184,50 @@ export default function ScoringScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.topBar}>
-        <View style={styles.topBarLeft}>
-          <Pressable
-            onPress={() => router.dismissTo('/(tabs)/(score)' as never)}
-            hitSlop={8}
-            style={styles.backBtn}
-            accessibilityLabel="Back to Rounds hub">
-            <Ionicons name="chevron-back" size={22} color={colors.textTitle} />
-          </Pressable>
-          <Text style={styles.topBarLabel}>SCORE</Text>
-          {round.course.holes.length >= 18 ? (
+      <Stack.Screen
+        options={{
+          title: 'Round',
+          headerLeft: () => (
             <Pressable
-              style={[
-                styles.rangePill,
-                rangeMenuOpen && styles.rangePillActive,
-              ]}
-              onPress={() => setRangeMenuOpen(true)}
-              hitSlop={4}>
-              <Text
-                style={[
-                  styles.rangePillText,
-                  rangeMenuOpen && styles.rangePillTextActive,
-                ]}>
-                {rangeLabel(round.holeRange)}
-              </Text>
-              <Text
-                style={[
-                  styles.rangePillChev,
-                  rangeMenuOpen && styles.rangePillChevActive,
-                ]}>
-                {rangeMenuOpen ? '▴' : '▾'}
-              </Text>
+              onPress={() => router.dismissTo('/(tabs)/(score)' as never)}
+              hitSlop={8}
+              style={styles.headerBackBtn}
+              accessibilityLabel="Back to Rounds">
+              <Ionicons name="chevron-back" size={26} color={colors.textTitle} />
+              <Text style={styles.headerBackText}>Rounds</Text>
             </Pressable>
-          ) : null}
+          ),
+          headerRight: () => (
+            <Pressable onPress={() => handleFinish()} style={styles.finishBtn}>
+              <Text style={styles.finishBtnText}>Finish</Text>
+            </Pressable>
+          ),
+        }}
+      />
+
+      {round.course.holes.length >= 18 ? (
+        <View style={styles.subToolbar}>
+          <Pressable
+            style={[styles.rangePill, rangeMenuOpen && styles.rangePillActive]}
+            onPress={() => setRangeMenuOpen(true)}
+            hitSlop={4}>
+            <Text
+              style={[
+                styles.rangePillText,
+                rangeMenuOpen && styles.rangePillTextActive,
+              ]}>
+              {rangeLabel(round.holeRange)}
+            </Text>
+            <Text
+              style={[
+                styles.rangePillChev,
+                rangeMenuOpen && styles.rangePillChevActive,
+              ]}>
+              {rangeMenuOpen ? '▴' : '▾'}
+            </Text>
+          </Pressable>
         </View>
-        <Pressable onPress={() => handleFinish()} style={styles.finishBtn}>
-          <Text style={styles.finishBtnText}>Finish</Text>
-        </Pressable>
-      </View>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.content}>
         <RoundDetailView
@@ -330,34 +335,31 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    topBar: {
+    headerBackBtn: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
+      gap: 0,
+      paddingRight: 4,
+      marginLeft: -8,
+    },
+    headerBackText: {
+      fontSize: 17,
+      color: colors.textTitle,
+      fontWeight: '500',
+    },
+    subToolbar: {
+      flexDirection: 'row',
+      alignItems: 'center',
       paddingHorizontal: 14,
-      paddingTop: 10,
+      paddingTop: 8,
       paddingBottom: 4,
-    },
-    topBarLeft: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    backBtn: {
-      marginLeft: -4,
-      paddingRight: 2,
-    },
-    topBarLabel: {
-      fontSize: 11,
-      fontWeight: '800',
-      letterSpacing: 0.8,
-      color: colors.textMuted,
     },
     finishBtn: {
       backgroundColor: colors.primary,
       paddingHorizontal: 14,
       paddingVertical: 7,
       borderRadius: 999,
+      marginRight: 4,
     },
     finishBtnText: {
       color: '#fff',

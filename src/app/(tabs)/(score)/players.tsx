@@ -287,13 +287,6 @@ export default function PlayersScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.headerRow}>
-        <Pressable onPress={() => router.back()} hitSlop={8} style={styles.backBtn}>
-          <Ionicons name="chevron-back" size={22} color={colors.textTitle} />
-          <Text style={styles.backText}>Course</Text>
-        </Pressable>
-      </View>
-
       <View style={styles.fixedTop}>
         {course && (
           <Text style={styles.greeting} numberOfLines={1}>
@@ -721,25 +714,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    headerRow: {
-      paddingHorizontal: 10,
-      paddingTop: 8,
-      paddingBottom: 4,
-    },
-    backBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 2,
-      alignSelf: 'flex-start',
-      paddingVertical: 6,
-      paddingRight: 8,
-    },
-    backText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.textTitle,
-    },
-    fixedTop: { paddingHorizontal: 20, paddingTop: 4 },
+    fixedTop: { paddingHorizontal: 20, paddingTop: 12 },
     greeting: {
       fontSize: 12,
       color: colors.textMuted,
