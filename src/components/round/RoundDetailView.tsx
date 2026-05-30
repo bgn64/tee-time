@@ -15,8 +15,8 @@
  *
  * Composes:
  *   1. `topActions` slot (e.g. "Finish" / "Done" / "Edit" buttons).
- *   2. `<RoundCardHeader showScoreBlock={false} />` — the gradient
- *      identity band, score block intentionally hidden because the
+ *   2. `<RoundCardHeader showScoreBlock={false} />` — the neutral
+ *      identity header, score block intentionally hidden because the
  *      per-scorer rows below carry the same info per scorer.
  *   3. `<HoleNavBar />` — editing modes only.
  *   4. `<ScorerStack />` — per-scorer rows. `isEditing` toggles the
@@ -58,7 +58,7 @@ type Props = {
   /** Required when `isEditing` for the HoleNavBar arrows. */
   onChangeCurrentHole?: (n: number) => void;
 
-  /** Optional slot above the band (e.g. Finish / Done / Edit buttons). */
+  /** Optional slot above the header (e.g. Finish / Done / Edit buttons). */
   topActions?: ReactNode;
   /** Optional slot below comments (e.g. Delete / Abandon buttons). */
   footerActions?: ReactNode;
