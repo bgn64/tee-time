@@ -20,8 +20,10 @@ name: Deploy to production
 #       - PROJECT_ID                   Production Supabase project ref (e.g. bamdgmmhwcancdpppbzr)
 #       - POWERSYNC_PROD_INSTANCE_ID   Production PowerSync instance ID
 #       - POWERSYNC_PROD_PROJECT_ID    Production PowerSync project (slot) ID
-#       - POWERSYNC_PROD_ORG_ID        (optional) PowerSync org ID — only needed
-#                                       if your PAT spans multiple orgs
+#       - POWERSYNC_PROD_ORG_ID        PowerSync org ID (required for the
+#                                       generated cli.yaml). Same value as
+#                                       the staging org if you're using a
+#                                       single PowerSync account.
 #
 #   The `production` environment also gates this workflow behind a manual
 #   approval — a reviewer clicks Approve in the Actions UI before any
@@ -115,12 +117,14 @@ jobs:
           type: cloud
           instance_id: ${{ vars.POWERSYNC_PROD_INSTANCE_ID }}
           project_id: ${{ vars.POWERSYNC_PROD_PROJECT_ID }}
+          org_id: ${{ vars.POWERSYNC_PROD_ORG_ID }}
           EOF
-          if [ -n "${{ vars.POWERSYNC_PROD_ORG_ID }}" ]; then
-            echo "org_id: ${{ vars.POWERSYNC_PROD_ORG_ID }}" >> .powersync-prod/cli.yaml
-          fi
           echo "--- generated cli.yaml ---"
           cat .powersync-prod/cli.yaml
+          if ! grep -q '^org_id: .' .powersync-prod/cli.yaml; then
+            echo "::error::POWERSYNC_PROD_ORG_ID environment variable is missing. Add it under Settings → Environments → production → Variables."
+            exit 1
+          fi
 
       - name: Validate sync rules against prod instance
         env:
