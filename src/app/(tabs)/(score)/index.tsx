@@ -10,8 +10,9 @@
  * with welcome copy if the user has no completed rounds at all
  * (brand-new account).
  *
- * Continue card surfaces a live heartbeat banner + ±score chip +
- * course/thru subtitle when active, so the hub feels alive without
+ * Continue card surfaces the same live top strip + chip used by
+ * round list cards, plus ±score chip + course/thru subtitle when active,
+ * so the hub feels alive without
  * yanking the user straight into scoring — the user opted for an
  * explicit tap to enter scoring, not auto-routing.
  *
@@ -32,7 +33,8 @@ import {
   View,
 } from 'react-native';
 
-import { LiveRoundIndicatorV1 } from '@/components/round/LiveRoundIndicatorV1';
+import { LiveStatusChip } from '@/components/round/LiveStatusChip';
+import { LiveTopStrip } from '@/components/round/LiveTopStrip';
 import { useRound } from '@/library/golf/RoundContext';
 import {
   formatRelativeTime,
@@ -221,48 +223,79 @@ function PrimaryHubCard({
 }: PrimaryProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const isLive = liveRound != null;
   const row = (
     <>
-      <View style={[styles.iconSquare, styles.iconSquarePrimary]}>
-        <Ionicons name={iconName} size={20} color="#ffffff" />
+      <View
+        style={[
+          styles.iconSquare,
+          isLive ? styles.iconSquareLive : styles.iconSquarePrimary,
+        ]}>
+        <Ionicons
+          name={iconName}
+          size={20}
+          color={isLive ? colors.primaryDark : '#ffffff'}
+        />
       </View>
       <View style={styles.body}>
         <View style={styles.labelRow}>
-          <Text style={[styles.label, styles.labelOnPrimary]}>{label}</Text>
+          <Text style={[styles.label, !isLive && styles.labelOnPrimary]}>
+            {label}
+          </Text>
           {scoreText ? (
-            <View style={styles.scoreChip}>
-              <Text style={styles.scoreChipText}>{scoreText}</Text>
+            <View style={[styles.scoreChip, isLive && styles.scoreChipLive]}>
+              <Text
+                style={[
+                  styles.scoreChipText,
+                  isLive && styles.scoreChipTextLive,
+                ]}>
+                {scoreText}
+              </Text>
             </View>
           ) : null}
+          {isLive ? <LiveStatusChip /> : null}
         </View>
-        <Text style={[styles.sub, styles.subOnPrimary]} numberOfLines={1}>
+        <Text
+          style={[styles.sub, !isLive && styles.subOnPrimary]}
+          numberOfLines={1}>
           {sub}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={20} color="#ffffff" />
+      <Ionicons
+        name="chevron-forward"
+        size={20}
+        color={isLive ? colors.textMuted : '#ffffff'}
+      />
     </>
   );
 
+  if (isLive) {
+    return (
+      <Pressable
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={({ pressed }) => [
+          styles.liveHubCard,
+          pressed && styles.cardPressed,
+        ]}>
+        <LiveTopStrip />
+        <View style={styles.liveHubContent}>{row}</View>
+      </Pressable>
+    );
+  }
+
   return (
-    <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}>
       <LinearGradient
         colors={[colors.primary, colors.primaryDark]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[
-          styles.card,
-          styles.cardPrimary,
-          liveRound && styles.cardPrimaryLive,
-        ]}>
-        {liveRound ? <View style={styles.cardContentRow}>{row}</View> : row}
-        {liveRound ? (
-          <LiveRoundIndicatorV1
-            size="sm"
-            lastScoreAt={liveRound.lastScoreAt ?? liveRound.startedAt}
-            scorerName={liveRound.scores.length > 0 ? 'You' : undefined}
-            style={styles.hubLiveIndicator}
-          />
-        ) : null}
+        style={[styles.card, styles.cardPrimary]}>
+        {row}
       </LinearGradient>
     </Pressable>
   );
@@ -319,6 +352,16 @@ function DisabledHubCard({ iconName, label, sub }: HubCardBaseProps) {
   );
 }
 
+function withAlpha(hex: string, alpha: number): string {
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) return hex;
+
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
@@ -364,17 +407,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderWidth: 1,
       borderColor: colors.primary,
     },
-    cardPrimaryLive: {
-      flexDirection: 'column',
-      alignItems: 'stretch',
-      gap: 10,
-    },
-    cardContentRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 14,
-      width: '100%',
-    },
     cardNeutral: {
       backgroundColor: colors.cardBg,
       borderWidth: 1,
@@ -389,6 +421,21 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderColor: colors.border,
       borderStyle: 'dashed',
     },
+    liveHubCard: {
+      borderRadius: 14,
+      marginBottom: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBg,
+      overflow: 'hidden',
+    },
+    liveHubContent: {
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+    },
     iconSquare: {
       width: 44,
       height: 44,
@@ -402,6 +449,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     iconSquarePrimary: {
       backgroundColor: 'rgba(255,255,255,0.22)',
+    },
+    iconSquareLive: {
+      backgroundColor: colors.chipBg,
     },
     iconSquareDisabled: {
       backgroundColor: 'transparent',
@@ -440,19 +490,24 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     subOnPrimary: {
       color: 'rgba(255,255,255,0.85)',
     },
-    hubLiveIndicator: {
-      width: '100%',
-    },
     scoreChip: {
       paddingHorizontal: 6,
       paddingVertical: 1,
       borderRadius: 4,
       backgroundColor: 'rgba(255,255,255,0.22)',
     },
+    scoreChipLive: {
+      backgroundColor: withAlpha(colors.primary, 0.12),
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: withAlpha(colors.primary, 0.24),
+    },
     scoreChipText: {
       color: '#ffffff',
       fontSize: 12,
       fontWeight: '800',
+    },
+    scoreChipTextLive: {
+      color: colors.primaryDark,
     },
   });
 }

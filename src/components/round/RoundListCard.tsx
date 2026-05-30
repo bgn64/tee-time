@@ -3,16 +3,17 @@
  * home feed and the rounds tab). Same visual as the round-detail
  * view's "top portion" so the language is consistent across surfaces:
  *
- *   1. <RoundCardHeader showScoreBlock={false} /> — gradient band
+ *   1. <LiveTopStrip /> when in progress — a 6px live cue at the
+ *      very top of the clipped card shell.
+ *   2. <RoundCardHeader showScoreBlock={false} /> — neutral header
  *      with owner identity, course/location, and format pills
  *      where applicable. No big score block — the per-scorer rows
  *      below carry every scorer's score (matches the detail view).
- *   2. <LiveRoundIndicatorV1 /> when in progress — hero live banner.
  *   3. <ScorerStack isEditing={false} /> — per-scorer rows with
  *      identity + final / running score on line 1; tee pill on line
  *      2 when set (static, no buttons).
- *   4. Footer strip — comment count + last-comment relative time
- *      (or "be the first to comment") + tap-through chevron.
+ *   4. Direction A footer — primary details CTA plus secondary
+ *      comment / Like chips.
  *
  * The whole card is a Pressable; the caller wires `onPress` to push
  * into the appropriate tab's detail route so back-nav stays inside
@@ -24,15 +25,22 @@
  * list cards to convey per-scorer detail without a tap-through.
  */
 
-import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type GestureResponderEvent,
+} from 'react-native';
 
-import { LiveRoundIndicatorV1 } from './LiveRoundIndicatorV1';
+import { LiveStatusChip } from './LiveStatusChip';
+import { LiveTopStrip } from './LiveTopStrip';
 import { RoundCardHeader } from './RoundCardHeader';
 import { ScorerStack } from './ScorerStack';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import { formatRelativeTime } from '@/library/golf/scoring';
-import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Round } from '@/types/golf';
 
@@ -47,15 +55,18 @@ type Props = {
 export function RoundListCard({ round, onPress, accessibilityLabel }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const [isCtaHovered, setIsCtaHovered] = useState(false);
 
   const { count, lastAt } = useCommentSummary(round.id);
   const isInProgress = !round.completedAt;
-  const { profile: ownerProfile } = useProfile(round.ownerUserId ?? null);
-  const scorerName =
-    isInProgress && round.scores.length > 0
-      ? ownerProfile?.displayName ??
-        (ownerProfile?.handle ? `@${ownerProfile.handle}` : undefined)
-      : undefined;
+  const commentChipText = formatCommentChipText(count, lastAt);
+  const openFromChild = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+    onPress();
+  };
+  const handleLikePress = (event: GestureResponderEvent) => {
+    event.stopPropagation();
+  };
 
   return (
     <Pressable
@@ -65,40 +76,81 @@ export function RoundListCard({ round, onPress, accessibilityLabel }: Props) {
       accessibilityLabel={
         accessibilityLabel ?? `Open round at ${round.course.name}`
       }>
-      <RoundCardHeader round={round} showScoreBlock={false} />
+      {isInProgress ? <LiveTopStrip /> : null}
+      <RoundCardHeader
+        round={round}
+        showScoreBlock={false}
+        rightSlot={isInProgress ? <LiveStatusChip /> : undefined}
+      />
       <View style={styles.body}>
-        {isInProgress ? (
-          <LiveRoundIndicatorV1
-            size="lg"
-            lastScoreAt={round.lastScoreAt ?? round.startedAt}
-            scorerName={scorerName}
-            style={styles.liveIndicator}
-          />
-        ) : null}
         <ScorerStack round={round} isEditing={false} />
       </View>
       <View style={styles.foot}>
-        <View style={styles.footLeft}>
-          <Text style={styles.statCount}>
-            💬{' '}
-            {count > 0 ? (
-              <Text style={styles.statCountNum}>{count}</Text>
-            ) : (
-              '0'
-            )}
-          </Text>
-          {count > 0 && lastAt ? (
-            <Text style={styles.statHint}>
-              last comment {formatRelativeTime(lastAt)}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`View round details for ${round.course.name}`}
+          onPress={openFromChild}
+          onHoverIn={
+            Platform.OS === 'web' ? () => setIsCtaHovered(true) : undefined
+          }
+          onHoverOut={
+            Platform.OS === 'web' ? () => setIsCtaHovered(false) : undefined
+          }
+          style={({ pressed }) => [
+            styles.primaryCta,
+            isCtaHovered && styles.primaryCtaHovered,
+            pressed && styles.primaryCtaPressed,
+          ]}>
+          <Text style={styles.primaryCtaText}>View round details</Text>
+          <Text style={styles.primaryCtaChev}>›</Text>
+        </Pressable>
+        <View style={styles.chipRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={commentChipText}
+            onPress={openFromChild}
+            style={({ pressed }) => [
+              styles.secondaryChip,
+              styles.commentChip,
+              pressed && styles.secondaryChipPressed,
+            ]}>
+            <Text style={styles.commentChipText} numberOfLines={1}>
+              {commentChipText}
             </Text>
-          ) : (
-            <Text style={styles.statHint}>be the first to comment</Text>
-          )}
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Like (coming soon)"
+            onPress={handleLikePress}
+            style={({ pressed }) => [
+              styles.secondaryChip,
+              styles.likeChip,
+              pressed && styles.secondaryChipPressed,
+            ]}>
+            <Text style={styles.likeChipText}>♡ Like</Text>
+          </Pressable>
         </View>
-        <Text style={styles.chev}>›</Text>
       </View>
     </Pressable>
   );
+}
+
+function formatCommentChipText(count: number, lastAt?: string | null): string {
+  if (count <= 0) return '💬 Be the first to comment';
+
+  const label = count === 1 ? 'comment' : 'comments';
+  const age = lastAt ? ` · ${formatRelativeTime(lastAt)}` : '';
+  return `💬 ${count} ${label}${age}`;
+}
+
+function withAlpha(hex: string, alpha: number): string {
+  const normalized = hex.replace('#', '');
+  if (normalized.length !== 6) return hex;
+
+  const r = Number.parseInt(normalized.slice(0, 2), 16);
+  const g = Number.parseInt(normalized.slice(2, 4), 16);
+  const b = Number.parseInt(normalized.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
@@ -117,49 +169,86 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     body: {
       padding: 10,
       // ScorerStack already renders its own bordered card. The body
-      // padding here sits between the gradient band and the scorer
+      // padding here sits between the neutral header and the scorer
       // stack so the visual rhythm matches the detail view.
     },
-    liveIndicator: {
-      marginBottom: 10,
-    },
     foot: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 14,
-      paddingVertical: 9,
+      paddingHorizontal: 12,
+      paddingTop: 10,
+      paddingBottom: 12,
       backgroundColor: colors.cardBg,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.border,
     },
-    footLeft: {
+    primaryCta: {
+      minHeight: 44,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: 'transparent',
+      backgroundColor: colors.chipBg,
       flexDirection: 'row',
       alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 12,
       gap: 12,
+    },
+    primaryCtaHovered: {
+      backgroundColor: withAlpha(colors.primary, 0.12),
+      borderColor: withAlpha(colors.primary, 0.24),
+    },
+    primaryCtaPressed: {
+      backgroundColor: withAlpha(colors.primary, 0.16),
+      borderColor: withAlpha(colors.primary, 0.24),
+      transform: [{ scale: 0.992 }],
+    },
+    primaryCtaText: {
+      color: colors.textTitle,
+      fontSize: 14,
+      fontWeight: '900',
+      letterSpacing: 0.1,
+    },
+    primaryCtaChev: {
+      color: colors.textMuted,
+      fontSize: 21,
+      fontWeight: '900',
+      lineHeight: 22,
+    },
+    chipRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 9,
+    },
+    secondaryChip: {
+      minHeight: 34,
+      borderRadius: 999,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBg,
+      paddingHorizontal: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    secondaryChipPressed: {
+      opacity: 0.82,
+    },
+    commentChip: {
       flex: 1,
       minWidth: 0,
     },
-    statCount: {
-      fontSize: 12.5,
+    commentChipText: {
+      fontSize: 12,
       fontWeight: '700',
       color: colors.textMuted,
     },
-    statCountNum: {
+    likeChip: {
+      flexShrink: 0,
+    },
+    likeChipText: {
+      fontSize: 12,
+      fontWeight: '800',
       color: colors.textTitle,
-      fontWeight: '800',
-    },
-    statHint: {
-      fontSize: 11.5,
-      fontWeight: '600',
-      color: colors.textMuted,
-      flexShrink: 1,
-    },
-    chev: {
-      fontSize: 18,
-      color: colors.textMuted,
-      fontWeight: '800',
-      marginLeft: 8,
     },
   });
 }
