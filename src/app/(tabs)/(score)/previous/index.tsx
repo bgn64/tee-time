@@ -341,7 +341,7 @@ export default function RoundsListScreen() {
                 <RoundListCard
                   key={round.id}
                   round={round}
-                  onPress={() =>
+                  onOpen={() =>
                     router.push(`/(tabs)/(score)/previous/${round.id}` as never)
                   }
                 />
