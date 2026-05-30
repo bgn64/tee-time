@@ -269,6 +269,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       currentHoleNumber: currentHole,
       scores,
       startedAt: scorecardRow.started_at ?? new Date().toISOString(),
+      lastScoreAt: scorecardRow.updated_at ?? undefined,
       completedAt: scorecardRow.completed_at ?? undefined,
     };
   }, [scorecardRow, scoreRows, currentHole]);

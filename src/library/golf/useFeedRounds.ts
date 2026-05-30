@@ -157,18 +157,6 @@ export function useFeedRounds(): FeedRoundsResult {
     return out;
   }, [scorecardRows, scoresByScorecard]);
 
-  // Build a side map keyed by scorecard id so the sort callbacks
-  // can read scorecards.updated_at without re-projecting. The
-  // canonical "last activity" timestamp lives on the row directly
-  // because RoundContext bumps it on every score tap.
-  const updatedAtById = React.useMemo(() => {
-    const m = new Map<string, string>();
-    for (const row of scorecardRows) {
-      if (row.id && row.updated_at) m.set(row.id, row.updated_at);
-    }
-    return m;
-  }, [scorecardRows]);
-
   const liveRounds = React.useMemo(() => {
     // No `scores.length > 0` gate — a friend who's just started a
     // round (no scores entered yet) appears in the feed immediately
@@ -182,11 +170,11 @@ export function useFeedRounds(): FeedRoundsResult {
     return projected
       .filter((r) => !r.completedAt)
       .sort((a, b) => {
-        const at = new Date(updatedAtById.get(a.id) ?? a.startedAt).getTime();
-        const bt = new Date(updatedAtById.get(b.id) ?? b.startedAt).getTime();
+        const at = new Date(a.lastScoreAt ?? a.startedAt).getTime();
+        const bt = new Date(b.lastScoreAt ?? b.startedAt).getTime();
         return bt - at;
       });
-  }, [projected, updatedAtById]);
+  }, [projected]);
 
   const completedRounds = React.useMemo(() => {
     return projected

@@ -4,8 +4,8 @@
  * Reads from `useFeedRounds()` — a thin PowerSync projection over
  * local SQLite that filters scorecards through the local `friendships`
  * join (so unfriending hides cards immediately even before PowerSync
- * prunes the cached rows). Live rounds (in-flight, ≥1 score) pin to
- * the top with a pulsing IN PROGRESS pill; completed rounds follow.
+ * prunes the cached rows). Live rounds (in-flight) pin to the top
+ * with a heartbeat status banner; completed rounds follow.
  * Each section is sorted newest-first by its own recency timestamp
  * (`lastScoreAt` for live, `completedAt` for done).
  *

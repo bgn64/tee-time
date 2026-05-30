@@ -90,6 +90,7 @@ export function projectScorecardRow(
     currentHoleNumber: 1,
     scores: scoresForThisScorecard,
     startedAt: row.started_at ?? new Date().toISOString(),
+    lastScoreAt: row.updated_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
   };
 }

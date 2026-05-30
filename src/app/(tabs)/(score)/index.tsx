@@ -10,10 +10,10 @@
  * with welcome copy if the user has no completed rounds at all
  * (brand-new account).
  *
- * Continue card surfaces a LIVE pill + ±score chip + course/thru
- * subtitle when active, so the hub feels alive without yanking the
- * user straight into scoring — the user opted for an explicit tap to
- * enter scoring, not auto-routing.
+ * Continue card surfaces a live heartbeat banner + ±score chip +
+ * course/thru subtitle when active, so the hub feels alive without
+ * yanking the user straight into scoring — the user opted for an
+ * explicit tap to enter scoring, not auto-routing.
  *
  * Greeting: time-of-day greeting + name in the typical state; a
  * welcome message replaces it when the user has no rounds at all.
@@ -22,11 +22,9 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   ActivityIndicator,
-  Animated,
-  Easing,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -34,6 +32,7 @@ import {
   View,
 } from 'react-native';
 
+import { LiveRoundIndicatorV1 } from '@/components/round/LiveRoundIndicatorV1';
 import { useRound } from '@/library/golf/RoundContext';
 import {
   formatRelativeTime,
@@ -109,7 +108,7 @@ export default function RoundsHubScreen() {
       label="Continue"
       sub={continueSubtitle(currentRound!, account.userId)}
       onPress={() => router.push('/(tabs)/(score)/scoring' as never)}
-      live
+      liveRound={currentRound!}
       scoreText={continueScoreText(currentRound!, account.userId)}
     />
   ) : (
@@ -208,38 +207,62 @@ type HubCardBaseProps = {
 
 type PrimaryProps = HubCardBaseProps & {
   onPress: () => void;
-  live?: boolean;
+  liveRound?: Round;
   scoreText?: string;
 };
 
-function PrimaryHubCard({ iconName, label, sub, onPress, live, scoreText }: PrimaryProps) {
+function PrimaryHubCard({
+  iconName,
+  label,
+  sub,
+  onPress,
+  liveRound,
+  scoreText,
+}: PrimaryProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const row = (
+    <>
+      <View style={[styles.iconSquare, styles.iconSquarePrimary]}>
+        <Ionicons name={iconName} size={20} color="#ffffff" />
+      </View>
+      <View style={styles.body}>
+        <View style={styles.labelRow}>
+          <Text style={[styles.label, styles.labelOnPrimary]}>{label}</Text>
+          {scoreText ? (
+            <View style={styles.scoreChip}>
+              <Text style={styles.scoreChipText}>{scoreText}</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={[styles.sub, styles.subOnPrimary]} numberOfLines={1}>
+          {sub}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color="#ffffff" />
+    </>
+  );
+
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
       <LinearGradient
         colors={[colors.primary, colors.primaryDark]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[styles.card, styles.cardPrimary]}>
-        <View style={[styles.iconSquare, styles.iconSquarePrimary]}>
-          <Ionicons name={iconName} size={20} color="#ffffff" />
-        </View>
-        <View style={styles.body}>
-          <View style={styles.labelRow}>
-            <Text style={[styles.label, styles.labelOnPrimary]}>{label}</Text>
-            {live ? <LivePill /> : null}
-            {scoreText ? (
-              <View style={styles.scoreChip}>
-                <Text style={styles.scoreChipText}>{scoreText}</Text>
-              </View>
-            ) : null}
-          </View>
-          <Text style={[styles.sub, styles.subOnPrimary]} numberOfLines={1}>
-            {sub}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color="#ffffff" />
+        style={[
+          styles.card,
+          styles.cardPrimary,
+          liveRound && styles.cardPrimaryLive,
+        ]}>
+        {liveRound ? <View style={styles.cardContentRow}>{row}</View> : row}
+        {liveRound ? (
+          <LiveRoundIndicatorV1
+            size="sm"
+            lastScoreAt={liveRound.lastScoreAt ?? liveRound.startedAt}
+            scorerName={liveRound.scores.length > 0 ? 'You' : undefined}
+            style={styles.hubLiveIndicator}
+          />
+        ) : null}
       </LinearGradient>
     </Pressable>
   );
@@ -296,42 +319,6 @@ function DisabledHubCard({ iconName, label, sub }: HubCardBaseProps) {
   );
 }
 
-/** Pulsing-dot pill rendered next to the Continue card label when a
- * round is in progress. Same dot-with-opacity-loop pattern as the
- * feed card's `<InProgressPill />` but with a transparent-white
- * background to sit on the primary gradient. */
-function LivePill() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [opacity] = useState(() => new Animated.Value(1));
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 0.45,
-          duration: 700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity]);
-  return (
-    <View style={styles.livePill}>
-      <Animated.View style={[styles.livePillDot, { opacity }]} />
-      <Text style={styles.livePillText}>LIVE</Text>
-    </View>
-  );
-}
-
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
@@ -376,6 +363,17 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     cardPrimary: {
       borderWidth: 1,
       borderColor: colors.primary,
+    },
+    cardPrimaryLive: {
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      gap: 10,
+    },
+    cardContentRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+      width: '100%',
     },
     cardNeutral: {
       backgroundColor: colors.cardBg,
@@ -442,26 +440,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     subOnPrimary: {
       color: 'rgba(255,255,255,0.85)',
     },
-    livePill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: 'rgba(255,255,255,0.25)',
-      paddingHorizontal: 6,
-      paddingVertical: 2,
-      borderRadius: 4,
-    },
-    livePillDot: {
-      width: 5,
-      height: 5,
-      borderRadius: 2.5,
-      backgroundColor: '#ffffff',
-    },
-    livePillText: {
-      color: '#ffffff',
-      fontSize: 9,
-      fontWeight: '800',
-      letterSpacing: 0.5,
+    hubLiveIndicator: {
+      width: '100%',
     },
     scoreChip: {
       paddingHorizontal: 6,

@@ -2,7 +2,7 @@
  * RoundCardHeader — the gradient band shared between the lean feed
  * card and the round-detail view. Carries everything a viewer needs
  * to identify the round at a glance: course + location, format /
- * hole-range / live pills, owner avatar + handle + relative time,
+ * hole-range pills, owner avatar + handle + relative time,
  * and the owner's score block.
  *
  * Extracted from the original `FeedCardLarge` band so the feed
@@ -11,20 +11,20 @@
  * surfaces.
  *
  * Live cards (no `completedAt`):
- *   - Pulsing "● IN PROGRESS" pill on the pill row.
+ *   - The list card hosts the live heartbeat indicator above the
+ *     scorer stack; the header only keeps format + hole-range pills.
  *   - Score block shows the owner's running ±score with a "THRU N"
  *     subline.
- *   - The "X ago" label reflects the time **this device** last
- *     received an update for the round — honest staleness, never
- *     the scorer's wall-clock time.
+ *   - The "X ago" label reflects `round.lastScoreAt` when available,
+ *     falling back to `startedAt`.
  *
  * Completed cards: the relative-time label is the round's
  * `completedAt` (an immutable, meaningful moment).
  */
 
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useMemo, useState } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 import {
   formatRelativeTime,
@@ -113,25 +113,9 @@ export function RoundCardHeader({ round, showScoreBlock = true }: Props) {
 
   const { thruCount } = getScorerProgress(round, ownerScorerId);
 
-  // Device-local sync-arrival stamp: bump it whenever the round's
-  // identity (scores or completion state) changes on this device.
-  // Used for the live-card "X ago" label so the relative time
-  // honestly reflects when WE last heard about the round — never
-  // the scorer's clock time, which would imply data freshness we
-  // can't guarantee. Adjust-state-during-render pattern avoids the
-  // cascading re-render of a useEffect setter.
-  const identity = round.scores.length + '|' + (round.completedAt ?? '');
-  const [prevIdentity, setPrevIdentity] = useState(identity);
-  const [lastReceivedAt, setLastReceivedAt] = useState(() =>
-    new Date().toISOString()
-  );
-  if (prevIdentity !== identity) {
-    setPrevIdentity(identity);
-    setLastReceivedAt(new Date().toISOString());
-  }
-
+  const liveDate = round.lastScoreAt ?? round.startedAt;
   const dateLabel = formatRelativeTime(
-    isInProgress ? lastReceivedAt : (round.completedAt ?? round.startedAt)
+    isInProgress ? liveDate : (round.completedAt ?? round.startedAt)
   );
   const location = round.course.location;
 
@@ -163,7 +147,6 @@ export function RoundCardHeader({ round, showScoreBlock = true }: Props) {
         <View style={styles.bandPill}>
           <Text style={styles.bandPillText}>{holesLabel}</Text>
         </View>
-        {isInProgress ? <InProgressPill /> : null}
       </View>
       <View style={styles.bandBottomRow}>
         <Text style={styles.bandByLine} numberOfLines={1}>
@@ -181,45 +164,6 @@ export function RoundCardHeader({ round, showScoreBlock = true }: Props) {
         ) : null}
       </View>
     </LinearGradient>
-  );
-}
-
-/**
- * Small pulsing-dot pill rendered when a round is still in progress.
- * Opacity loops between 0.45 and 1.0 on the native driver so it
- * stays smooth during scroll.
- */
-function InProgressPill() {
-  const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [opacity] = useState(() => new Animated.Value(1));
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 0.45,
-          duration: 700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 700,
-          easing: Easing.inOut(Easing.ease),
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity]);
-
-  return (
-    <View style={styles.bandPill} accessibilityLabel="In progress">
-      <Animated.View style={[styles.bandPillDot, { opacity }]} />
-      <Text style={styles.bandPillText}>IN PROGRESS</Text>
-    </View>
   );
 }
 
@@ -263,12 +207,6 @@ function makeStyles(_colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '800',
       letterSpacing: 0.6,
       color: '#ffffff',
-    },
-    bandPillDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: '#ffffff',
     },
     bandBottomRow: {
       flexDirection: 'row',
