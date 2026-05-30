@@ -4,13 +4,14 @@
  * view's "top portion" so the language is consistent across surfaces:
  *
  *   1. <RoundCardHeader showScoreBlock={false} /> — gradient band
- *      with owner identity, course/location, format pills, LIVE pill
+ *      with owner identity, course/location, and format pills
  *      where applicable. No big score block — the per-scorer rows
  *      below carry every scorer's score (matches the detail view).
- *   2. <ScorerStack isEditing={false} /> — per-scorer rows with
+ *   2. <LiveRoundIndicatorV1 /> when in progress — hero live banner.
+ *   3. <ScorerStack isEditing={false} /> — per-scorer rows with
  *      identity + final / running score on line 1; tee pill on line
  *      2 when set (static, no buttons).
- *   3. Footer strip — comment count + last-comment relative time
+ *   4. Footer strip — comment count + last-comment relative time
  *      (or "be the first to comment") + tap-through chevron.
  *
  * The whole card is a Pressable; the caller wires `onPress` to push
@@ -26,10 +27,12 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { LiveRoundIndicatorV1 } from './LiveRoundIndicatorV1';
 import { RoundCardHeader } from './RoundCardHeader';
 import { ScorerStack } from './ScorerStack';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import { formatRelativeTime } from '@/library/golf/scoring';
+import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Round } from '@/types/golf';
 
@@ -46,6 +49,13 @@ export function RoundListCard({ round, onPress, accessibilityLabel }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const { count, lastAt } = useCommentSummary(round.id);
+  const isInProgress = !round.completedAt;
+  const { profile: ownerProfile } = useProfile(round.ownerUserId ?? null);
+  const scorerName =
+    isInProgress && round.scores.length > 0
+      ? ownerProfile?.displayName ??
+        (ownerProfile?.handle ? `@${ownerProfile.handle}` : undefined)
+      : undefined;
 
   return (
     <Pressable
@@ -57,6 +67,14 @@ export function RoundListCard({ round, onPress, accessibilityLabel }: Props) {
       }>
       <RoundCardHeader round={round} showScoreBlock={false} />
       <View style={styles.body}>
+        {isInProgress ? (
+          <LiveRoundIndicatorV1
+            size="lg"
+            lastScoreAt={round.lastScoreAt ?? round.startedAt}
+            scorerName={scorerName}
+            style={styles.liveIndicator}
+          />
+        ) : null}
         <ScorerStack round={round} isEditing={false} />
       </View>
       <View style={styles.foot}>
@@ -101,6 +119,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       // ScorerStack already renders its own bordered card. The body
       // padding here sits between the gradient band and the scorer
       // stack so the visual rhythm matches the detail view.
+    },
+    liveIndicator: {
+      marginBottom: 10,
     },
     foot: {
       flexDirection: 'row',

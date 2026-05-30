@@ -6,7 +6,7 @@
  * in scope for the source app's first scoring milestone:
  *
  *   - linked-friend metadata (`linkedUserId`, mentionedUserIds,
- *     caption, isLiveShareable, lastScoreAt) — no friend graph yet
+ *     caption, isLiveShareable) — no friend graph yet
  *   - Course catalog (we ship seeded local data)
  *
  * `Hole.yardages` is a sparse `Record<teeId, number>`. The destination
@@ -128,6 +128,8 @@ export type Round = {
   currentHoleNumber: number;
   scores: RoundScore[];
   startedAt: string;
+  /** Canonical last live activity timestamp, currently backed by `scorecards.updated_at`. */
+  lastScoreAt?: string;
   completedAt?: string;
   ownerUserId?: string;
   participants: RoundParticipant[];
