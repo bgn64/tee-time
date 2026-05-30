@@ -1,162 +1,223 @@
-# Welcome to your Expo app 👋
+# Tee Time
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A private Expo + React Native + PowerSync golf scoring app for a small friend group. Web (Vercel) is the primary surface; native Android is paused.
 
-## Get started
+This README is the operations handbook. For per-area code structure see the folder-level docs (`src/app/`, `src/library/`, `src/components/`, `supabase/`, `powersync/`, `scripts/`).
 
-1. Install dependencies
+## Stack
 
-   ```bash
-   npm install
-   ```
+| Layer | Choice |
+|---|---|
+| App framework | Expo 56 + Expo Router 56 (file-based routing under `src/app/`) |
+| Sync engine | PowerSync (`@powersync/react-native` + `@powersync/web`); local SQLite via `wa-sqlite` on web, `react-native-quick-sqlite` on native |
+| Backend | Supabase (Postgres + auth + REST + logical replication for PowerSync) |
+| Web deploy | Vercel (auto-build on push to `main`) |
+| DB + sync-rules deploy | GitHub Actions (`.github/workflows/deploy-production.yml`) — see [Deploy model](#deploy-model) |
+| Course catalog | OpenGolfAPI bulk CSV (ingested via `scripts/ingest-opengolf.ts`) + lazy enrichment via `src/library/golf/courseEnrichment.ts` |
 
-2. Start the app
+PowerSync is the source of truth for everything users read in-app: `scorecards`, `scorecard_scores`, `profiles`, `friendships`, `friend_requests`, `custom_players`, `comments`. The `courses` catalog is intentionally NOT synced (too large) — the app queries it via Supabase REST and snapshots the picked course onto each new scorecard at `startRound` time.
 
-   ```bash
-   npx expo start
-   ```
+## Current release model
 
-In the output, you'll find options to open the app in a
+| Surface | Audience | Deploy |
+|---|---|---|
+| Web production | Friend group | Vercel from `main` |
+| Web "staging" | Manual sandbox / pre-merge feature branches | Vercel preview deploys per branch (no auto-promote) |
+| Android | Paused | EAS configs deferred; old APK no longer compatible with the post-PowerSync schema |
+| Local dev | This repo | `npm run web` against either local Supabase (`npx supabase start`) or staging |
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Production access stays invite-only: Supabase public signup is disabled; magic-link email auth only; uninvited emails fail.
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## Quick start (local)
 
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```powershell
+npm install
+npx supabase start            # local Postgres + auth + studio (Docker required)
+npm run web
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Local `.env.local` (gitignored) needs at minimum:
 
-### Other setup steps
+```text
+EXPO_PUBLIC_SUPABASE_URL=<staging URL OR http://127.0.0.1:54321 for local>
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<matching anon/publishable key>
+EXPO_PUBLIC_POWERSYNC_URL=<staging PowerSync instance URL>
+```
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+`EXPO_PUBLIC_*` values are bundled into the client and must be safe to ship. Server-side scripts (`scripts/`) take `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` from a per-environment file passed via `--env`:
 
-## Score tab — out-of-repo setup
+```powershell
+npm run ingest:opengolf -- --env .staging.env
+```
 
-The Score tab introduces two new synced tables (`scorecards`, `scorecard_scores`) plus a server-side trigger that denormalizes `owner_user_id` onto child rows. After pulling these changes you need to apply the new schema to your Supabase project and update the PowerSync sync rules — neither is run automatically by the app.
+`.staging.env` and `.prod.env` are gitignored. Templates: copy from `.env.local.template` and fill in.
 
-1. **Apply the SQL migration.** Open the Supabase dashboard → SQL editor and paste the contents of [`supabase/migrations/002_scorecards.sql`](./supabase/migrations/002_scorecards.sql). This creates the two new tables, the `scorecard_scores` owner-denorm trigger, the `auth.uid()` RLS policies, and `ALTER PUBLICATION powersync ADD TABLE …` so PowerSync can replicate them.
-2. **Update the PowerSync sync rules.** Open the PowerSync dashboard → Sync Rules and replace the rules with the contents of [`sync-rules.yaml`](./sync-rules.yaml). The new file adds `scorecards` and `scorecard_scores` streams scoped to `owner_user_id = request.user_id()` so two devices signed in to the same account see the same in-progress round.
-3. **Smoke-test cross-device sync.** Sign in on web and on a phone/simulator with the same magic-link OTP account. Start a round on one device, tap a score, and confirm the second device's `ReadOnlyScorecard` reflects the change within a couple of seconds. The current-hole position (`HoleNavBar`) intentionally stays per-device — only the scores sync.
+## Project layout
 
-## Friending — out-of-repo setup
+```
+src/
+  app/                  expo-router screens (file-based routing)
+  components/           shared UI primitives (CourseRow, PlayerChip, ReadOnlyScorecard, etc.)
+  library/
+    golf/               domain logic (RoundContext, scoring, teams, course helpers, useCourses, courseEnrichment)
+    powersync/          AppSchema + system (PowerSync wiring, KV storage adapter)
+    social/             AccountContext, FriendsContext, profile cache
+    supabase/           SupabaseConnector (upload connector for PowerSync CRUD)
+    theme/              ThemeContext + semantic color tokens
+    utils/              uuid, alert, etc.
+  data/                 (intentionally empty — courses come from the DB now, not from seeds)
+  types/                Course / Tee / Hole / RoundParticipant / etc.
 
-The friending feature adds three new tables (`profiles`, `friend_requests`, `friendships`) plus six SECURITY DEFINER RPCs that own all the write paths. The friend graph **is** synced to clients via PowerSync — the Home incoming-requests banner is realtime, and the friends list is offline-available — but writes still flow through RPCs so multi-row invariants (e.g., "accepted FR ⇔ two friendship rows") can be enforced atomically.
+supabase/
+  migrations/           002_…009_… — applied in order by `supabase db push`
+  tests/                (optional) Postgres-level RLS / RPC tests
 
-Search-result profiles are NOT synced: handle search needs a server-side prefix index across the global user set, so the Search tab queries Supabase directly.
+powersync/
+  cli.yaml              points at staging instance (used for local dev)
+  service.yaml          staging service config (NOT deployed by CI — prod's service.yaml is owned by the PowerSync dashboard)
+  sync-config.yaml      sync streams — deployed to prod by CI when this file changes
 
-1. **Apply the SQL migration.** Open the Supabase dashboard → SQL editor and paste the contents of [`supabase/migrations/003_friends.sql`](./supabase/migrations/003_friends.sql). This creates the three tables, the partial unique index that prevents duplicate pending requests in one direction, the RLS read policies (no direct insert/update/delete — clients must go through RPCs), and the six RPCs (`complete_profile`, `send_friend_request`, `accept_friend_request`, `decline_friend_request`, `cancel_friend_request`, `unfriend`). Each RPC starts with an `auth.uid()` null guard and is granted EXECUTE only to `authenticated`. The `friendships` PK is a synthetic `id uuid` (with `UNIQUE (user_id, friend_user_id)` preserving the symmetric-two-rows invariant) — PowerSync requires a single-column `id` on every synced row.
-2. **Redeploy the PowerSync sync rules.** Five new streams have been added to [`powersync/sync-config.yaml`](./powersync/sync-config.yaml): `own_profile`, `friend_profiles`, `requester_profiles`, `friendships`, and `friend_requests`. The three profile streams alias `user_id AS id` so PowerSync sees a usable local row key. Push the file with `powersync deploy sync-config` (or paste the YAML into the PowerSync dashboard → Sync Rules and Deploy). The `powersync` publication is already `FOR ALL TABLES`, so no `ALTER PUBLICATION` is needed for the new tables.
-3. **Smoke-test the end-to-end flow** with two invited accounts on two browser windows:
-   - A signs in, picks `@alice`. B signs in, picks `@bob`.
-   - A opens the **Search** tab, types `bo`, taps Bob's row → profile shows `+ Add Friend`. Tap → flips to `Requested`.
-   - B opens **Home** → sees the incoming-request banner appear **without refreshing** (this is the realtime check; PowerSync pushes the new row to B's open tab). Tap Confirm → banner clears, A's profile flips to `Friends ✓`.
-   - B taps the `Friends ✓` pill → dropdown shows `Unfriend` → confirm → friendship deleted on both sides.
-4. **Offline check.** With B's friends list populated, disconnect the network and reload the web app. The friends list and any pending FRs should still render — PowerSync's local SQLite holds them across reloads, and the RPC writes are deliberately not queued offline (they need server-side multi-row transactions).
+scripts/
+  ingest-opengolf.ts    upserts OpenGolfAPI bulk CSV into the `courses` table
+  validate-cutover.ts   one-off post-cutover validation (kept for posterity)
 
-## Custom players — out-of-repo setup
+.github/workflows/
+  deploy-production.yml  see [Deploy model](#deploy-model)
 
-The Score-tab player picker replaces the old seeded roster with two
-real sources: your **friends** (live via the existing
-`friend_profiles` PowerSync stream) and **custom players** —
-user-scoped roster of off-app people you play rounds with. Custom
-players are created inline from the picker; each row has a 3-dot
-menu offering soft-delete (the row stays synced so historic
-scorecards keep rendering correctly).
+prod-backups/           (gitignored if you create this dir locally) snapshots of prod DB
+```
 
-`participantKey` switches to a prefixed format
-(`user:{uid}` / `custom:{cid}`) so the same scorecard schema can
-reference both kinds. The seeded ids on any in-flight pre-migration
-rounds (e.g. `'player-you'`) still resolve via a legacy fallback.
+## Branching + PR conventions
 
-1. **Apply the SQL migration.** Open the Supabase dashboard → SQL editor and paste the contents of [`supabase/migrations/004_custom_players.sql`](./supabase/migrations/004_custom_players.sql). This creates the `custom_players` table (owner-scoped via FK + RLS) with a `deleted_at` column for soft-delete. The picker filters `deleted_at IS NULL` locally; the scorecard participant resolver doesn't, so deleted players keep rendering on historic rounds.
-2. **Redeploy the PowerSync sync rules.** The `custom_players` stream has been added to [`powersync/sync-config.yaml`](./powersync/sync-config.yaml). It returns ALL of the user's rows including soft-deleted ones (the picker / resolver split handles the filter locally). Push with `powersync deploy sync-config` (or paste into the dashboard → Sync Rules → Deploy).
-3. **Smoke-test the end-to-end flow** with two accounts A (friends with B):
-   - A opens the **Score** tab → picks a course → Players. Confirm "You" is pinned, B appears under FRIENDS, and the "+ Add new player" row is visible.
-   - Type "Dad" into the search box. The "+ Add new player" row updates to `Add "Dad" as a new player`. Tap it. Confirm "Dad" appears under CUSTOM PLAYERS with a 3-dot menu on the right, and is selected.
-   - Start the round with You + B + Dad. Confirm the scoring screen renders all three avatars / names correctly.
-   - Tap a name in the Final-totals row of the read-only scorecard. For `user:` participants (You + B) the row should navigate to the profile screen.
-   - Back on the players picker, tap the 3-dot menu on Dad → Delete → confirm. Confirm Dad disappears from the picker.
-   - Open the in-flight round's scorecard — Dad should still render correctly there (live lookup hits the soft-deleted row).
-4. **Unfriend / ex-friend check (online)**. After completing the round, have B unfriend A. Open the scorecard on A's device. B's name + avatar should still render correctly (the participant resolver's tier-2 direct fetch reads B's profile from Supabase since the `profiles_select_all` RLS allows it).
-5. **Offline limitation**. The same scenario when offline → B falls back to "Player". Mitigation (a `scorecard_participants` retention sync stream) is deferred.
+- `main` is the **only deployed branch**. Vercel + the GH Action both fire on every push to `main`.
+- All changes land via PR. Branch protection on `main` requires PR + status checks.
+- Feature branches: `feat/<short-name>`. Use `docs/<short-name>` for doc-only, `fix/<short-name>` for hotfixes.
+- Staging-style validation = open the PR, use the Vercel preview URL to test, then merge.
 
-## You tab — no out-of-repo setup
+## Deploy model
 
-The new **You tab** in the bottom nav renders the signed-in user's profile via the same `<ProfileScreen>` component used everywhere else (Search results, scorecard tap-to-profile, friends-list drill-ins). No new tables, RLS policies, or sync streams — everything is computed from rows already synced (`profiles`, `friendships`, `scorecards`).
+`.github/workflows/deploy-production.yml` runs on every push to `main` and has three jobs:
 
-The profile screen now shows:
-- **Friends N** (tappable on your own profile → drills to `/(you)/friends`; hidden on others')
-- **Rounds played** (own) / **Rounds together** (others) — both computed from completed scorecards in your local PowerSync DB.
+| Job | Trigger | What it does |
+|---|---|---|
+| `changes` | always | Probes which paths changed (uses `dorny/paths-filter@v3`); outputs `db` / `powersync` flags |
+| `deploy-db` | `db` flag OR manual dispatch | `supabase link` → backup prod DB (uploaded as `prod-backup-<sha>` artifact, 30-day retention) → `supabase db push` |
+| `deploy-powersync` | `powersync` flag OR manual dispatch | Generates a prod-targeting `.powersync-prod/` config dir (because the committed `powersync/cli.yaml` points at staging) → `powersync deploy sync-config --directory .powersync-prod` |
 
-Both counts have a known accuracy ceiling: they only see scorecards *you* own (`scorecards.owner_user_id = auth.user_id()`). A round another user created with you in it isn't synced to your device, so the count silently undercounts in that direction. Fix (broaden the `scorecards` sync rule to include rounds you appear in) is well-scoped and deferred.
+Vercel runs independently from the GH Action — it picks up the same push and rebuilds the web bundle.
 
-### Navigation pattern — per-tab profile routes
+Both deploy jobs bind to the `production` GitHub environment. Configure required reviewers there to add a manual approval step.
 
-Profiles are reachable from four tabs now (Home feed, Search, Score scorecard, You/friends list). Each tab gets its own `profile/[userId]` route; tapping a name from anywhere pushes onto the **current** tab's stack so tab context is preserved (Instagram / X convention). Switching tabs preserves each tab's exploration history; back always behaves predictably within the current tab.
+### Required GitHub secrets / variables
 
-## Home tab — Feed
+Settings → Secrets and variables → Actions:
 
-The **Home tab** is the friend-rounds feed. Every friend's completed round appears chronologically; in-flight rounds (≥1 score written) pin to the top with a pulsing `● IN PROGRESS` pill and tick in real time as scores arrive.
+| Type | Name | Scope |
+|---|---|---|
+| Secret | `SUPABASE_ACCESS_TOKEN` | Repository |
+| Secret | `DB_PASSWORD` | `production` environment |
+| Secret | `POWERSYNC_PS_ADMIN_TOKEN` | `production` environment |
+| Variable | `PROJECT_ID` | `production` environment — production Supabase project ref |
+| Variable | `POWERSYNC_PROD_INSTANCE_ID` | `production` environment |
+| Variable | `POWERSYNC_PROD_PROJECT_ID` | `production` environment |
+| Variable | `POWERSYNC_PROD_ORG_ID` | `production` environment |
 
-### Deploy steps
+### Required Vercel env vars
 
-Apply **migration 005** (`supabase/migrations/005_friend_scorecard_visibility.sql`) and deploy the updated **`powersync/sync-config.yaml`** (two new streams: `friend_scorecards`, `friend_scorecard_scores`). The migration is defense-in-depth — PowerSync sync rules read via the replication slot and bypass RLS, so the feed *works* without it; the migration just aligns the RLS surface with what the app exposes.
+Vercel project → Settings → Environment Variables → Production scope:
 
-### How "live" works
+- `EXPO_PUBLIC_SUPABASE_URL`
+- `EXPO_PUBLIC_SUPABASE_ANON_KEY`
+- `EXPO_PUBLIC_POWERSYNC_URL` (the prod PowerSync slot's URL)
 
-`RoundContext.setCustomHoleScore` bumps `scorecards.updated_at` on every score tap (the parent scorecard row gets re-synced along with the score-row insert). The feed sorts live rounds by `scorecards.updated_at DESC` directly — no client-side aggregate query over score rows. Trade-off: every tap re-replicates the parent row (including its ~few-KB `course_snapshot`). For ≤ a handful of concurrent live rounds the cost is negligible; revisit with a denormalized `last_score_at` column if profiling ever shows it hurting on mobile data.
+## Schema migrations
 
-The card's "X ago" label on a live round shows the time **your device** last received an update for that round, not the scorer's timestamp. If you're offline, the label keeps ticking forward ("3m ago" → "1h ago" → "Yesterday") so it honestly reflects how stale your data is rather than implying freshness it can't guarantee. Completed rounds keep using `completedAt` since that's an immutable moment with real meaning.
+1. Add SQL under `supabase/migrations/NNN_short_name.sql`. Number sequentially.
+2. Test locally:
+   ```powershell
+   npx supabase db reset
+   ```
+   This wipes local Postgres and reapplies every migration in order.
+3. Open PR → review → merge to `main`.
+4. The `deploy-db` job runs `supabase db push --linked` against prod, with a pre-push backup artifact.
 
-### Participant snapshots for friend custom players
+Migrations are **forward-only**. To undo a change, write a compensating migration (e.g. `010_revert_*.sql`). Don't edit applied migrations.
 
-A friend's custom players (`custom:{uuid}` participants — e.g. "Dad") don't sync to your device because `custom_players` is scoped to `owner_user_id = me`. `RoundParticipant` now carries optional `localDisplayName` + `localDisplayColor` populated at `startRound` time. The participant resolver uses those snapshots as a fallback so friends see your nicknames in the feed even though they can't query your `custom_players` table.
+### Migration history note (one-time legacy artifact)
 
-### Known gaps
+Prod was migrated from an older codebase in May 2026. To align history, `001` is marked as `reverted` in prod's `supabase_migrations.schema_migrations`, and `002` through `007` (which describe a from-scratch schema that prod doesn't need to re-apply) are marked `applied` via `supabase migration repair`. The actual cutover ran via `008_courses.sql` + `009_cutover_from_legacy.sql`. Migration 010 onwards behaves normally.
 
-- **Sync volume per friend** scales linearly with their round count + per-cell score count, **plus** the parent scorecard row (with its course_snapshot) re-syncs on every tap. No time-window cap yet; very active friends could create noticeable initial-sync cost. Easy future improvement: scope `friend_scorecards` to the last N days.
-- **No stale-live-round cutoff** — a friend who taps two scores then puts the phone down stays "live" in your feed until they complete or abandon the round. Old app used a 6-hour window.
-- **Non-friend app users** in a friend's round resolve via online Supabase REST fetch; offline they render as "Player".
+## PowerSync sync rules
 
-## Rounds tab — no out-of-repo setup
+The single source of truth is `powersync/sync-config.yaml`. Edit it, open a PR, merge to `main`. The `deploy-powersync` job pushes it to the prod slot via `powersync deploy sync-config`.
 
-The **Rounds tab** lists the user's **own** completed scorecards (`owner_user_id = me AND completed_at IS NOT NULL`). Friends' rounds intentionally stay on the Home feed — the Rounds tab is "rounds I scored," matching the same one-owner-per-scorecard mental model that the Score tab and stats hooks already follow.
+The `powersync/service.yaml` file in the repo is for **local / staging only**. The production slot's service config (DB connection, JWT auth) is owned by the PowerSync dashboard — adding it to CI would require shipping the prod DB password through env-var substitution, which is deferred. If you ever want to bring prod's service config into the repo, see [PowerSync CLI docs on multi-environment setups](https://docs.powersync.com/usage/tools/cli).
 
-### Toolbar
+### Setup gotcha: Supabase auth
 
-A search bar (fuzzy match across course name + every participant's resolved display name/handle), a Filter pill (hole range × date range), and a Sort pill (Newest / Oldest / Best score / Worst score). Score sort uses the user's per-scorer total when they were in the round, falling back to the round-wide total when they weren't (a round scored for friends/family without playing yourself). Cards group by month when sorted by time; flat when sorted by score.
+The prod PowerSync slot must have **Use Supabase auth** checked in the dashboard (= `client_auth.supabase: true` in service.yaml). Without it, every sync attempt fails with `PSYNC_S2101: Could not find an appropriate key in the keystore`. This is set per-slot, not per-project.
 
-### Detail screen
+### Setup gotcha: `powersync_role`
 
-Read-only `ReadOnlyScorecard` with FinalTotals visible, plus an owner-only Delete button. The detail screen does its own targeted query by id so deep links and mid-navigation deletes resolve cleanly to a "Round not available" empty state instead of crashing.
+The prod Supabase project must have a `powersync_role` user with replication + SELECT permissions. Run this once on prod via the dashboard SQL editor:
 
-`deleteRound(id)` on `RoundContext` is owner-scoped at the SQL level (`AND owner_user_id = ?` on both DELETEs) as defense in depth — RLS would also reject the upload but enforcing it locally keeps the UI consistent. Delete navigates via `router.replace`, not `router.back`, so you don't see a stale-detail flash or get a "back to a deleted round" entry in the navigation history.
+```sql
+CREATE ROLE powersync_role
+  WITH REPLICATION BYPASSRLS LOGIN PASSWORD '<random>';
 
-### Out of scope (deferred)
+GRANT USAGE  ON SCHEMA public TO powersync_role;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO powersync_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT ON TABLES TO powersync_role;
+```
 
-In-place score corrections (the old app's edit mode), scramble paths (we're stroke-only), captions, photos. The edit-mode hook is easy to add later because we already have all the live-scoring components.
+The chosen password goes into the PowerSync prod slot's data source config (`powersync_role` as username, the password you picked).
 
-## Learn more
+## Course catalog
 
-To learn more about developing your project with Expo, look at the following resources:
+`scripts/ingest-opengolf.ts` populates the `courses` table from the OpenGolfAPI US bulk CSV. ~14k catalog rows. Idempotent (upserts on `id`); same script runs against local / staging / prod.
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```powershell
+npm run ingest:opengolf -- --env .prod.env
+```
 
-## Join the community
+The bulk CSV has known gaps in per-hole par/yardage data. The app handles this via **lazy enrichment**: when a user picks a catalog course that doesn't have `holes` populated, `useCourse(id)` automatically calls the OpenGolfAPI `/v1/courses/:id` endpoints and writes the enriched data back via the `enrich_catalog_course` RPC. See `src/library/golf/courseEnrichment.ts`.
 
-Join our community of developers creating universal apps.
+Custom (user-created) courses use a different id namespace (`custom:<uuid>`) and never need enrichment.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Backup / rollback
+
+Every deploy that touches the DB uploads a `prod-backup-<sha>` artifact (schema.sql + data.sql, 30-day retention). Find them under the workflow run's Artifacts.
+
+To restore from a backup:
+
+```powershell
+# 1. Download prod-backup-<sha> from the GH Actions run
+# 2. Pipe through psql via Docker against prod (DANGER — full schema replace):
+docker exec -i supabase_db_<local-instance> psql -U postgres "$PROD_DB_URL" < schema.sql
+docker exec -i supabase_db_<local-instance> psql -U postgres "$PROD_DB_URL" < data.sql
+```
+
+In practice, prefer **forward fixes** (write a compensating migration) over restore. Only restore for catastrophic data loss.
+
+## Common gotchas
+
+- **Vercel 404 at root** — `vercel.json` is required. It declares `outputDirectory: dist`, sets the `expo export` build command, and adds SPA fallback rewrites. Without it, Expo Router routes 404 because Vercel's auto-detection doesn't add the SPA rewrites.
+- **`powersync/cli.yaml` points at staging** — by design (for local dev). The prod GH Action generates a separate `.powersync-prod/cli.yaml` at deploy time so it doesn't matter.
+- **`supabase db push` says "Remote migration versions not found in local"** — usually means a stale entry in `supabase_migrations.schema_migrations`. Use `supabase migration repair --status reverted <version>` to remove untracked entries.
+- **`react-hooks/set-state-in-effect` ESLint failure** — React 19 strict rule. Don't call `setState` synchronously at the top of an effect; derive idle state from inputs instead. See `src/library/golf/useCourses.ts` for an example pattern.
+
+## Validation before publishing
+
+```powershell
+npx tsc --noEmit
+npm run lint
+```
+
+For schema changes, additionally reset local and reapply:
+
+```powershell
+npx supabase db reset
+```
+
+(There's no `npm test` yet — the Jest setup from the old repo wasn't ported. If you add tests later, hook them into the workflow as a status check.)
