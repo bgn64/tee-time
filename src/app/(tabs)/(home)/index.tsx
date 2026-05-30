@@ -125,7 +125,7 @@ export default function HomeFeedScreen() {
         <RoundListCard
           key={round.id}
           round={round}
-          onPress={() =>
+          onOpen={() =>
             router.push(`/(tabs)/(home)/round/${round.id}` as never)
           }
         />

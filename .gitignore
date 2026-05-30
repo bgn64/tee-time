@@ -53,6 +53,9 @@ plan.md
 # Generated PowerSync prod-targeting dir (created at deploy time)
 .powersync-prod/
 
+# HTML design mockups — local design scratchpad
+docs/mockups/
+
 # typescript
 *.tsbuildinfo
 
