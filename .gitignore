@@ -50,6 +50,9 @@ Deploy-Migrations.ps1
 Deploy-SyncStreams.ps1
 plan.md
 
+# Generated PowerSync prod-targeting dir (created at deploy time)
+.powersync-prod/
+
 # typescript
 *.tsbuildinfo
 

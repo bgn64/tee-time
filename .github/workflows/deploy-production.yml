@@ -96,25 +96,38 @@ jobs:
       # `powersync-prod/service.yaml` with `!env` substitution and
       # call `powersync deploy` (no scope) from that directory.
       #
-      # INSTANCE_ID / PROJECT_ID / ORG_ID env vars target the prod
-      # slot (overriding whatever the committed `powersync/cli.yaml`
-      # points at, which is the dev/staging instance).
+      # We stage the prod config in a generated `.powersync-prod/`
+      # directory because the committed `powersync/cli.yaml` is linked
+      # to the dev/staging instance, and the PowerSync CLI prefers
+      # the linked config over INSTANCE_ID/PROJECT_ID env vars when
+      # both are present. Using --directory on a freshly-generated
+      # folder is the unambiguous way to target prod.
 
       - name: Install PowerSync CLI
         run: npm install -g powersync@latest
 
-      - name: Validate sync rules
+      - name: Stage prod-targeted PowerSync config
+        run: |
+          rm -rf .powersync-prod
+          mkdir -p .powersync-prod
+          cp powersync/sync-config.yaml .powersync-prod/sync-config.yaml
+          cat > .powersync-prod/cli.yaml <<EOF
+          type: cloud
+          instance_id: ${{ vars.POWERSYNC_PROD_INSTANCE_ID }}
+          project_id: ${{ vars.POWERSYNC_PROD_PROJECT_ID }}
+          EOF
+          if [ -n "${{ vars.POWERSYNC_PROD_ORG_ID }}" ]; then
+            echo "org_id: ${{ vars.POWERSYNC_PROD_ORG_ID }}" >> .powersync-prod/cli.yaml
+          fi
+          echo "--- generated cli.yaml ---"
+          cat .powersync-prod/cli.yaml
+
+      - name: Validate sync rules against prod instance
         env:
           PS_ADMIN_TOKEN: ${{ secrets.POWERSYNC_PS_ADMIN_TOKEN }}
-          INSTANCE_ID:    ${{ vars.POWERSYNC_PROD_INSTANCE_ID }}
-          PROJECT_ID:     ${{ vars.POWERSYNC_PROD_PROJECT_ID }}
-          ORG_ID:         ${{ vars.POWERSYNC_PROD_ORG_ID }}
-        run: powersync validate --sync-config-file-path=powersync/sync-config.yaml
+        run: powersync validate --directory .powersync-prod
 
       - name: Deploy sync rules to prod slot
         env:
           PS_ADMIN_TOKEN: ${{ secrets.POWERSYNC_PS_ADMIN_TOKEN }}
-          INSTANCE_ID:    ${{ vars.POWERSYNC_PROD_INSTANCE_ID }}
-          PROJECT_ID:     ${{ vars.POWERSYNC_PROD_PROJECT_ID }}
-          ORG_ID:         ${{ vars.POWERSYNC_PROD_ORG_ID }}
-        run: powersync deploy sync-config --sync-config-file-path=powersync/sync-config.yaml
+        run: powersync deploy sync-config --directory .powersync-prod
