@@ -126,10 +126,12 @@ jobs:
             exit 1
           fi
 
-      - name: Validate sync rules against prod instance
-        env:
-          PS_ADMIN_TOKEN: ${{ secrets.POWERSYNC_PS_ADMIN_TOKEN }}
-        run: powersync validate --directory .powersync-prod
+      # Skipping `powersync validate` here because it runs three checks
+      # (config schema, connection test, sync rules) and the first two
+      # require service.yaml — which we deliberately don't ship from
+      # CI (the prod slot's service.yaml is owned by the PowerSync
+      # dashboard). The `deploy sync-config` step below performs the
+      # sync-rules validation itself before pushing.
 
       - name: Deploy sync rules to prod slot
         env:
