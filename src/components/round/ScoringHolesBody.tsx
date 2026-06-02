@@ -23,10 +23,14 @@ import { StyleSheet, View } from 'react-native';
 import { ScoreEntryAccordion } from './ScoreEntryAccordion';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
+import {
+  effectiveEnabledTags,
+} from '@/library/golf/achievementTags';
 import { findTee } from '@/library/golf/courseHelpers';
 import { formatScore, playerProgress } from '@/library/golf/scoring';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round, Tee } from '@/types/golf';
@@ -56,6 +60,7 @@ export function ScoringHolesBody({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const resolver = useParticipantResolver(round.playerIds ?? []);
   const { getTags, toggleTag } = useRoundAchievementTags(round.id);
+  const { getOverride, setOverride } = useRoundTrackedStats(round.id);
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
@@ -158,6 +163,8 @@ export function ScoringHolesBody({
           (sc) => sc.scorerId === s.id && sc.holeNumber === currentHoleNumber
         );
         const tappedTags = getTags(s.id, currentHoleNumber);
+        const override = getOverride(s.id);
+        const enabledTags = effectiveEnabledTags(round.scoringRule, override);
 
         return (
           <ScoreEntryAccordion
@@ -182,8 +189,12 @@ export function ScoringHolesBody({
             scorerId={s.id}
             scoringRule={round.scoringRule}
             tappedTags={tappedTags}
+            enabledTags={enabledTags}
             onToggleTag={(tagKey) => {
               void toggleTag(s.id, currentHoleNumber, tagKey);
+            }}
+            onChangeEnabledTags={(next) => {
+              void setOverride(s.id, next);
             }}
           />
         );

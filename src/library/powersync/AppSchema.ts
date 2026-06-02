@@ -3,6 +3,7 @@ import { column, Schema, Table } from '@powersync/common';
 export const SCORECARDS_TABLE = 'scorecards';
 export const SCORECARD_SCORES_TABLE = 'scorecard_scores';
 export const SCORECARD_ACHIEVEMENT_TAGS_TABLE = 'scorecard_achievement_tags';
+export const SCORECARD_TRACKED_STATS_TABLE = 'scorecard_tracked_stats';
 export const PROFILES_TABLE = 'profiles';
 export const FRIENDSHIPS_TABLE = 'friendships';
 export const FRIEND_REQUESTS_TABLE = 'friend_requests';
@@ -166,6 +167,27 @@ const scorecard_achievement_tags = new Table(
   }
 );
 
+// Per-(scorer, round) tracked-stats overrides. Storage convention:
+// row absent = use defaults; row with empty list = scorer turned
+// every tag off; row with non-empty list = use as-is. `enabled_tags`
+// is a JSON array of TagKey strings stored as TEXT locally; the
+// upload connector re-parses to jsonb.
+const scorecard_tracked_stats = new Table(
+  {
+    scorecard_id: column.text,
+    owner_user_id: column.text,
+    scorer_id: column.text,
+    enabled_tags: column.text,
+    updated_at: column.text
+  },
+  {
+    indexes: {
+      by_scorecard: ['scorecard_id'],
+      by_scorer: ['scorecard_id', 'scorer_id']
+    }
+  }
+);
+
 export const AppSchema = new Schema({
   scorecards,
   scorecard_scores,
@@ -175,7 +197,8 @@ export const AppSchema = new Schema({
   custom_players,
   comments,
   round_likes,
-  scorecard_achievement_tags
+  scorecard_achievement_tags,
+  scorecard_tracked_stats
 });
 
 export type Database = (typeof AppSchema)['types'];
@@ -188,3 +211,4 @@ export type CustomPlayerRecord = Database['custom_players'];
 export type CommentRecord = Database['comments'];
 export type RoundLikeRecord = Database['round_likes'];
 export type ScorecardAchievementTagRecord = Database['scorecard_achievement_tags'];
+export type ScorecardTrackedStatsRecord = Database['scorecard_tracked_stats'];
