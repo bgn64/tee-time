@@ -1,6 +1,6 @@
 /**
- * RoundDetailView — full detail render for a single round, shared
- * by every detail-view state in the app:
+ * RoundDetailView — full detail render for a single round, shared by
+ * every detail-view state in the app:
  *
  *   ① Completed + viewing  (feed / Previous-rounds read-only)
  *   ② In-progress + editing (scoring tab — wires `isEditing=true`
@@ -8,34 +8,47 @@
  *   ③ Completed + editing  (Previous-rounds Edit route)
  *   ④ In-progress + viewing (feed live round)
  *
- * The component is the same in all four; what differs is the
- * `isEditing` flag, whether `currentHoleNumber` + score-change
- * handlers are supplied, and what (if anything) the caller renders
- * in the `topActions` / `footerActions` slots.
+ * Phase 1 redesign — like `RoundListCard`, this is now an
+ * edge-to-edge tabbed surface (Summary · Scorecard · Holes) hosted
+ * inside the same `TabbedRoundShell` so both surfaces share the
+ * same chrome.
  *
- * Composes:
- *   1. `topActions` slot (e.g. "Finish" / "Done" / "Edit" buttons).
- *   2. `<RoundCardHeader showScoreBlock={false} />` — the neutral
- *      identity header, score block intentionally hidden because the
- *      per-scorer rows below carry the same info per scorer.
- *   3. `<HoleNavBar />` — editing modes only.
- *   4. `<ScorerStack />` — per-scorer rows. `isEditing` toggles the
- *      score buttons + tee-pill interactivity.
- *   5. `<ReadOnlyScorecard />` — vertical grid with inline totals.
- *   6. `<CommentsSection />` — thread + composer.
- *   7. `footerActions` slot (e.g. "Delete" / "Abandon").
+ * The Holes tab body during editing intentionally keeps the legacy
+ * `<HoleNavBar>` + `<ScorerStack>` arrangement so score entry stays
+ * functional through Phase 1. Phase 3 replaces that with
+ * `HoleStepperCombo` + per-scorer entry blocks; Phases 4–6 fill in
+ * achievement tags and scramble shot attribution. The viewing
+ * variant (no editing) renders a "Coming soon" placeholder until
+ * Phase 3 lands the read-only viewer.
+ *
+ * Action bar (Like + Comments) sits at the bottom of the card; the
+ * Comments tap opens a bottom-sheet modal. `topActions` and
+ * `footerActions` slots are preserved so the scoring route can keep
+ * mounting Finish + Abandon outside the card.
  */
 
 import { useRouter } from 'expo-router';
-import { ReactNode, useMemo } from 'react';
+import { ReactNode, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { CommentsSection } from './CommentsSection';
-import { RoundCardHeader } from './RoundCardHeader';
+import { CommentsSheet } from './CommentsSheet';
+import { EditorialHeader } from './EditorialHeader';
+import { HolesTabPlaceholder } from './HolesTabPlaceholder';
+import { RoundActionBar } from './RoundActionBar';
 import { ScorerStack } from './ScorerStack';
+import { SummaryTabContent } from './SummaryTabContent';
+import { TabbedRoundShell } from './TabbedRoundShell';
 import { HoleNavBar } from '@/components/scoring/HoleNavBar';
 import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
+import { useCommentSummary } from '@/library/comments/useRoundComments';
+import { userParticipantKey } from '@/library/golf/participantKey';
+import {
+  formatRelativeTime,
+  getScorerProgress,
+  scorerIdForUser,
+} from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
+import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
 
 type Props = {
@@ -58,13 +71,17 @@ type Props = {
   /** Required when `isEditing` for the HoleNavBar arrows. */
   onChangeCurrentHole?: (n: number) => void;
 
-  /** Optional slot above the header (e.g. Finish / Done / Edit buttons). */
+  /** Optional slot above the card (e.g. Finish / Done / Edit buttons). */
   topActions?: ReactNode;
-  /** Optional slot below comments (e.g. Delete / Abandon buttons). */
+  /** Optional slot below the card (e.g. Delete / Abandon buttons). */
   footerActions?: ReactNode;
 
   /** Editing-only score-change handler. Wired into ScorerStack. */
-  onChangeScore?: (scorerId: string, holeNumber: number, strokes: number) => void;
+  onChangeScore?: (
+    scorerId: string,
+    holeNumber: number,
+    strokes: number
+  ) => void;
   /** Editing-only tee-pill tap handler. Wired into ScorerStack. */
   onPressTeeForScorer?: (scorerId: string) => void;
 };
@@ -84,9 +101,18 @@ export function RoundDetailView({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
 
-  // Build the per-tee yardages payload for HoleNavBar. Empty when
-  // not editing (HoleNavBar is hidden anyway). Same derivation that
-  // scoring.tsx had inline.
+  const { count: commentCount } = useCommentSummary(round.id);
+  const [sheetVisible, setSheetVisible] = useState(false);
+
+  const { topLineLeft, topLineRight } = useMemo(
+    () => deriveTopLine(round),
+    [round]
+  );
+  const subtitle = useMemo(() => deriveSubtitle(round), [round]);
+  const isInProgress = !round.completedAt;
+
+  // Holes tab body — preserves legacy editing flow through Phase 1.
+  // Phase 3 replaces this entirely with HolesTabContent.
   const navTees = useMemo(() => {
     if (!isEditing || currentHoleNumber == null) return [];
     const currentHole = round.course.holes.find(
@@ -103,23 +129,19 @@ export function RoundDetailView({
       }))
       .filter((t) => Number.isFinite(t.yardage))
       .sort((a, b) => {
-        const at = courseTees.find((ct) => ct.id === a.id)?.totalYardage ?? -1;
-        const bt = courseTees.find((ct) => ct.id === b.id)?.totalYardage ?? -1;
+        const at =
+          courseTees.find((ct) => ct.id === a.id)?.totalYardage ?? -1;
+        const bt =
+          courseTees.find((ct) => ct.id === b.id)?.totalYardage ?? -1;
         return bt - at;
       });
   }, [isEditing, currentHoleNumber, round.course]);
 
   const maxHole = round.course.holes.length;
 
-  return (
-    <View style={styles.shell}>
-      {topActions ? <View style={styles.actionsSlot}>{topActions}</View> : null}
-
-      <View style={styles.bandWrap}>
-        <RoundCardHeader round={round} showScoreBlock={false} />
-      </View>
-
-      {isEditing && currentHoleNumber != null && onChangeCurrentHole ? (
+  const holesBody =
+    isEditing && currentHoleNumber != null && onChangeCurrentHole ? (
+      <View style={styles.holesEditing}>
         <HoleNavBar
           holeNumber={currentHoleNumber}
           par={
@@ -130,30 +152,58 @@ export function RoundDetailView({
           maxHole={maxHole}
           onChange={onChangeCurrentHole}
         />
-      ) : null}
-
-      <ScorerStack
-        round={round}
-        isEditing={isEditing}
-        currentHoleNumber={currentHoleNumber}
-        onChangeScore={onChangeScore}
-        onPressTeeForScorer={onPressTeeForScorer}
-      />
-
-      <View>
-        <ReadOnlyScorecard
+        <ScorerStack
           round={round}
+          isEditing={isEditing}
           currentHoleNumber={currentHoleNumber}
-          onHolePress={onChangeCurrentHole}
-          onPressParticipant={(userId) =>
-            router.push(`${profileRoutePrefix}/${userId}` as never)
+          onChangeScore={onChangeScore}
+          onPressTeeForScorer={onPressTeeForScorer}
+        />
+      </View>
+    ) : (
+      <HolesTabPlaceholder />
+    );
+
+  return (
+    <View style={styles.shell}>
+      {topActions ? <View style={styles.actionsSlot}>{topActions}</View> : null}
+
+      <View style={styles.card}>
+        <EditorialHeader
+          liveStripVisible={isInProgress}
+          topLineLeft={topLineLeft}
+          topLineRight={topLineRight}
+          title={round.course.name}
+          subtitle={subtitle}
+        />
+        <TabbedRoundShell
+          summary={<SummaryTabContent round={round} />}
+          scorecard={
+            <View style={styles.tabBody}>
+              <ReadOnlyScorecard
+                round={round}
+                currentHoleNumber={currentHoleNumber}
+                onHolePress={onChangeCurrentHole}
+                onPressParticipant={(userId) =>
+                  router.push(`${profileRoutePrefix}/${userId}` as never)
+                }
+              />
+            </View>
           }
+          holes={holesBody}
+        />
+        <RoundActionBar
+          commentCount={commentCount}
+          onOpenComments={() => setSheetVisible(true)}
         />
       </View>
 
-      <CommentsSection
+      <CommentsSheet
+        visible={sheetVisible}
         roundId={round.id}
         ownerUserId={round.ownerUserId ?? ''}
+        commentCount={commentCount}
+        onClose={() => setSheetVisible(false)}
       />
 
       {footerActions ? (
@@ -163,16 +213,56 @@ export function RoundDetailView({
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+function deriveTopLine(round: Round): {
+  topLineLeft: string;
+  topLineRight?: string;
+} {
+  const isInProgress = !round.completedAt;
+  const ownerUserId = round.ownerUserId ?? '';
+  const ownerScorerId =
+    scorerIdForUser(round, ownerUserId) ?? userParticipantKey(ownerUserId);
+
+  if (isInProgress) {
+    const { thruCount } = getScorerProgress(round, ownerScorerId);
+    const left =
+      thruCount > 0 ? `LIVE · THRU ${thruCount}` : 'LIVE · NOT STARTED';
+    const right = formatRelativeTime(round.lastScoreAt ?? round.startedAt);
+    return { topLineLeft: left, topLineRight: right };
+  }
+  const left = `Completed · ${formatRelativeTime(round.completedAt ?? round.startedAt)}`;
+  return { topLineLeft: left };
+}
+
+function deriveSubtitle(round: Round): string {
+  const location = round.course.location?.trim();
+  const format = round.scoringRule === 'scramble' ? 'Scramble' : 'Stroke';
+  const holes = `${round.course.holes.length} holes`;
+  const parts = [location, format, holes].filter(
+    (s): s is string => typeof s === 'string' && s.length > 0
+  );
+  return parts.join(' · ');
+}
+
+function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     shell: {
       gap: 14,
     },
-    bandWrap: {
-      borderRadius: 18,
-      overflow: 'hidden',
-      borderWidth: 1,
-      borderColor: colors.border,
+    card: {
+      backgroundColor: colors.cardBg,
+      ...colors.shadowCard,
+    },
+    tabBody: {
+      paddingHorizontal: 4,
+      paddingBottom: 8,
+    },
+    holesEditing: {
+      // Holes tab in editing mode: HoleNavBar + ScorerStack with
+      // score-chip rows. Preserves the existing entry experience
+      // until Phase 3 replaces it.
+      paddingHorizontal: 4,
+      paddingBottom: 8,
+      gap: 10,
     },
     actionsSlot: {
       // Lets the route wrapper inject any padding it wants on the
@@ -180,3 +270,4 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
   });
 }
+
