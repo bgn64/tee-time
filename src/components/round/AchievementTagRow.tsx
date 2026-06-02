@@ -101,7 +101,15 @@ export function AchievementTagRow({
     return null;
   }
 
-  const tappedSet = mode === 'edit' ? new Set(tags) : null;
+  // In edit mode `tags` = the per-hole tapped set; in filter mode
+  // `tags` = the per-scorer-per-round enabled set. Either way, the
+  // chip is "on" when its key is in `tags`, but the visual is
+  // different: edit mode fills the chip with the group's accent
+  // colour, while filter mode uses a bordered toggle look so the
+  // user can read at a glance whether the stat is enabled.
+  const activeSet = mode === 'read' || mode === 'edit' || mode === 'filter'
+    ? new Set(tags)
+    : null;
 
   return (
     <View style={styles.wrap}>
@@ -114,11 +122,53 @@ export function AchievementTagRow({
             ) : null}
             <View style={styles.cluster}>
               {g.tagsToRender.map((tag) => {
-                const isTapped = tappedSet?.has(tag.key) ?? false;
+                const isActive = activeSet?.has(tag.key) ?? false;
                 const onPress =
                   mode === 'edit' || mode === 'filter'
                     ? () => onToggle?.(tag.key)
                     : undefined;
+
+                if (mode === 'filter') {
+                  return (
+                    <Pressable
+                      key={tag.key}
+                      onPress={onPress}
+                      disabled={!onPress}
+                      accessibilityRole={onPress ? 'button' : undefined}
+                      accessibilityState={{ selected: isActive }}
+                      accessibilityLabel={`${tag.label} ${isActive ? 'enabled' : 'disabled'} — tap to toggle`}
+                      style={[
+                        styles.filterChip,
+                        isActive ? styles.filterChipOn : styles.filterChipOff,
+                      ]}>
+                      <View
+                        style={[
+                          styles.filterPip,
+                          isActive
+                            ? styles.filterPipOn
+                            : styles.filterPipOff,
+                        ]}>
+                        <Text
+                          style={[
+                            styles.filterPipText,
+                            isActive
+                              ? styles.filterPipTextOn
+                              : styles.filterPipTextOff,
+                          ]}>
+                          {isActive ? '✓' : '−'}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          isActive ? styles.filterChipTextOn : null,
+                        ]}>
+                        {tag.label}
+                      </Text>
+                    </Pressable>
+                  );
+                }
+
                 return (
                   <Pressable
                     key={tag.key}
@@ -127,17 +177,17 @@ export function AchievementTagRow({
                     accessibilityRole={onPress ? 'button' : undefined}
                     style={[
                       styles.chip,
-                      isTapped && g.group === 'did_well'
+                      isActive && g.group === 'did_well'
                         ? styles.chipDidWell
                         : null,
-                      isTapped && g.group === 'hurt_me'
+                      isActive && g.group === 'hurt_me'
                         ? styles.chipHurtMe
                         : null,
-                      isTapped && g.group === 'scramble_only'
+                      isActive && g.group === 'scramble_only'
                         ? styles.chipDidWell
                         : null,
                     ]}>
-                    {isTapped ? (
+                    {isActive ? (
                       <Text
                         style={[
                           styles.chipPrefix,
@@ -149,7 +199,7 @@ export function AchievementTagRow({
                     <Text
                       style={[
                         styles.chipText,
-                        isTapped ? styles.chipTextTapped : null,
+                        isActive ? styles.chipTextTapped : null,
                       ]}>
                       {tag.label}
                     </Text>
@@ -215,6 +265,64 @@ function makeStyles(colors: ThemeColors) {
     },
     chipTextTapped: {
       color: '#fff',
+    },
+    // ===== Filter mode: bordered toggle look distinct from edit chips =====
+    // Edit chips fill with the group accent when active. Filter chips
+    // keep a neutral background but use a colored border + check-pip
+    // to communicate "this stat is enabled" at a glance, mirroring the
+    // toggle-row metaphor from the mockup.
+    filterChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingLeft: 6,
+      paddingRight: 11,
+      paddingVertical: 5,
+      borderRadius: 999,
+      borderWidth: 1.5,
+    },
+    filterChipOn: {
+      borderColor: colors.primary,
+      backgroundColor: 'rgba(47,125,75,0.10)',
+    },
+    filterChipOff: {
+      borderColor: colors.border,
+      borderStyle: 'dashed',
+      backgroundColor: 'transparent',
+    },
+    filterPip: {
+      width: 16,
+      height: 16,
+      borderRadius: 999,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    filterPipOn: {
+      backgroundColor: colors.primary,
+    },
+    filterPipOff: {
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: colors.border,
+    },
+    filterPipText: {
+      fontSize: 11,
+      fontWeight: '900',
+      lineHeight: 12,
+    },
+    filterPipTextOn: {
+      color: '#fff',
+    },
+    filterPipTextOff: {
+      color: colors.textMuted,
+    },
+    filterChipText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: colors.textMuted,
+    },
+    filterChipTextOn: {
+      color: colors.primaryDark,
     },
   });
 }

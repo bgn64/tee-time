@@ -92,28 +92,22 @@ export function computeScorerAggregates(
 }
 
 /**
- * Filter aggregates by the scorer's enabled-tags set so tiles for
- * disabled tags don't render. Aggregates whose tag is not enabled
- * return `null`; the renderer collapses the tile entirely (rather
- * than showing `0/0` for a metric the scorer opted out of).
+ * Filter aggregates by the scorer's enabled-tags set. Returns ONLY
+ * the tiles whose underlying tag is enabled, in canonical order
+ * (Fairways → GIR → OB → Sand). Disabled stats are dropped entirely
+ * — the caller should hide the whole tile strip when the returned
+ * array is empty so a scorer who's opted every stat off doesn't see
+ * a row of "0/0" placeholders.
  */
 export function filterAggregatesByEnabled(
   aggregates: ScorerAggregates,
   enabled: readonly TagKey[]
-): ScorerAggregates {
+): AggregateTile[] {
   const enabledSet = new Set(enabled);
-  return {
-    fairways: enabledSet.has('fairway')
-      ? aggregates.fairways
-      : { ...aggregates.fairways, value: 0, denom: 0 },
-    gir: enabledSet.has('gir')
-      ? aggregates.gir
-      : { ...aggregates.gir, value: 0, denom: 0 },
-    ob: enabledSet.has('ob')
-      ? aggregates.ob
-      : { ...aggregates.ob, value: 0 },
-    sand: enabledSet.has('sand_trap')
-      ? aggregates.sand
-      : { ...aggregates.sand, value: 0 },
-  };
+  const out: AggregateTile[] = [];
+  if (enabledSet.has('fairway')) out.push(aggregates.fairways);
+  if (enabledSet.has('gir')) out.push(aggregates.gir);
+  if (enabledSet.has('ob')) out.push(aggregates.ob);
+  if (enabledSet.has('sand_trap')) out.push(aggregates.sand);
+  return out;
 }

@@ -180,9 +180,9 @@ export function ScoringHolesBody({
             key={s.id}
             members={s.members}
             name={s.name}
-            runningText={runningText}
-            runningTone={tone}
-            thruText={thruText}
+            scoreText={runningText}
+            scoreTone={tone}
+            scoreSub={thruText}
             tee={tee}
             onPressTee={
               onPressTeeForScorer ? () => onPressTeeForScorer(s.id) : undefined
@@ -221,13 +221,13 @@ export function ScoringHolesBody({
   );
 }
 
-function makeStyles(_colors: ThemeColors) {
+function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
       paddingBottom: 8,
+      paddingHorizontal: 18,
     },
     stepperWrap: {
-      paddingHorizontal: 16,
       paddingTop: 4,
       paddingBottom: 10,
     },

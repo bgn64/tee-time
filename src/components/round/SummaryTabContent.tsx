@@ -14,12 +14,12 @@
  */
 
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { ScorerSummaryRow } from './ScorerSummaryRow';
 import { SummaryAggregateTiles } from './SummaryAggregateTiles';
 import { TeamContributionRow } from './TeamContributionRow';
-import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
-import { teeSwatch } from '@/components/scoring/TeePickerSheet';
+import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
   computeScorerAggregates,
   filterAggregatesByEnabled,
@@ -133,58 +133,30 @@ export function SummaryTabContent({ round }: Props) {
               : undefined;
 
         const tee = resolveScorerTee(s.id);
-        const teeColor = tee ? teeSwatch(tee) : undefined;
-        const teeLabel = tee
-          ? tee.totalYardage
-            ? `${tee.name} · ${tee.totalYardage.toLocaleString()}`
-            : tee.name
-          : null;
 
         // Aggregate tiles — derived from the scorer's tag rows
-        // filtered through their per-round enabled set.
+        // filtered through their per-round enabled set. Empty array
+        // (e.g. scorer turned every stat off) → SummaryAggregateTiles
+        // renders nothing.
         const rawAggregates = computeScorerAggregates(
           tagRows,
           s.id,
           visibleHoles
         );
         const enabled = effectiveEnabledTags(round.scoringRule, getOverride(s.id));
-        const aggregates = filterAggregatesByEnabled(rawAggregates, enabled);
+        const tiles = filterAggregatesByEnabled(rawAggregates, enabled);
 
         return (
           <View key={s.id} style={i > 0 ? styles.rowSep : styles.row}>
-            {i > 0 ? <View style={styles.row} /> : null}
-            <View style={styles.rowInner}>
-              <TeamAvatarCluster members={s.members} size="lg" />
-              <View style={styles.body}>
-                <Text style={styles.name} numberOfLines={1}>
-                  {s.name}
-                </Text>
-                {tee && teeColor && teeLabel ? (
-                  <View style={styles.teeChip}>
-                    <View
-                      style={[styles.teeDot, { backgroundColor: teeColor }]}
-                    />
-                    <Text style={styles.teeLabel} numberOfLines={1}>
-                      {teeLabel}
-                    </Text>
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.scoreCol}>
-                <Text
-                  style={[
-                    styles.scoreText,
-                    tone === 'over' ? styles.scoreOver : null,
-                    tone === 'even' ? styles.scoreEven : null,
-                  ]}>
-                  {scoreText}
-                </Text>
-                {thruText ? (
-                  <Text style={styles.thruText}>{thruText}</Text>
-                ) : null}
-              </View>
-            </View>
-            <SummaryAggregateTiles aggregates={aggregates} />
+            <ScorerSummaryRow
+              members={s.members}
+              name={s.name}
+              tee={tee ?? null}
+              scoreText={scoreText}
+              tone={tone}
+              scoreSub={thruText}
+            />
+            <SummaryAggregateTiles tiles={tiles} />
             {isScramble ? (
               <TeamContributionRow
                 contributions={summarizeContributions(
@@ -217,65 +189,6 @@ function makeStyles(colors: ThemeColors) {
       borderTopColor: colors.hairline,
       paddingTop: 10,
       paddingBottom: 10,
-    },
-    rowInner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    body: {
-      flex: 1,
-      minWidth: 0,
-    },
-    name: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
-    teeChip: {
-      marginTop: 4,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      paddingHorizontal: 8,
-      paddingVertical: 3,
-      borderRadius: 999,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      alignSelf: 'flex-start',
-    },
-    teeDot: {
-      width: 9,
-      height: 9,
-      borderRadius: 5,
-    },
-    teeLabel: {
-      fontSize: 10.5,
-      fontWeight: '800',
-      color: colors.textTitle,
-    },
-    scoreCol: {
-      alignItems: 'flex-end',
-      flexShrink: 0,
-    },
-    scoreText: {
-      fontSize: 28,
-      fontWeight: '800',
-      color: colors.primaryDark,
-      lineHeight: 30,
-    },
-    scoreEven: {
-      color: colors.textBody,
-    },
-    scoreOver: {
-      color: colors.textTitle,
-    },
-    thruText: {
-      marginTop: 3,
-      fontSize: 10,
-      fontWeight: '700',
-      letterSpacing: 0.4,
-      color: colors.textMuted,
     },
   });
 }

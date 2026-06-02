@@ -93,18 +93,44 @@ export function HorizontalScorecard({
   // Resolve tees with a synthetic single-tee fallback when the course
   // has no per-tee data at all (typical for opengolf courses pre-
   // enrichment + in-flight rounds with old snapshots).
+  //
+  // Filter to only the tees that at least one scorer actually plays.
+  // A tee that nobody's playing adds noise + a wasted yardage row in
+  // the grid. If no scorer specified a tee at all, fall back to the
+  // first course tee (or the synthetic default below) so the grid
+  // still renders something.
   const tees = useMemo<Tee[]>(() => {
     const courseTees = round.course.tees ?? [];
-    if (courseTees.length > 0) return courseTees;
-    // Synthesize a single "Default" tee so the grouping helper has
-    // something to group.
-    return [
-      {
-        id: '__default__',
-        name: 'Tees',
-      },
-    ];
-  }, [round.course.tees]);
+    if (courseTees.length === 0) {
+      return [{ id: '__default__', name: 'Tees' }];
+    }
+
+    // Collect every teeId referenced by a participant. In scramble the
+    // tee lives on the first member of each team (matches the grouping
+    // rule in `resolveScorerTee` below); in stroke each participant
+    // carries their own teeId.
+    const playedTeeIds = new Set<string>();
+    if (round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0) {
+      for (const team of round.teams ?? []) {
+        const firstMember = team.playerIds[0];
+        if (!firstMember) continue;
+        const teeId = round.participants.find(
+          (p) => p.participantKey === firstMember
+        )?.teeId;
+        if (teeId) playedTeeIds.add(teeId);
+      }
+    } else {
+      for (const p of round.participants) {
+        if (p.teeId) playedTeeIds.add(p.teeId);
+      }
+    }
+
+    const filtered = courseTees.filter((t) => playedTeeIds.has(t.id));
+    if (filtered.length > 0) return filtered;
+    // No scorer specified a tee — fall back to the first course tee
+    // so the grid has something rather than collapsing to empty.
+    return [courseTees[0]];
+  }, [round.course.tees, round.participants, round.scoringRule, round.teams]);
 
   const teeColorMap = useMemo(() => assignTeeColors(tees), [tees]);
   const groups = useMemo(
@@ -215,7 +241,8 @@ export function HorizontalScorecard({
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
-        bounces={false}>
+        bounces={false}
+        contentContainerStyle={styles.scrollContent}>
         <View>
           <HoleHeaderRow
             visibleHoles={visibleHoles}
@@ -532,9 +559,6 @@ function ScorerRow({
           ) : (
             <TeamAvatarCluster members={scorer.members} size="sm" />
           )}
-          <Text style={styles.scorerName} numberOfLines={1}>
-            {scorer.label}
-          </Text>
           {dotHex ? (
             <View style={[styles.teeDotSmall, { backgroundColor: dotHex }]} />
           ) : null}
@@ -639,7 +663,7 @@ function makeStyles(colors: ThemeColors) {
       borderTopColor: colors.hairline,
     },
     cellLabel: {
-      width: 84,
+      width: 60,
       paddingLeft: 4,
       paddingVertical: 5,
       flexDirection: 'row',
@@ -756,11 +780,12 @@ function makeStyles(colors: ThemeColors) {
       flex: 1,
       minWidth: 0,
     },
-    scorerName: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.textTitle,
-      flexShrink: 1,
+    scrollContent: {
+      // Center the table when it fits the viewport (i.e. Front/Back
+      // 9 + a few scorers). Wider all-18 layouts overflow naturally
+      // and scroll horizontally.
+      flexGrow: 1,
+      justifyContent: 'center',
     },
   });
 }

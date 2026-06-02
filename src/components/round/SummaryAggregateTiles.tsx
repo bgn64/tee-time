@@ -1,40 +1,32 @@
 /**
- * SummaryAggregateTiles — inline 4-tile row of {value, label} pairs
- * rendered under each scorer row on the Summary tab.
+ * SummaryAggregateTiles — inline horizontal row of {value, label}
+ * tiles rendered under each scorer row on the Summary tab.
  *
- * Tiles whose `denom` is exactly 0 (no holes recorded for the
- * metric) render the numerator only; tiles with a `denom > 0`
- * render `N/M`. OB / Sand tiles never carry a denom and always
- * show the raw count.
+ * Receives a pre-filtered list of tiles from
+ * `filterAggregatesByEnabled` (Phase 5). Renders nothing when the
+ * list is empty so scorers who've opted every tag off don't see a
+ * row of placeholder zeros.
  *
- * Phase 5 always shows all four tiles; Phase 5's storage layer
- * (`filterAggregatesByEnabled`) hides disabled tags from the
- * data, so a tile for a tag the scorer opted out of renders `0`.
- * Phase 6 may add per-tile hiding when the user has opted the
- * underlying tag out via the gear panel.
+ * Tiles with a `denom > 0` render as `N/M`; tiles without a denom
+ * (OB, Sand) render the raw count.
  */
 
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import type { ScorerAggregates } from '@/library/golf/aggregateStats';
+import type { AggregateTile } from '@/library/golf/aggregateStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 
 type Props = {
-  aggregates: ScorerAggregates;
+  tiles: readonly AggregateTile[];
 };
 
-export function SummaryAggregateTiles({ aggregates }: Props) {
+export function SummaryAggregateTiles({ tiles }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const tiles = [
-    aggregates.fairways,
-    aggregates.gir,
-    aggregates.ob,
-    aggregates.sand,
-  ];
+  if (tiles.length === 0) return null;
 
   return (
     <View style={styles.row}>
