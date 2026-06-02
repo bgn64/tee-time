@@ -36,7 +36,7 @@ import { EditorialHeader } from './EditorialHeader';
 import { RoundActionBar } from './RoundActionBar';
 import { SummaryTabContent } from './SummaryTabContent';
 import { TabbedRoundShell } from './TabbedRoundShell';
-import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
+import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import {
   formatRelativeTime,
@@ -108,7 +108,7 @@ export function RoundListCard({
         }
         scorecard={
           <View style={styles.tabBody}>
-            <ReadOnlyScorecard round={round} />
+            <HorizontalScorecard round={round} />
           </View>
         }
         holes={<HolesTabPlaceholder />}
