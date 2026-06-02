@@ -282,3 +282,26 @@ streams:
       JOIN friendships ON friendships.friend_user_id = scorecard_tracked_stats.owner_user_id
       WHERE friendships.user_id = auth.user_id()
     auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Shot attribution (added with migration 012).
+  #
+  # Per-(team, hole) ordered contributor list for scramble rounds.
+  # Same own + friend pair pattern. Friend visibility lets friend
+  # devices render the ShotSequence read view on a feed surface.
+  # ---------------------------------------------------------------
+
+  scorecard_shot_attributions:
+    query: |
+      SELECT *
+      FROM scorecard_shot_attributions
+      WHERE owner_user_id = auth.user_id()
+    auto_subscribe: true
+
+  friend_scorecard_shot_attributions:
+    query: |
+      SELECT scorecard_shot_attributions.*
+      FROM scorecard_shot_attributions
+      JOIN friendships ON friendships.friend_user_id = scorecard_shot_attributions.owner_user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true

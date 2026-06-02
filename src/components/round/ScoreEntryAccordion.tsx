@@ -27,6 +27,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { AchievementTagRow } from './AchievementTagRow';
 import { GearToggleButton } from './GearToggleButton';
 import { ScorerRow } from './ScorerRow';
+import { ShotPicker } from '@/components/scoring/ShotPicker';
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
   ACHIEVEMENT_TAGS,
@@ -71,6 +72,17 @@ type Props = {
    */
   onChangeEnabledTags?: (next: readonly TagKey[]) => void;
 
+  /**
+   * Phase 6: scramble shot attribution. When `scoringRule` is
+   * 'scramble' and these props are wired, the Detail accordion body
+   * also renders a "Whose shots" section with `ShotPicker`. The
+   * stroke count comes from the current `strokes` prop; team
+   * members come from this list.
+   */
+  teamMembers?: readonly AvatarMember[];
+  contributorIds?: readonly string[];
+  onChangeContributors?: (next: readonly string[]) => void;
+
   /** Optional slot for Phase 5's gear toggle (placeholder for now). */
   detailHeaderSlot?: ReactNode;
 };
@@ -93,6 +105,9 @@ export function ScoreEntryAccordion({
   enabledTags,
   onToggleTag,
   onChangeEnabledTags,
+  teamMembers,
+  contributorIds,
+  onChangeContributors,
   detailHeaderSlot,
 }: Props) {
   const { colors } = useTheme();
@@ -176,13 +191,31 @@ export function ScoreEntryAccordion({
               onToggle={handleFilterToggle}
             />
           ) : (
-            <AchievementTagRow
-              mode="edit"
-              tags={tappedTags}
-              enabledTags={effectiveEnabled}
-              isScramble={scoringRule === 'scramble'}
-              onToggle={onToggleTag}
-            />
+            <>
+              <AchievementTagRow
+                mode="edit"
+                tags={tappedTags}
+                enabledTags={effectiveEnabled}
+                isScramble={scoringRule === 'scramble'}
+                onToggle={onToggleTag}
+              />
+              {scoringRule === 'scramble' &&
+              teamMembers &&
+              onChangeContributors &&
+              effectiveEnabled.includes('whose_shots') &&
+              strokes != null &&
+              strokes > 0 ? (
+                <View style={styles.shotsGroup}>
+                  <Text style={styles.shotsLabel}>WHOSE SHOTS</Text>
+                  <ShotPicker
+                    strokeCount={strokes}
+                    contributorIds={contributorIds ?? []}
+                    members={teamMembers}
+                    onChange={onChangeContributors}
+                  />
+                </View>
+              ) : null}
+            </>
           )}
         </View>
       ) : null}
@@ -240,6 +273,16 @@ function makeStyles(colors: ThemeColors) {
       flexDirection: 'row',
       justifyContent: 'flex-end',
       marginBottom: 2,
+    },
+    shotsGroup: {
+      marginTop: 10,
+      gap: 6,
+    },
+    shotsLabel: {
+      fontSize: 9.5,
+      fontWeight: '900',
+      color: colors.textMuted,
+      letterSpacing: 0.5,
     },
   });
 }

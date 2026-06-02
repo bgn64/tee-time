@@ -28,10 +28,12 @@ import { AchievementTagRow } from './AchievementTagRow';
 import { HoleContextSummary } from './HoleContextSummary';
 import { ScorerPickPill, type ScorerPickOption } from './ScorerPickPill';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
+import { ShotSequence } from '@/components/scoring/ShotSequence';
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { findTee } from '@/library/golf/courseHelpers';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -141,7 +143,10 @@ export function HolesTabContent({ round }: Props) {
   // Read-only achievement tags for the focused (scorer, hole). The
   // hook returns getTags() so we don't re-derive on every render.
   const { getTags } = useRoundAchievementTags(round.id);
+  const { getContributors } = useRoundShotAttributions(round.id);
   const tappedTags = focused ? getTags(focused.id, focusedHole) : [];
+  const contributorIds =
+    isScramble && focused ? getContributors(focused.id, focusedHole) : [];
 
   if (!focused) return null;
 
@@ -179,6 +184,14 @@ export function HolesTabContent({ round }: Props) {
           tags={tappedTags}
           isScramble={isScramble}
         />
+        {isScramble && contributorIds.length > 0 ? (
+          <View style={styles.shotsWrap}>
+            <ShotSequence
+              contributorIds={contributorIds}
+              members={focused.members}
+            />
+          </View>
+        ) : null}
       </View>
     </View>
   );
@@ -199,6 +212,10 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 18,
       paddingTop: 4,
       paddingBottom: 18,
+      gap: 12,
+    },
+    shotsWrap: {
+      paddingTop: 4,
     },
   });
 }

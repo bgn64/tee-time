@@ -30,6 +30,7 @@ import { findTee } from '@/library/golf/courseHelpers';
 import { formatScore, playerProgress } from '@/library/golf/scoring';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
 import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -61,6 +62,9 @@ export function ScoringHolesBody({
   const resolver = useParticipantResolver(round.playerIds ?? []);
   const { getTags, toggleTag } = useRoundAchievementTags(round.id);
   const { getOverride, setOverride } = useRoundTrackedStats(round.id);
+  const { getContributors, setContributors } = useRoundShotAttributions(
+    round.id
+  );
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
@@ -165,6 +169,11 @@ export function ScoringHolesBody({
         const tappedTags = getTags(s.id, currentHoleNumber);
         const override = getOverride(s.id);
         const enabledTags = effectiveEnabledTags(round.scoringRule, override);
+        // Scramble shot-picker plumbing (no-op for stroke rounds).
+        const contributorIds = isScramble
+          ? getContributors(s.id, currentHoleNumber)
+          : undefined;
+        const teamMembers = isScramble ? s.members : undefined;
 
         return (
           <ScoreEntryAccordion
@@ -196,6 +205,15 @@ export function ScoringHolesBody({
             onChangeEnabledTags={(next) => {
               void setOverride(s.id, next);
             }}
+            teamMembers={teamMembers}
+            contributorIds={contributorIds}
+            onChangeContributors={
+              isScramble
+                ? (next) => {
+                    void setContributors(s.id, currentHoleNumber, next);
+                  }
+                : undefined
+            }
           />
         );
       })}
