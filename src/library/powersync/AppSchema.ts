@@ -7,6 +7,7 @@ export const FRIENDSHIPS_TABLE = 'friendships';
 export const FRIEND_REQUESTS_TABLE = 'friend_requests';
 export const CUSTOM_PLAYERS_TABLE = 'custom_players';
 export const COMMENTS_TABLE = 'comments';
+export const ROUND_LIKES_TABLE = 'round_likes';
 
 // JSON-shaped columns (course_snapshot, participants, player_ids,
 // teams) are declared as `column.text` here because PowerSync's local
@@ -121,6 +122,25 @@ const comments = new Table(
   { indexes: { by_round: ['round_id'] } }
 );
 
+// Round likes — at-most-one row per (round, liker). Hard-delete on
+// toggle-off (no soft-delete; see migration 013's note). Sync streams
+// scope by `owner_user_id` (denormalized on the row by the server-side
+// trigger), so clients leave that column null on insert.
+const round_likes = new Table(
+  {
+    round_id: column.text,
+    liker_user_id: column.text,
+    owner_user_id: column.text,
+    created_at: column.text
+  },
+  {
+    indexes: {
+      by_round: ['round_id'],
+      by_round_liker: ['round_id', 'liker_user_id']
+    }
+  }
+);
+
 export const AppSchema = new Schema({
   scorecards,
   scorecard_scores,
@@ -128,7 +148,8 @@ export const AppSchema = new Schema({
   friendships,
   friend_requests,
   custom_players,
-  comments
+  comments,
+  round_likes
 });
 
 export type Database = (typeof AppSchema)['types'];
@@ -139,3 +160,4 @@ export type FriendshipRecord = Database['friendships'];
 export type FriendRequestRecord = Database['friend_requests'];
 export type CustomPlayerRecord = Database['custom_players'];
 export type CommentRecord = Database['comments'];
+export type RoundLikeRecord = Database['round_likes'];

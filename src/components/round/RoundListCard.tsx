@@ -44,6 +44,7 @@ import {
   scorerIdForUser,
 } from '@/library/golf/scoring';
 import { userParticipantKey } from '@/library/golf/participantKey';
+import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -71,6 +72,9 @@ export function RoundListCard({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const { count: commentCount } = useCommentSummary(round.id);
+  const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
+    round.id
+  );
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const { topLineLeft, topLineRight } = useMemo(
@@ -110,7 +114,10 @@ export function RoundListCard({
         holes={<HolesTabPlaceholder />}
       />
       <RoundActionBar
+        liked={likedByMe}
+        likeCount={likeCount}
         commentCount={commentCount}
+        onToggleLike={toggleLike}
         onOpenComments={() => setSheetVisible(true)}
       />
       <CommentsSheet

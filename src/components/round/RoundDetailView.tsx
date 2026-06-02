@@ -47,6 +47,7 @@ import {
   getScorerProgress,
   scorerIdForUser,
 } from '@/library/golf/scoring';
+import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -102,6 +103,9 @@ export function RoundDetailView({
   const router = useRouter();
 
   const { count: commentCount } = useCommentSummary(round.id);
+  const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
+    round.id
+  );
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const { topLineLeft, topLineRight } = useMemo(
@@ -193,7 +197,10 @@ export function RoundDetailView({
           holes={holesBody}
         />
         <RoundActionBar
+          liked={likedByMe}
+          likeCount={likeCount}
           commentCount={commentCount}
+          onToggleLike={toggleLike}
           onOpenComments={() => setSheetVisible(true)}
         />
       </View>

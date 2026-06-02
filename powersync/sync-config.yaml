@@ -198,3 +198,36 @@ streams:
       JOIN friendships ON friendships.friend_user_id = scorecards.owner_user_id
       WHERE friendships.user_id = auth.user_id()
     auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Round likes (added with migration 013_round_likes.sql).
+  #
+  # Mirrors the comments pair above — one stream for likes on the
+  # user's own rounds, one for likes on friend rounds. PowerSync
+  # dedups across streams; a like the user authored on their own
+  # round appears once locally even though both streams could
+  # match.
+  #
+  # The denormalized `owner_user_id` on each row means we *could*
+  # scope by `owner_user_id = auth.user_id()` without the JOIN,
+  # but the JOIN keeps the pattern identical to comments and makes
+  # the policy easier to reason about (visibility = "see the
+  # parent round").
+  # ---------------------------------------------------------------
+
+  own_round_likes:
+    query: |
+      SELECT round_likes.*
+      FROM round_likes
+      JOIN scorecards ON scorecards.id = round_likes.round_id
+      WHERE scorecards.owner_user_id = auth.user_id()
+    auto_subscribe: true
+
+  friend_round_likes:
+    query: |
+      SELECT round_likes.*
+      FROM round_likes
+      JOIN scorecards ON scorecards.id = round_likes.round_id
+      JOIN friendships ON friendships.friend_user_id = scorecards.owner_user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true
