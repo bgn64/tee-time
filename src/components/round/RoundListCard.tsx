@@ -33,6 +33,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import { CommentsSheet } from './CommentsSheet';
 import { EditorialHeader } from './EditorialHeader';
+import { HolesTabContent } from './HolesTabContent';
 import { RoundActionBar } from './RoundActionBar';
 import { SummaryTabContent } from './SummaryTabContent';
 import { TabbedRoundShell } from './TabbedRoundShell';
@@ -48,8 +49,6 @@ import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
-
-import { HolesTabPlaceholder } from './HolesTabPlaceholder';
 
 type Props = {
   round: Round;
@@ -111,7 +110,7 @@ export function RoundListCard({
             <HorizontalScorecard round={round} />
           </View>
         }
-        holes={<HolesTabPlaceholder />}
+        holes={<HolesTabContent round={round} />}
       />
       <RoundActionBar
         liked={likedByMe}
