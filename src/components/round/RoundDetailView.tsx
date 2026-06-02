@@ -33,12 +33,12 @@ import { StyleSheet, View } from 'react-native';
 
 import { CommentsSheet } from './CommentsSheet';
 import { EditorialHeader } from './EditorialHeader';
-import { HolesTabPlaceholder } from './HolesTabPlaceholder';
+import { HolesTabContent } from './HolesTabContent';
 import { RoundActionBar } from './RoundActionBar';
 import { ScorerStack } from './ScorerStack';
 import { SummaryTabContent } from './SummaryTabContent';
 import { TabbedRoundShell } from './TabbedRoundShell';
-import { HoleNavBar } from '@/components/scoring/HoleNavBar';
+import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
 import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import { userParticipantKey } from '@/library/golf/participantKey';
@@ -115,46 +115,20 @@ export function RoundDetailView({
   const subtitle = useMemo(() => deriveSubtitle(round), [round]);
   const isInProgress = !round.completedAt;
 
-  // Holes tab body — preserves legacy editing flow through Phase 1.
-  // Phase 3 replaces this entirely with HolesTabContent.
-  const navTees = useMemo(() => {
-    if (!isEditing || currentHoleNumber == null) return [];
-    const currentHole = round.course.holes.find(
-      (h) => h.number === currentHoleNumber
-    );
-    if (!currentHole) return [];
-    const courseTees = round.course.tees ?? [];
-    return courseTees
-      .map((tee) => ({
-        id: tee.id,
-        name: tee.name,
-        color: tee.color,
-        yardage: currentHole.yardages?.[tee.id],
-      }))
-      .filter((t) => Number.isFinite(t.yardage))
-      .sort((a, b) => {
-        const at =
-          courseTees.find((ct) => ct.id === a.id)?.totalYardage ?? -1;
-        const bt =
-          courseTees.find((ct) => ct.id === b.id)?.totalYardage ?? -1;
-        return bt - at;
-      });
-  }, [isEditing, currentHoleNumber, round.course]);
-
-  const maxHole = round.course.holes.length;
-
+  // Holes tab body — replaces the Phase 1 interim arrangement. In
+  // editing mode the user sees `HoleStepperCombo` + `ScorerStack`
+  // (with score-entry chips); Phase 4 replaces the ScorerStack with
+  // per-scorer entry blocks that include achievement-tag accordions.
+  // In viewing mode the user sees the new `HolesTabContent`
+  // (read-only per-hole viewer).
   const holesBody =
     isEditing && currentHoleNumber != null && onChangeCurrentHole ? (
       <View style={styles.holesEditing}>
-        <HoleNavBar
-          holeNumber={currentHoleNumber}
-          par={
-            round.course.holes.find((h) => h.number === currentHoleNumber)
-              ?.par ?? 0
-          }
-          tees={navTees}
-          maxHole={maxHole}
-          onChange={onChangeCurrentHole}
+        <HoleStepperCombo
+          current={currentHoleNumber}
+          range={round.holeRange}
+          allHoles={round.course.holes}
+          onPickHole={onChangeCurrentHole}
         />
         <ScorerStack
           round={round}
@@ -165,7 +139,7 @@ export function RoundDetailView({
         />
       </View>
     ) : (
-      <HolesTabPlaceholder />
+      <HolesTabContent round={round} />
     );
 
   return (
