@@ -40,3 +40,8 @@ export function newTeamId(): string {
 export function newCommentId(): string {
   return uuid();
 }
+
+/** Stable id for a new round like row (server-side `round_likes.id`). */
+export function newRoundLikeId(): string {
+  return uuid();
+}
