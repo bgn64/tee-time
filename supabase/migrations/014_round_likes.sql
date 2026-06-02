@@ -23,7 +23,7 @@
 --     migration 005, matching the comments table from migration 007.
 --
 -- Run once against your Supabase project after migrations 001
--- through 012 have been applied. Idempotent re-runs are out of
+-- through 013 have been applied. Idempotent re-runs are out of
 -- scope: drop the table manually if you need to re-apply.
 
 -- =====================================================

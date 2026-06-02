@@ -11,7 +11,7 @@
 -- Only used by scramble rounds. Stroke rounds never write to this
 -- table (every shot is attributed to the single scorer).
 --
--- Shape mirrors `scorecard_achievement_tags` from migration 010:
+-- Shape mirrors `scorecard_achievement_tags` from migration 011:
 --   * Composite natural key `(scorecard_id, team_id, hole_number)`
 --     enforced via UNIQUE. Upsert on (team, hole).
 --   * `owner_user_id` denormalized for sync-rule scoping; trigger
@@ -21,7 +21,7 @@
 --     element is the tee shot per Q6 (plan.md §Phase 6 risks).
 --
 -- Run once against your Supabase project after migrations 001
--- through 011 have been applied.
+-- through 012 have been applied.
 
 -- =====================================================
 -- Table

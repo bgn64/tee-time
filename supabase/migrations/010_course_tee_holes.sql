@@ -36,8 +36,12 @@
 -- See plan.md §"Deferred / future work" + Phase 2 for the rationale.
 --
 -- Run once against your Supabase project after migrations 001
--- through 008 have been applied. Idempotent re-runs are out of
--- scope: drop the tables manually if you need to re-apply.
+-- through 009 have been applied. Idempotent re-runs are safe
+-- (every CREATE uses IF NOT EXISTS; every policy / trigger is
+-- dropped before recreate) — Phase 2 of the round-views redesign
+-- ships migration 010 with idempotency guards so a re-deploy
+-- after a partial Phase 2 push doesn't fail on already-existing
+-- tables.
 
 -- =====================================================
 -- Extensions
@@ -51,7 +55,7 @@ create extension if not exists "pgcrypto";
 -- Tables
 -- =====================================================
 
-create table public.course_tee_sets (
+create table if not exists public.course_tee_sets (
   id            uuid         not null default gen_random_uuid(),
   course_id     text         not null references public.courses (id) on delete cascade,
   name          text         not null,
@@ -76,10 +80,10 @@ create table public.course_tee_sets (
     ))
 );
 
-create index course_tee_sets_course_idx
+create index if not exists course_tee_sets_course_idx
   on public.course_tee_sets (course_id);
 
-create table public.course_tee_holes (
+create table if not exists public.course_tee_holes (
   tee_set_id     uuid         not null references public.course_tee_sets (id) on delete cascade,
   hole_number    integer      not null,
   par            integer      not null check (par between 1 and 7),
@@ -92,7 +96,7 @@ create table public.course_tee_holes (
     check (hole_number between 1 and 36)
 );
 
-create index course_tee_holes_tee_set_idx
+create index if not exists course_tee_holes_tee_set_idx
   on public.course_tee_holes (tee_set_id);
 
 -- =====================================================
@@ -101,10 +105,12 @@ create index course_tee_holes_tee_set_idx
 -- Reuse the generic public.touch_updated_at function defined in
 -- migration 008.
 
+drop trigger if exists course_tee_sets_touch_updated_at on public.course_tee_sets;
 create trigger course_tee_sets_touch_updated_at
   before update on public.course_tee_sets
   for each row execute function public.touch_updated_at();
 
+drop trigger if exists course_tee_holes_touch_updated_at on public.course_tee_holes;
 create trigger course_tee_holes_touch_updated_at
   before update on public.course_tee_holes
   for each row execute function public.touch_updated_at();
@@ -131,6 +137,7 @@ create trigger course_tee_holes_touch_updated_at
 alter table public.course_tee_sets enable row level security;
 alter table public.course_tee_holes enable row level security;
 
+drop policy if exists course_tee_sets_select on public.course_tee_sets;
 create policy course_tee_sets_select
   on public.course_tee_sets
   for select
@@ -144,6 +151,7 @@ create policy course_tee_sets_select
     )
   );
 
+drop policy if exists course_tee_sets_modify_own on public.course_tee_sets;
 create policy course_tee_sets_modify_own
   on public.course_tee_sets
   for all
@@ -167,6 +175,7 @@ create policy course_tee_sets_modify_own
     )
   );
 
+drop policy if exists course_tee_holes_select on public.course_tee_holes;
 create policy course_tee_holes_select
   on public.course_tee_holes
   for select
@@ -181,6 +190,7 @@ create policy course_tee_holes_select
     )
   );
 
+drop policy if exists course_tee_holes_modify_own on public.course_tee_holes;
 create policy course_tee_holes_modify_own
   on public.course_tee_holes
   for all

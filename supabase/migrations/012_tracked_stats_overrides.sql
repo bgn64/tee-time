@@ -18,8 +18,7 @@
 -- the parent scorecards row and rejects mismatches.
 --
 -- Run once against your Supabase project after migrations 001
--- through 010 have been applied. Idempotent re-runs are out of
--- scope: drop the table manually if you need to re-apply.
+-- through 011 have been applied.
 
 -- =====================================================
 -- Table
