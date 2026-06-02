@@ -44,6 +44,32 @@ export type ThemeColors = {
    * them per-View). Spread: `style={{...colors.shadowCard}}`.
    */
   shadowCard: ShadowSpec;
+  /**
+   * Highlight colour for scorecard cells that diverge from the prior
+   * tee group's par/hcp. Mockup uses the accent colour for this; we
+   * alias it explicitly so future palette tweaks can decouple
+   * divergence highlighting from the accent (likes / live indicator)
+   * if needed.
+   */
+  divergent: string;
+  /** Canonical tee colour tokens. */
+  teeBlue: string;
+  teeWhite: string;
+  teeRed: string;
+  teeGold: string;
+  /**
+   * Deterministic fallback palette for non-canonical tee names
+   * ("Senior", "Member", "Forward Gold", etc.). Tee colour assignment
+   * (see `src/library/golf/teeColor.ts`) hashes the tee's stable id
+   * mod 6 to pick one of these, then resolves in-round collisions by
+   * incrementing the index.
+   */
+  teeFallback1: string;
+  teeFallback2: string;
+  teeFallback3: string;
+  teeFallback4: string;
+  teeFallback5: string;
+  teeFallback6: string;
   tabBar: string;
   tabBarActive: string;
   tabBarInactive: string;
@@ -74,6 +100,17 @@ export const themes: Record<ThemeName, ThemeColors> = {
       shadowRadius: 14,
       elevation: 3,
     },
+    divergent: '#d94835',
+    teeBlue: '#4b8fd1',
+    teeWhite: '#8a8f81',
+    teeRed: '#c9442f',
+    teeGold: '#b08a1d',
+    teeFallback1: '#a05fb2',
+    teeFallback2: '#0e9491',
+    teeFallback3: '#d77a2e',
+    teeFallback4: '#4a6f3a',
+    teeFallback5: '#c93b7a',
+    teeFallback6: '#5c5a7d',
     tabBar: '#ffffff',
     tabBarActive: '#2f7d4b',
     tabBarInactive: '#718077',
@@ -99,6 +136,17 @@ export const themes: Record<ThemeName, ThemeColors> = {
       shadowRadius: 14,
       elevation: 6,
     },
+    divergent: '#f97066',
+    teeBlue: '#6aa9e5',
+    teeWhite: '#c2c8b8',
+    teeRed: '#f08e7e',
+    teeGold: '#d4a839',
+    teeFallback1: '#c08fd2',
+    teeFallback2: '#4cc7c4',
+    teeFallback3: '#ef9b5a',
+    teeFallback4: '#8eb978',
+    teeFallback5: '#ea6fa1',
+    teeFallback6: '#8d8baf',
     tabBar: '#18222b',
     tabBarActive: '#91d45f',
     tabBarInactive: '#91a095',

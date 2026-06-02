@@ -39,7 +39,7 @@ import { ScorerStack } from './ScorerStack';
 import { SummaryTabContent } from './SummaryTabContent';
 import { TabbedRoundShell } from './TabbedRoundShell';
 import { HoleNavBar } from '@/components/scoring/HoleNavBar';
-import { ReadOnlyScorecard } from '@/components/scoring/ReadOnlyScorecard';
+import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import {
@@ -184,7 +184,7 @@ export function RoundDetailView({
           summary={<SummaryTabContent round={round} />}
           scorecard={
             <View style={styles.tabBody}>
-              <ReadOnlyScorecard
+              <HorizontalScorecard
                 round={round}
                 currentHoleNumber={currentHoleNumber}
                 onHolePress={onChangeCurrentHole}

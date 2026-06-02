@@ -24,14 +24,67 @@ export type Tee = {
   name: string;
   /** CSS hex (e.g. "#4a90e2") OR a TeamAvatarCluster-known name (e.g. "Blue"). */
   color?: string;
+  /**
+   * Canonical tee colour token name. When set, `teeColor.assignTeeColors`
+   * uses this instead of hashing `id`. Useful for custom courses where
+   * the editor explicitly assigns one of the canonical tee names
+   * (Blue / White / Red / Gold) or one of the fallback palette slots.
+   */
+  colorToken?: string;
   slope?: number;
   rating?: number;
   totalYardage?: number;
+  /**
+   * Per-tee per-hole rows. When present, takes precedence over
+   * `Course.holes[*].par` / `.handicapIndex` / `.yardages[id]` for
+   * any hole in the array. Missing entries fall back to the
+   * course-level `Hole` row's scalar values via `getHoleStats()`.
+   *
+   * Populated by:
+   *   - `enrichCatalogCourse()` for opengolf courses → all rows
+   *     share the same scalar `par`/`handicapIndex` (Branch B; the
+   *     upstream API doesn't expose per-tee divergence today). The
+   *     per-tee `yardage` comes from `holes[*].yardages[tee.name]`.
+   *   - Custom course editor (future) → per-tee divergent values
+   *     supported.
+   *
+   * When `holes` is empty / undefined the scorecard collapses every
+   * tee into a single "PAR" + "HCP" row for the round and reads from
+   * `Course.holes[*]` instead.
+   */
+  holes?: CourseTeeHole[];
+};
+
+/**
+ * Per-tee per-hole row. The data shape that `course_tee_holes` (server)
+ * and `Tee.holes` (client) both use.
+ *
+ * `handicapIndex` is the stroke-index value (1–18) — what golfers call
+ * "handicap" on a scorecard. We name it `handicapIndex` here to mirror
+ * the existing `Hole.handicapIndex` field and to avoid confusion with
+ * a player's handicap rating.
+ *
+ * All three numeric fields are optional even though `par` is logically
+ * required: a tee row may exist with par-only or yardage-only data,
+ * and the render path falls back to the scalar `Hole` row for missing
+ * pieces.
+ */
+export type CourseTeeHole = {
+  holeNumber: number;
+  par?: number;
+  handicapIndex?: number;
+  yardage?: number;
 };
 
 export type Hole = {
   number: number;
   par: number;
+  /**
+   * Per-hole stroke index when known. Captured by the OpenGolfAPI
+   * enrichment path as a scalar (one value per hole, not per tee).
+   * Per-tee divergence lives on `Tee.holes[].handicapIndex`.
+   */
+  handicapIndex?: number;
   /** Per-tee yardages keyed by `Tee.id`. */
   yardages?: Record<string, number>;
   /** Optional fallback for displays that don't filter by tee. */
