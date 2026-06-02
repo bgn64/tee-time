@@ -16,11 +16,25 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { SummaryAggregateTiles } from './SummaryAggregateTiles';
 import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { teeSwatch } from '@/components/scoring/TeePickerSheet';
+import {
+  computeScorerAggregates,
+  filterAggregatesByEnabled,
+} from '@/library/golf/aggregateStats';
+import {
+  effectiveEnabledTags,
+} from '@/library/golf/achievementTags';
 import { findTee } from '@/library/golf/courseHelpers';
-import { formatScore, playerProgress } from '@/library/golf/scoring';
+import {
+  formatScore,
+  holesInRange,
+  playerProgress,
+} from '@/library/golf/scoring';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round, Tee } from '@/types/golf';
@@ -40,10 +54,17 @@ export function SummaryTabContent({ round }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const resolver = useParticipantResolver(round.playerIds ?? []);
+  const { rows: tagRows } = useRoundAchievementTags(round.id);
+  const { getOverride } = useRoundTrackedStats(round.id);
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
   const isCompleted = !!round.completedAt;
+
+  const visibleHoles = useMemo(
+    () => holesInRange(round.course.holes, round.holeRange),
+    [round.course.holes, round.holeRange]
+  );
 
   const scorers: Scorer[] = useMemo(() => {
     if (isScramble) {
@@ -113,6 +134,16 @@ export function SummaryTabContent({ round }: Props) {
             : tee.name
           : null;
 
+        // Aggregate tiles — derived from the scorer's tag rows
+        // filtered through their per-round enabled set.
+        const rawAggregates = computeScorerAggregates(
+          tagRows,
+          s.id,
+          visibleHoles
+        );
+        const enabled = effectiveEnabledTags(round.scoringRule, getOverride(s.id));
+        const aggregates = filterAggregatesByEnabled(rawAggregates, enabled);
+
         return (
           <View key={s.id} style={i > 0 ? styles.rowSep : styles.row}>
             {i > 0 ? <View style={styles.row} /> : null}
@@ -147,6 +178,7 @@ export function SummaryTabContent({ round }: Props) {
                 ) : null}
               </View>
             </View>
+            <SummaryAggregateTiles aggregates={aggregates} />
           </View>
         );
       })}

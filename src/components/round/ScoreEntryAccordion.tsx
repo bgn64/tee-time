@@ -25,9 +25,11 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AchievementTagRow } from './AchievementTagRow';
+import { GearToggleButton } from './GearToggleButton';
 import { ScorerRow } from './ScorerRow';
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
+  ACHIEVEMENT_TAGS,
   defaultEnabledTagsFor,
   type TagKey,
 } from '@/library/golf/achievementTags';
@@ -61,6 +63,13 @@ type Props = {
    */
   enabledTags?: readonly TagKey[] | null;
   onToggleTag: (tagKey: TagKey) => void;
+  /**
+   * Phase 5: per-scorer tracked-stats override writer. When set, the
+   * accordion shows a gear toggle in the Detail header; tapping it
+   * swaps the body from per-hole tag entry to a filter panel listing
+   * every available tag. Calls back with the new enabled set.
+   */
+  onChangeEnabledTags?: (next: readonly TagKey[]) => void;
 
   /** Optional slot for Phase 5's gear toggle (placeholder for now). */
   detailHeaderSlot?: ReactNode;
@@ -83,16 +92,38 @@ export function ScoreEntryAccordion({
   tappedTags,
   enabledTags,
   onToggleTag,
+  onChangeEnabledTags,
   detailHeaderSlot,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [expanded, setExpanded] = useState(false);
+  const [filterMode, setFilterMode] = useState(false);
 
   const effectiveEnabled = useMemo(
     () => enabledTags ?? defaultEnabledTagsFor(scoringRule),
     [enabledTags, scoringRule]
   );
+
+  // Available tags for the filter panel: every defined tag, filtered
+  // by scoring rule (whose_shots only appears for scramble). The
+  // panel renders chips with explicit on/off state.
+  const availableTags = useMemo<readonly TagKey[]>(() => {
+    return ACHIEVEMENT_TAGS.filter(
+      (t) => !t.scrambleOnly || scoringRule === 'scramble'
+    ).map((t) => t.key);
+  }, [scoringRule]);
+
+  function handleFilterToggle(tagKey: TagKey) {
+    if (!onChangeEnabledTags) return;
+    const set = new Set(effectiveEnabled);
+    if (set.has(tagKey)) set.delete(tagKey);
+    else set.add(tagKey);
+    // Preserve the canonical order from ACHIEVEMENT_TAGS so the
+    // saved list reads predictably.
+    const next = availableTags.filter((k) => set.has(k));
+    onChangeEnabledTags(next);
+  }
 
   return (
     <View style={styles.block}>
@@ -128,13 +159,31 @@ export function ScoreEntryAccordion({
       </View>
       {expanded ? (
         <View style={styles.accordionBody}>
-          <AchievementTagRow
-            mode="edit"
-            tags={tappedTags}
-            enabledTags={effectiveEnabled}
-            isScramble={scoringRule === 'scramble'}
-            onToggle={onToggleTag}
-          />
+          {onChangeEnabledTags ? (
+            <View style={styles.gearRow}>
+              <GearToggleButton
+                active={filterMode}
+                onToggle={() => setFilterMode((v) => !v)}
+              />
+            </View>
+          ) : null}
+          {filterMode && onChangeEnabledTags ? (
+            <AchievementTagRow
+              mode="filter"
+              tags={effectiveEnabled}
+              enabledTags={availableTags}
+              isScramble={scoringRule === 'scramble'}
+              onToggle={handleFilterToggle}
+            />
+          ) : (
+            <AchievementTagRow
+              mode="edit"
+              tags={tappedTags}
+              enabledTags={effectiveEnabled}
+              isScramble={scoringRule === 'scramble'}
+              onToggle={onToggleTag}
+            />
+          )}
         </View>
       ) : null}
     </View>
@@ -186,6 +235,11 @@ function makeStyles(colors: ThemeColors) {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.hairline,
       backgroundColor: colors.chipBg,
+    },
+    gearRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      marginBottom: 2,
     },
   });
 }

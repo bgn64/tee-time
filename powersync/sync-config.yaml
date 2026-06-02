@@ -259,3 +259,26 @@ streams:
       JOIN friendships ON friendships.friend_user_id = scorecard_achievement_tags.owner_user_id
       WHERE friendships.user_id = auth.user_id()
     auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Tracked-stats overrides (added with migration 011).
+  #
+  # Same own + friend pair pattern as achievement tags. Friends
+  # need read access so they compute aggregates using the same
+  # enabled-tag set the owner picked.
+  # ---------------------------------------------------------------
+
+  scorecard_tracked_stats:
+    query: |
+      SELECT *
+      FROM scorecard_tracked_stats
+      WHERE owner_user_id = auth.user_id()
+    auto_subscribe: true
+
+  friend_scorecard_tracked_stats:
+    query: |
+      SELECT scorecard_tracked_stats.*
+      FROM scorecard_tracked_stats
+      JOIN friendships ON friendships.friend_user_id = scorecard_tracked_stats.owner_user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true
