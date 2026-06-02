@@ -20,8 +20,7 @@
 --     lets us recompute aggregates without scanning every hole.
 --
 -- Run once against your Supabase project after migrations 001
--- through 009 have been applied. Idempotent re-runs are out of
--- scope: drop the table manually if you need to re-apply.
+-- through 010 have been applied.
 
 -- =====================================================
 -- Table
