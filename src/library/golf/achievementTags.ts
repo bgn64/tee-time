@@ -111,11 +111,11 @@ export function defaultEnabledTagsFor(
  */
 export function effectiveEnabledTags(
   scoringRule: ScoringRule,
-  override?: { enabled_tags?: readonly TagKey[] } | null
+  override?: { enabledTags?: readonly TagKey[] } | null
 ): readonly TagKey[] {
   if (!override) return defaultEnabledTagsFor(scoringRule);
   // Explicit empty list = "scorer turned every tag off"; respect it.
-  return override.enabled_tags ?? defaultEnabledTagsFor(scoringRule);
+  return override.enabledTags ?? defaultEnabledTagsFor(scoringRule);
 }
 
 /**

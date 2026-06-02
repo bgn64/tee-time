@@ -17,6 +17,7 @@ import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { SummaryAggregateTiles } from './SummaryAggregateTiles';
+import { TeamContributionRow } from './TeamContributionRow';
 import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { teeSwatch } from '@/components/scoring/TeePickerSheet';
 import {
@@ -34,6 +35,10 @@ import {
 } from '@/library/golf/scoring';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import {
+  summarizeContributions,
+  useRoundShotAttributions,
+} from '@/library/golf/useRoundShotAttributions';
 import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -56,6 +61,7 @@ export function SummaryTabContent({ round }: Props) {
   const resolver = useParticipantResolver(round.playerIds ?? []);
   const { rows: tagRows } = useRoundAchievementTags(round.id);
   const { getOverride } = useRoundTrackedStats(round.id);
+  const { rows: shotRows } = useRoundShotAttributions(round.id);
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
@@ -179,6 +185,16 @@ export function SummaryTabContent({ round }: Props) {
               </View>
             </View>
             <SummaryAggregateTiles aggregates={aggregates} />
+            {isScramble ? (
+              <TeamContributionRow
+                contributions={summarizeContributions(
+                  shotRows,
+                  s.id,
+                  s.members.map((m) => m.id)
+                )}
+                members={s.members}
+              />
+            ) : null}
           </View>
         );
       })}

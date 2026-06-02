@@ -4,6 +4,7 @@ export const SCORECARDS_TABLE = 'scorecards';
 export const SCORECARD_SCORES_TABLE = 'scorecard_scores';
 export const SCORECARD_ACHIEVEMENT_TAGS_TABLE = 'scorecard_achievement_tags';
 export const SCORECARD_TRACKED_STATS_TABLE = 'scorecard_tracked_stats';
+export const SCORECARD_SHOT_ATTRIBUTIONS_TABLE = 'scorecard_shot_attributions';
 export const PROFILES_TABLE = 'profiles';
 export const FRIENDSHIPS_TABLE = 'friendships';
 export const FRIEND_REQUESTS_TABLE = 'friend_requests';
@@ -188,6 +189,27 @@ const scorecard_tracked_stats = new Table(
   }
 );
 
+// Per-(team, hole) shot attribution for scramble. `contributor_ids`
+// is a JSON array of participantKeys; the first element is the tee
+// shot (per Q6 plan decision). List length is allowed to drift from
+// the team's stroke count - renderers truncate/pad as needed.
+const scorecard_shot_attributions = new Table(
+  {
+    scorecard_id: column.text,
+    owner_user_id: column.text,
+    team_id: column.text,
+    hole_number: column.integer,
+    contributor_ids: column.text,
+    updated_at: column.text
+  },
+  {
+    indexes: {
+      by_scorecard: ['scorecard_id'],
+      by_team_hole: ['scorecard_id', 'team_id', 'hole_number']
+    }
+  }
+);
+
 export const AppSchema = new Schema({
   scorecards,
   scorecard_scores,
@@ -198,7 +220,8 @@ export const AppSchema = new Schema({
   comments,
   round_likes,
   scorecard_achievement_tags,
-  scorecard_tracked_stats
+  scorecard_tracked_stats,
+  scorecard_shot_attributions
 });
 
 export type Database = (typeof AppSchema)['types'];
@@ -212,3 +235,4 @@ export type CommentRecord = Database['comments'];
 export type RoundLikeRecord = Database['round_likes'];
 export type ScorecardAchievementTagRecord = Database['scorecard_achievement_tags'];
 export type ScorecardTrackedStatsRecord = Database['scorecard_tracked_stats'];
+export type ScorecardShotAttributionRecord = Database['scorecard_shot_attributions'];
