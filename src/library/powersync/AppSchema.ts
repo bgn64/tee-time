@@ -2,6 +2,7 @@ import { column, Schema, Table } from '@powersync/common';
 
 export const SCORECARDS_TABLE = 'scorecards';
 export const SCORECARD_SCORES_TABLE = 'scorecard_scores';
+export const SCORECARD_ACHIEVEMENT_TAGS_TABLE = 'scorecard_achievement_tags';
 export const PROFILES_TABLE = 'profiles';
 export const FRIENDSHIPS_TABLE = 'friendships';
 export const FRIEND_REQUESTS_TABLE = 'friend_requests';
@@ -141,6 +142,30 @@ const round_likes = new Table(
   }
 );
 
+// Per-(scorer, hole) achievement tags. `tags` is a JSON array of
+// opaque string keys (the client owns the vocabulary in
+// `src/library/golf/achievementTags.ts`). PowerSync local SQLite
+// stores it as TEXT; the upload connector re-parses it into jsonb
+// before posting to Supabase (see SupabaseConnector's
+// JSON_COLUMNS_BY_TABLE map). `owner_user_id` is filled by the
+// server-side trigger from the parent scorecards row.
+const scorecard_achievement_tags = new Table(
+  {
+    scorecard_id: column.text,
+    owner_user_id: column.text,
+    scorer_id: column.text,
+    hole_number: column.integer,
+    tags: column.text,
+    updated_at: column.text
+  },
+  {
+    indexes: {
+      by_scorecard: ['scorecard_id'],
+      by_scorer_hole: ['scorecard_id', 'scorer_id', 'hole_number']
+    }
+  }
+);
+
 export const AppSchema = new Schema({
   scorecards,
   scorecard_scores,
@@ -149,7 +174,8 @@ export const AppSchema = new Schema({
   friend_requests,
   custom_players,
   comments,
-  round_likes
+  round_likes,
+  scorecard_achievement_tags
 });
 
 export type Database = (typeof AppSchema)['types'];
@@ -161,3 +187,4 @@ export type FriendRequestRecord = Database['friend_requests'];
 export type CustomPlayerRecord = Database['custom_players'];
 export type CommentRecord = Database['comments'];
 export type RoundLikeRecord = Database['round_likes'];
+export type ScorecardAchievementTagRecord = Database['scorecard_achievement_tags'];

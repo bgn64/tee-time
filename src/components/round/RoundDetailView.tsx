@@ -35,10 +35,9 @@ import { CommentsSheet } from './CommentsSheet';
 import { EditorialHeader } from './EditorialHeader';
 import { HolesTabContent } from './HolesTabContent';
 import { RoundActionBar } from './RoundActionBar';
-import { ScorerStack } from './ScorerStack';
+import { ScoringHolesBody } from './ScoringHolesBody';
 import { SummaryTabContent } from './SummaryTabContent';
 import { TabbedRoundShell } from './TabbedRoundShell';
-import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
 import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import { userParticipantKey } from '@/library/golf/participantKey';
@@ -115,29 +114,19 @@ export function RoundDetailView({
   const subtitle = useMemo(() => deriveSubtitle(round), [round]);
   const isInProgress = !round.completedAt;
 
-  // Holes tab body — replaces the Phase 1 interim arrangement. In
-  // editing mode the user sees `HoleStepperCombo` + `ScorerStack`
-  // (with score-entry chips); Phase 4 replaces the ScorerStack with
-  // per-scorer entry blocks that include achievement-tag accordions.
-  // In viewing mode the user sees the new `HolesTabContent`
-  // (read-only per-hole viewer).
+  // Holes tab body — editing surface uses per-scorer entry blocks
+  // (ScoreEntryAccordion) inside `ScoringHolesBody`. Read-only feed
+  // surfaces use `HolesTabContent` (scorer-pick + stepper + hole
+  // context + read-only tags).
   const holesBody =
     isEditing && currentHoleNumber != null && onChangeCurrentHole ? (
-      <View style={styles.holesEditing}>
-        <HoleStepperCombo
-          current={currentHoleNumber}
-          range={round.holeRange}
-          allHoles={round.course.holes}
-          onPickHole={onChangeCurrentHole}
-        />
-        <ScorerStack
-          round={round}
-          isEditing={isEditing}
-          currentHoleNumber={currentHoleNumber}
-          onChangeScore={onChangeScore}
-          onPressTeeForScorer={onPressTeeForScorer}
-        />
-      </View>
+      <ScoringHolesBody
+        round={round}
+        currentHoleNumber={currentHoleNumber}
+        onChangeCurrentHole={onChangeCurrentHole}
+        onChangeScore={onChangeScore}
+        onPressTeeForScorer={onPressTeeForScorer}
+      />
     ) : (
       <HolesTabContent round={round} />
     );

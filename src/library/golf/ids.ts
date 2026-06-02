@@ -45,3 +45,8 @@ export function newCommentId(): string {
 export function newRoundLikeId(): string {
   return uuid();
 }
+
+/** Stable id for a new achievement-tag row (server-side `scorecard_achievement_tags.id`). */
+export function newAchievementTagId(): string {
+  return uuid();
+}

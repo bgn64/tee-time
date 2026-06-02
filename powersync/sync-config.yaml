@@ -231,3 +231,31 @@ streams:
       JOIN friendships ON friendships.friend_user_id = scorecards.owner_user_id
       WHERE friendships.user_id = auth.user_id()
     auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Achievement tags (added with migration 010_achievement_tags.sql).
+  #
+  # Mirrors the scorecard_scores / friend_scorecard_scores pair —
+  # one stream for tags on the user's own scorecards, one for tags
+  # on friend scorecards. The denormalized `owner_user_id` on each
+  # row scopes the streams without a JOIN.
+  #
+  # The `tags` column is jsonb on the server, TEXT in local
+  # PowerSync SQLite, and re-parsed at the upload boundary by
+  # SupabaseConnector's JSON_COLUMNS_BY_TABLE map.
+  # ---------------------------------------------------------------
+
+  scorecard_achievement_tags:
+    query: |
+      SELECT *
+      FROM scorecard_achievement_tags
+      WHERE owner_user_id = auth.user_id()
+    auto_subscribe: true
+
+  friend_scorecard_achievement_tags:
+    query: |
+      SELECT scorecard_achievement_tags.*
+      FROM scorecard_achievement_tags
+      JOIN friendships ON friendships.friend_user_id = scorecard_achievement_tags.owner_user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true

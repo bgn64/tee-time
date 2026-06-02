@@ -22,14 +22,16 @@
  */
 
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { AchievementTagRow } from './AchievementTagRow';
 import { HoleContextSummary } from './HoleContextSummary';
 import { ScorerPickPill, type ScorerPickOption } from './ScorerPickPill';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { findTee } from '@/library/golf/courseHelpers';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -136,6 +138,11 @@ export function HolesTabContent({ round }: Props) {
   }, [round.scores, focused]);
   const focusedStrokes = strokesByHole.get(focusedHole) ?? null;
 
+  // Read-only achievement tags for the focused (scorer, hole). The
+  // hook returns getTags() so we don't re-derive on every render.
+  const { getTags } = useRoundAchievementTags(round.id);
+  const tappedTags = focused ? getTags(focused.id, focusedHole) : [];
+
   if (!focused) return null;
 
   return (
@@ -167,9 +174,11 @@ export function HolesTabContent({ round }: Props) {
       ) : null}
 
       <View style={styles.body}>
-        <Text style={styles.placeholder}>
-          Achievement tags coming soon
-        </Text>
+        <AchievementTagRow
+          mode="read"
+          tags={tappedTags}
+          isScramble={isScramble}
+        />
       </View>
     </View>
   );
@@ -190,12 +199,6 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 18,
       paddingTop: 4,
       paddingBottom: 18,
-    },
-    placeholder: {
-      fontSize: 12,
-      color: colors.textMuted,
-      fontStyle: 'italic',
-      textAlign: 'center',
     },
   });
 }
