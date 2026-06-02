@@ -1,32 +1,36 @@
 /**
  * ScoreEntryAccordion — per-scorer entry block for the scoring
- * Holes tab. Replaces the ScorerStack pattern that Phase 1 mounted
- * inline:
+ * Holes tab. The name is historical: there is no longer an accordion.
+ * Everything is shown inline so the user sees the score chips AND the
+ * stat-tracking section without an extra tap.
  *
- *   [ScorerRow with score chips]
- *   [Detail ▸ (right-aligned)]
- *     ↓ when expanded
- *   [AchievementTagRow mode="edit"]
+ * Layout (top → bottom):
+ *   [ScorerSummaryRow]         ← shared with Summary tab for parity
+ *   [ScoreChipRow]             ← −2 / −1 / E / +1 / +2 / custom
+ *   [Stat tracking section]    ← AchievementTagRow or filter chips,
+ *                                with a small inline gear toggle in
+ *                                the top-right corner.
+ *   [Whose shots (scramble)]   ← ShotPicker, when whose_shots enabled
  *
- * The Detail accordion is collapsed by default; tapping the toggle
- * shows the tag editor. Per Q5 decision, there's no "reset to
- * defaults" button — the user can toggle individual tags to land
- * any subset they want. Phase 5 adds the gear toggle inside the
- * accordion body to switch into filter mode.
+ * Per Phase-5 design, the gear toggle swaps the stat tracking section
+ * between two modes:
+ *   - "edit" (default): per-hole tag entry — shows enabled tags only,
+ *     tap to mark "Did well" / "Hurt me".
+ *   - "filter": per-scorer enabled-set editor — shows every available
+ *     tag with on/off toggle (dashed-border off, solid-border on).
  *
- * State: accordion open/closed is local per scorer per round
- * lifetime. We deliberately don't persist it across navigation —
- * the user re-opens whichever rows they need each time they enter
- * the Holes tab. (Matches the no-tab-persistence convention from
- * Phase 1.)
+ * State: gear toggle is local per scorer per session. We don't
+ * persist it across navigation — re-entering the Holes tab lands you
+ * back in edit mode.
  */
 
-import { useMemo, useState, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { AchievementTagRow } from './AchievementTagRow';
 import { GearToggleButton } from './GearToggleButton';
-import { ScorerRow } from './ScorerRow';
+import { ScoreChipRow } from './ScoreChipRow';
+import { ScorerSummaryRow, type ScoreTone } from './ScorerSummaryRow';
 import { ShotPicker } from '@/components/scoring/ShotPicker';
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
@@ -39,18 +43,22 @@ import type { ThemeColors } from '@/library/theme/themes';
 import type { ScoringRule, Tee } from '@/types/golf';
 
 type Props = {
-  // ScorerRow props (passed through)
+  // Identity / summary props
   members: readonly AvatarMember[];
-  name?: string;
-  runningText?: string;
-  runningTone?: 'over' | 'under' | 'even';
-  thruText?: string;
+  name: string;
+  /** Hero score text (e.g. "−3", "E", "+5") for the right-edge column. */
+  scoreText: string;
+  scoreTone: ScoreTone;
+  /** Sub-label under the hero score (e.g. "THRU 11", "FINAL"). */
+  scoreSub?: string;
   tee?: Tee;
+  onPressTee?: () => void;
+
+  // Score-chip props (current hole context)
   holeNumber: number;
   par: number;
   strokes: number | null;
   onChange?: (strokes: number) => void;
-  onPressTee?: () => void;
 
   // Achievement-tag props
   scorerId: string;
@@ -66,40 +74,37 @@ type Props = {
   onToggleTag: (tagKey: TagKey) => void;
   /**
    * Phase 5: per-scorer tracked-stats override writer. When set, the
-   * accordion shows a gear toggle in the Detail header; tapping it
-   * swaps the body from per-hole tag entry to a filter panel listing
-   * every available tag. Calls back with the new enabled set.
+   * stat section shows a small gear button in its top-right corner.
+   * Tapping it swaps the body to a filter panel listing every
+   * available tag. Calls back with the new enabled set.
    */
   onChangeEnabledTags?: (next: readonly TagKey[]) => void;
 
   /**
    * Phase 6: scramble shot attribution. When `scoringRule` is
-   * 'scramble' and these props are wired, the Detail accordion body
-   * also renders a "Whose shots" section with `ShotPicker`. The
-   * stroke count comes from the current `strokes` prop; team
-   * members come from this list.
+   * 'scramble' and these props are wired, the section also renders
+   * a "Whose shots" subsection with `ShotPicker`. The stroke count
+   * comes from the current `strokes` prop; team members come from
+   * this list.
    */
   teamMembers?: readonly AvatarMember[];
   contributorIds?: readonly string[];
   onChangeContributors?: (next: readonly string[]) => void;
-
-  /** Optional slot for Phase 5's gear toggle (placeholder for now). */
-  detailHeaderSlot?: ReactNode;
 };
 
 export function ScoreEntryAccordion({
   members,
   name,
-  runningText,
-  runningTone,
-  thruText,
+  scoreText,
+  scoreTone,
+  scoreSub,
   tee,
+  onPressTee,
   holeNumber,
   par,
   strokes,
   onChange,
-  onPressTee,
-  scorerId,
+  scorerId: _scorerId,
   scoringRule,
   tappedTags,
   enabledTags,
@@ -108,11 +113,9 @@ export function ScoreEntryAccordion({
   teamMembers,
   contributorIds,
   onChangeContributors,
-  detailHeaderSlot,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const [expanded, setExpanded] = useState(false);
   const [filterMode, setFilterMode] = useState(false);
 
   const effectiveEnabled = useMemo(
@@ -121,8 +124,7 @@ export function ScoreEntryAccordion({
   );
 
   // Available tags for the filter panel: every defined tag, filtered
-  // by scoring rule (whose_shots only appears for scramble). The
-  // panel renders chips with explicit on/off state.
+  // by scoring rule (whose_shots only appears for scramble).
   const availableTags = useMemo<readonly TagKey[]>(() => {
     return ACHIEVEMENT_TAGS.filter(
       (t) => !t.scrambleOnly || scoringRule === 'scramble'
@@ -140,40 +142,46 @@ export function ScoreEntryAccordion({
     onChangeEnabledTags(next);
   }
 
+  const hasEnabled = effectiveEnabled.length > 0;
+  const showShotPicker =
+    scoringRule === 'scramble' &&
+    teamMembers !== undefined &&
+    onChangeContributors !== undefined &&
+    effectiveEnabled.includes('whose_shots') &&
+    strokes != null &&
+    strokes > 0;
+
+  // The stat-tracking section is hidden entirely (along with the
+  // gear) only when the scorer has nothing enabled AND there's no
+  // override writer wired (i.e. no way to add anything back). With
+  // a writer wired, we still want the gear visible so the user can
+  // re-enable a tag.
+  const showStatSection = hasEnabled || onChangeEnabledTags !== undefined;
+
   return (
     <View style={styles.block}>
-      <ScorerRow
+      <ScorerSummaryRow
         members={members}
         name={name}
-        runningText={runningText}
-        runningTone={runningTone}
-        thruText={thruText}
-        tee={tee}
+        tee={tee ?? null}
+        scoreText={scoreText}
+        tone={scoreTone}
+        scoreSub={scoreSub}
         onPressTee={onPressTee}
-        isEditing={true}
-        holeNumber={holeNumber}
-        par={par}
-        strokes={strokes}
-        onChange={onChange}
       />
-      <View style={styles.detailBar}>
-        {detailHeaderSlot}
-        <Pressable
-          onPress={() => setExpanded((v) => !v)}
-          style={styles.detailToggle}
-          accessibilityRole="button"
-          accessibilityLabel={
-            expanded ? 'Hide per-hole detail' : 'Show per-hole detail'
-          }
-          accessibilityState={{ expanded }}>
-          <Text style={styles.detailToggleLabel}>DETAIL</Text>
-          <Text style={[styles.detailArrow, expanded ? styles.detailArrowOpen : null]}>
-            ▸
-          </Text>
-        </Pressable>
-      </View>
-      {expanded ? (
-        <View style={styles.accordionBody}>
+      {onChange ? (
+        <View style={styles.chipsWrap}>
+          <ScoreChipRow
+            scorerName={name}
+            holeNumber={holeNumber}
+            par={par}
+            strokes={strokes}
+            onChange={onChange}
+          />
+        </View>
+      ) : null}
+      {showStatSection ? (
+        <View style={styles.statSection}>
           {onChangeEnabledTags ? (
             <View style={styles.gearRow}>
               <GearToggleButton
@@ -190,7 +198,7 @@ export function ScoreEntryAccordion({
               isScramble={scoringRule === 'scramble'}
               onToggle={handleFilterToggle}
             />
-          ) : (
+          ) : hasEnabled ? (
             <>
               <AchievementTagRow
                 mode="edit"
@@ -199,23 +207,22 @@ export function ScoreEntryAccordion({
                 isScramble={scoringRule === 'scramble'}
                 onToggle={onToggleTag}
               />
-              {scoringRule === 'scramble' &&
-              teamMembers &&
-              onChangeContributors &&
-              effectiveEnabled.includes('whose_shots') &&
-              strokes != null &&
-              strokes > 0 ? (
+              {showShotPicker ? (
                 <View style={styles.shotsGroup}>
                   <Text style={styles.shotsLabel}>WHOSE SHOTS</Text>
                   <ShotPicker
-                    strokeCount={strokes}
+                    strokeCount={strokes!}
                     contributorIds={contributorIds ?? []}
-                    members={teamMembers}
-                    onChange={onChangeContributors}
+                    members={teamMembers!}
+                    onChange={onChangeContributors!}
                   />
                 </View>
               ) : null}
             </>
+          ) : (
+            <Text style={styles.emptyHint}>
+              No stats tracked for this round. Tap the gear to enable some.
+            </Text>
           )}
         </View>
       ) : null}
@@ -226,53 +233,21 @@ export function ScoreEntryAccordion({
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     block: {
-      paddingTop: 12,
-      paddingBottom: 8,
+      paddingTop: 14,
+      paddingBottom: 14,
+      gap: 12,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.hairline,
     },
-    detailBar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'flex-end',
-      gap: 4,
-      paddingHorizontal: 12,
-      paddingTop: 2,
-      paddingBottom: 4,
+    chipsWrap: {
+      paddingLeft: 4,
     },
-    detailToggle: {
-      flexDirection: 'row',
-      alignItems: 'center',
+    statSection: {
       gap: 6,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      borderRadius: 999,
-    },
-    detailToggleLabel: {
-      fontSize: 10.5,
-      fontWeight: '900',
-      color: colors.textMuted,
-      letterSpacing: 0.5,
-    },
-    detailArrow: {
-      fontSize: 10,
-      color: colors.textMuted,
-    },
-    detailArrowOpen: {
-      transform: [{ rotate: '90deg' }],
-    },
-    accordionBody: {
-      paddingHorizontal: 16,
-      paddingTop: 8,
-      paddingBottom: 12,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
-      backgroundColor: colors.chipBg,
     },
     gearRow: {
       flexDirection: 'row',
       justifyContent: 'flex-end',
-      marginBottom: 2,
     },
     shotsGroup: {
       marginTop: 10,
@@ -283,6 +258,11 @@ function makeStyles(colors: ThemeColors) {
       fontWeight: '900',
       color: colors.textMuted,
       letterSpacing: 0.5,
+    },
+    emptyHint: {
+      fontSize: 11.5,
+      fontWeight: '600',
+      color: colors.textMuted,
     },
   });
 }
