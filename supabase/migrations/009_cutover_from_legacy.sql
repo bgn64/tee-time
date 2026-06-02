@@ -759,22 +759,41 @@ update public.scorecards
 -- Source A: roster_players rows that are true custom players
 -- (id is a valid uuid; linked_user_id is null; not the "user"
 -- self-placeholder; not a friend-linked "player-..." entry).
-insert into public.custom_players
-  (id, owner_user_id, nickname, avatar_color, created_at, updated_at, deleted_at)
-select
-  rp.id::uuid,
-  rp.owner_user_id,
-  rp.nickname,
-  coalesce(rp.color, '#999999'),
-  rp.updated_at,
-  rp.updated_at,
-  null
-from public.roster_players rp
-where rp.id <> 'user'
-  and rp.id not like 'player-%'
-  and rp.linked_user_id is null
-  and rp.id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-on conflict (id) do nothing;
+--
+-- Guarded for non-prod databases that never had the legacy schema
+-- (e.g. staging): if `roster_players` doesn't exist, skip this
+-- block entirely. Wrapped in EXECUTE because plpgsql compiles
+-- the body of a DO block before evaluating the IF guard, and a
+-- bare INSERT … FROM roster_players would fail at compile time
+-- when the table is absent.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'roster_players'
+  ) THEN
+    EXECUTE $sql$
+      INSERT INTO public.custom_players
+        (id, owner_user_id, nickname, avatar_color, created_at, updated_at, deleted_at)
+      SELECT
+        rp.id::uuid,
+        rp.owner_user_id,
+        rp.nickname,
+        COALESCE(rp.color, '#999999'),
+        rp.updated_at,
+        rp.updated_at,
+        NULL
+      FROM public.roster_players rp
+      WHERE rp.id <> 'user'
+        AND rp.id NOT LIKE 'player-%'
+        AND rp.linked_user_id IS NULL
+        AND rp.id ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      ON CONFLICT (id) DO NOTHING
+    $sql$;
+  ELSE
+    RAISE NOTICE 'Skipping I.4 source A: roster_players not present (likely staging)';
+  END IF;
+END $$;
 
 -- Source B: legacy "custom-player:<id>" participants that don't have
 -- a roster_players backing row. Without an entry in custom_players,
@@ -897,23 +916,43 @@ update public.scorecards s
 -- jsonb between runs (shouldn't happen — the old app is offline
 -- during cutover — but defensive) would be merged in on the next
 -- run because they'd not conflict on the natural key.
-insert into public.scorecard_scores
-  (id, scorecard_id, owner_user_id, scorer_id, hole_number, strokes, updated_at)
-select
-  gen_random_uuid()::text,
-  s.id,
-  s.owner_user_id,
-  pg_temp.rewrite_participant_key(score->>'scorerId', s.owner_user_id),
-  (score->>'holeNumber')::integer,
-  (score->>'strokes')::integer,
-  s.updated_at
-from public.scorecards s
-cross join lateral jsonb_array_elements(s.scores) as score
-where jsonb_typeof(s.scores)    = 'array'
-  and (score->>'scorerId')   is not null
-  and (score->>'holeNumber') is not null
-  and (score->>'strokes')    is not null
-on conflict (scorecard_id, scorer_id, hole_number) do nothing;
+--
+-- Guarded for non-prod databases that never had the legacy schema
+-- (e.g. staging): if scorecards has no `scores` column, skip
+-- entirely. Wrapped in EXECUTE because plpgsql compiles the DO
+-- block body before the IF guard fires, and a bare query against a
+-- missing column would error at compile time.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'scorecards'
+      AND column_name = 'scores'
+  ) THEN
+    EXECUTE $sql$
+      INSERT INTO public.scorecard_scores
+        (id, scorecard_id, owner_user_id, scorer_id, hole_number, strokes, updated_at)
+      SELECT
+        gen_random_uuid()::text,
+        s.id,
+        s.owner_user_id,
+        pg_temp.rewrite_participant_key(score->>'scorerId', s.owner_user_id),
+        (score->>'holeNumber')::integer,
+        (score->>'strokes')::integer,
+        s.updated_at
+      FROM public.scorecards s
+      CROSS JOIN LATERAL jsonb_array_elements(s.scores) AS score
+      WHERE jsonb_typeof(s.scores) = 'array'
+        AND (score->>'scorerId') IS NOT NULL
+        AND (score->>'holeNumber') IS NOT NULL
+        AND (score->>'strokes') IS NOT NULL
+      ON CONFLICT (scorecard_id, scorer_id, hole_number) DO NOTHING
+    $sql$;
+  ELSE
+    RAISE NOTICE 'Skipping I.6: scorecards.scores column not present (likely staging)';
+  END IF;
+END $$;
 
 -- =====================================================
 -- J. Tighten constraints (NOT NULL after backfill)
