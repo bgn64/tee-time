@@ -243,19 +243,6 @@ function FilterPill({ label, isOn, onPress, styles, colors: _colors }: FilterPil
       accessibilityRole="button"
       accessibilityState={{ selected: isOn }}
       accessibilityLabel={`${label} ${isOn ? 'enabled' : 'disabled'} — tap to toggle`}>
-      <View
-        style={[
-          styles.filterPip,
-          isOn ? styles.filterPipOn : styles.filterPipOff,
-        ]}>
-        <Text
-          style={[
-            styles.filterPipText,
-            isOn ? styles.filterPipTextOn : styles.filterPipTextOff,
-          ]}>
-          {isOn ? '✓' : '−'}
-        </Text>
-      </View>
       <Text style={[styles.filterPillLabel, isOn ? styles.filterPillLabelOn : null]}>
         {label}
       </Text>
@@ -353,50 +340,26 @@ function makeStyles(colors: ThemeColors) {
     },
 
     // ===== FilterPill (enable / disable a stat for the round) =====
+    // Visually distinct from the yes/no/unset cycling pill so the
+    // user can tell "enabled / disabled for tracking" apart from "yes /
+    // no / unset for this hole". Filter chips are solid-filled when
+    // ON (no circular pip), dashed when OFF. They use a neutral dark
+    // palette rather than the outcome green/red so they don't read
+    // like a positive/negative outcome.
     filterPill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-      paddingLeft: 6,
-      paddingRight: 11,
-      paddingVertical: 5,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
       borderRadius: 999,
       borderWidth: 1.5,
     },
     filterPillOn: {
-      borderColor: goodHex,
-      backgroundColor: goodTint,
+      borderColor: colors.textTitle,
+      backgroundColor: colors.textTitle,
     },
     filterPillOff: {
       borderColor: colors.border,
       borderStyle: 'dashed',
       backgroundColor: 'transparent',
-    },
-    filterPip: {
-      width: 16,
-      height: 16,
-      borderRadius: 999,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    filterPipOn: {
-      backgroundColor: goodHex,
-    },
-    filterPipOff: {
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      borderColor: colors.border,
-    },
-    filterPipText: {
-      fontSize: 11,
-      fontWeight: '900',
-      lineHeight: 12,
-    },
-    filterPipTextOn: {
-      color: '#fff',
-    },
-    filterPipTextOff: {
-      color: colors.textMuted,
     },
     filterPillLabel: {
       fontSize: 12,
@@ -404,7 +367,7 @@ function makeStyles(colors: ThemeColors) {
       color: colors.textMuted,
     },
     filterPillLabelOn: {
-      color: goodDark,
+      color: '#fff',
     },
   });
 }
