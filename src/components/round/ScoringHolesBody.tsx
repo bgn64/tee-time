@@ -1,16 +1,16 @@
 /**
- * ScoringHolesBody — assembled scoring-mode Holes tab body.
+ * ScoringHolesBody — editing Holes tab body.
  *
  * Composes:
  *   [HoleStepperCombo]
  *   per scorer:
- *     [ScoreEntryAccordion]   ← ScorerRow + chip row + Detail accordion
+ *     [ScoreEntryAccordion]   ← ScorerSummaryRow + chips + stat section
  *
- * Replaces the Phase 1 + Phase 3 interim arrangement (HoleStepperCombo
- * + ScorerStack) with proper per-scorer entry blocks that include
- * achievement-tag editing inside the Detail accordion. Phase 5 will
- * extend this by wiring the gear toggle into each accordion's header
- * via the `detailHeaderSlot` prop.
+ * Mirrors the layout of `HolesTabContent` (the viewing surface) so
+ * the live-scoring and live-viewing surfaces look like the same
+ * screen with chips swapped in. Both pull from `useRoundScorers`
+ * and pass per-hole context to `ScorerSummaryRow` so the meta line
+ * (yardage · Par · Hcp) is identical across surfaces.
  *
  * Lives in `src/components/round/` (not `scoring/`) because it's
  * scoped to the round-detail surface and reads through the round +
@@ -22,31 +22,24 @@ import { StyleSheet, View } from 'react-native';
 
 import { ScoreEntryAccordion } from './ScoreEntryAccordion';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
-import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
   effectiveEnabledTags,
 } from '@/library/golf/achievementTags';
-import { findTee } from '@/library/golf/courseHelpers';
 import { formatScore, playerProgress } from '@/library/golf/scoring';
-import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { getHoleStats } from '@/library/golf/teeGrouping';
 import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
 import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
-import type { Round, Tee } from '@/types/golf';
+import type { Round } from '@/types/golf';
 
 type Props = {
   round: Round;
   currentHoleNumber: number;
   onChangeCurrentHole: (n: number) => void;
   onChangeScore?: (scorerId: string, holeNumber: number, strokes: number) => void;
-};
-
-type Scorer = {
-  id: string;
-  name: string;
-  members: AvatarMember[];
 };
 
 export function ScoringHolesBody({
@@ -57,7 +50,8 @@ export function ScoringHolesBody({
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const resolver = useParticipantResolver(round.playerIds ?? []);
+
+  const scorers = useRoundScorers(round);
   const { getTags, toggleTag } = useRoundAchievementTags(round.id);
   const { getOverride, setOverride } = useRoundTrackedStats(round.id);
   const { getContributors, setContributors } = useRoundShotAttributions(
@@ -68,54 +62,6 @@ export function ScoringHolesBody({
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
   const isCompleted = !!round.completedAt;
 
-  const scorers: Scorer[] = useMemo(() => {
-    if (isScramble) {
-      return (round.teams ?? []).map((team) => {
-        const members: AvatarMember[] = team.playerIds.map((pid) => {
-          const r = resolver.get(pid);
-          return {
-            id: pid,
-            name: r?.displayName || 'Player',
-            color: r?.avatarColor || colors.primary,
-          };
-        });
-        return { id: team.id, name: team.name, members };
-      });
-    }
-    return (round.playerIds ?? []).map((pid) => {
-      const r = resolver.get(pid);
-      const name = r?.displayName || 'Player';
-      const color = r?.avatarColor || colors.primary;
-      return {
-        id: pid,
-        name,
-        members: [{ id: pid, name, color }],
-      };
-    });
-  }, [
-    isScramble,
-    round.teams,
-    round.playerIds,
-    resolver,
-    colors.primary,
-  ]);
-
-  function resolveScorerTee(scorerId: string): Tee | undefined {
-    if (isScramble) {
-      const team = round.teams?.find((t) => t.id === scorerId);
-      const firstMember = team?.playerIds[0];
-      if (!firstMember) return undefined;
-      const p = round.participants.find(
-        (q) => q.participantKey === firstMember
-      );
-      return findTee(round.course, p?.teeId);
-    }
-    const p = round.participants.find((q) => q.participantKey === scorerId);
-    return findTee(round.course, p?.teeId);
-  }
-
-  // Strokes for each scorer at the current hole — drives the score
-  // chip row's "active" highlight.
   const currentHole = round.course.holes.find(
     (h) => h.number === currentHoleNumber
   );
@@ -135,6 +81,8 @@ export function ScoringHolesBody({
     }
     return m;
   }, [round.scores, scorers]);
+
+  if (!currentHole) return null;
 
   return (
     <View style={styles.wrap}>
@@ -160,18 +108,27 @@ export function ScoringHolesBody({
               : 'even';
         const thruText =
           !isCompleted && hasScores ? `THRU ${progress.thru}` : undefined;
-        const tee = resolveScorerTee(s.id);
+
         const currentHoleScore = round.scores.find(
           (sc) => sc.scorerId === s.id && sc.holeNumber === currentHoleNumber
         );
         const tappedTags = getTags(s.id, currentHoleNumber);
         const override = getOverride(s.id);
         const enabledTags = effectiveEnabledTags(round.scoringRule, override);
-        // Scramble shot-picker plumbing (no-op for stroke rounds).
         const contributorIds = isScramble
           ? getContributors(s.id, currentHoleNumber)
           : undefined;
         const teamMembers = isScramble ? s.members : undefined;
+
+        // Per-hole context for the meta line — same source as
+        // HolesTabContent so the surfaces stay aligned. Scorers
+        // without a tee get the scalar Hole fallback.
+        const holeStats = s.tee
+          ? getHoleStats(s.tee, currentHoleNumber, currentHole)
+          : {
+              par: currentHole.par,
+              handicapIndex: currentHole.handicapIndex,
+            };
 
         return (
           <ScoreEntryAccordion
@@ -181,9 +138,14 @@ export function ScoringHolesBody({
             scoreText={runningText}
             scoreTone={tone}
             scoreSub={thruText}
-            tee={tee}
+            tee={s.tee}
+            holeContext={{
+              par: holeStats.par,
+              handicapIndex: holeStats.handicapIndex,
+              yardage: 'yardage' in holeStats ? holeStats.yardage : undefined,
+            }}
             holeNumber={currentHoleNumber}
-            par={currentHole?.par ?? 0}
+            par={currentHole.par}
             strokes={currentHoleScore ? currentHoleScore.strokes : null}
             onChange={
               onChangeScore
@@ -216,7 +178,7 @@ export function ScoringHolesBody({
   );
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles(_colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
       paddingBottom: 8,

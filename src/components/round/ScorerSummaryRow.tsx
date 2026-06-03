@@ -1,20 +1,22 @@
 /**
- * ScorerSummaryRow — the shared `[avatar] [name + tee chip] [hero
- * score + thru]` row used by:
+ * ScorerSummaryRow — the shared `[avatar] [name + tee/meta line]
+ * [hero score]` row used wherever a scorer needs a one-line header.
  *
- *   - SummaryTabContent (one per scorer/team)
- *   - ScoreEntryAccordion (Holes editing surface, above the score
- *     chips and per-hole stat tracking)
+ * Used by:
+ *   - SummaryTabContent (one per scorer; meta line shows total tee
+ *     yardage)
+ *   - HolesTabContent (viewing; meta line shows per-hole context —
+ *     yardage · Par · Hcp — when `holeContext` is set)
+ *   - ScoreEntryAccordion (Holes scoring; same per-hole context as
+ *     the viewing surface, so the surfaces look identical)
  *
- * The two surfaces want pixel-identical visuals so a scorer's row
- * looks the same when they're glancing at totals (Summary) and when
- * they're entering a score (Holes editing). Pulling the row into a
- * shared component is the cleanest way to keep them in lockstep —
- * earlier the editing surface used `ScorerRow` which had its own
- * 2-line layout that drifted from Summary's 1-line look.
+ * Pulling this row into a shared component is what keeps the
+ * scoring and viewing Holes surfaces visually in sync — earlier they
+ * each owned their own header (`ScorerRow` and `HoleContextSummary`),
+ * which drifted apart in font, score size, and tee-display style.
  *
- * Pure presentational; the parent resolves the scorer's tee and
- * computes the running/final scoreText + tone.
+ * Pure presentational; the parent resolves the scorer's tee + hole
+ * context + computes the running/final scoreText + tone.
  */
 
 import { useMemo } from 'react';
@@ -27,6 +29,19 @@ import type { ThemeColors } from '@/library/theme/themes';
 import type { Tee } from '@/types/golf';
 
 export type ScoreTone = 'over' | 'under' | 'even';
+
+/**
+ * Optional per-hole context for the meta line. When set, the row
+ * renders the per-hole yardage + Par + Hcp instead of the tee's
+ * total yardage. Mirrors the "ph-summary .meta" element in the
+ * mockup.
+ */
+export type HoleContext = {
+  par: number;
+  handicapIndex?: number;
+  /** Per-hole yardage for the scorer's tee, when known. */
+  yardage?: number;
+};
 
 type Props = {
   members: readonly AvatarMember[];
@@ -41,10 +56,20 @@ type Props = {
   /**
    * When set, the tee chip becomes a Pressable with a "▾" caret and
    * (if `tee` is null) renders a dashed "+ Tee" placeholder so the
-   * picker stays reachable. Editing surfaces (Holes tab) wire this;
-   * read-only surfaces (Summary, feed) leave it undefined.
+   * picker stays reachable. Editing surfaces (Summary tab in scoring
+   * mode) wire this; other surfaces leave it undefined.
    */
   onPressTee?: () => void;
+  /**
+   * Per-hole context. When set, the meta line becomes per-hole
+   * (yardage · Par X · Hcp Y). When undefined, falls back to the
+   * tee's total-yardage display (Summary tab behaviour).
+   *
+   * Incompatible with `onPressTee` — the Holes tab doesn't expose
+   * the picker (users change tees from Summary). We don't enforce
+   * this at the type level, but callers should not set both.
+   */
+  holeContext?: HoleContext;
 };
 
 export function ScorerSummaryRow({
@@ -55,6 +80,7 @@ export function ScorerSummaryRow({
   tone,
   scoreSub,
   onPressTee,
+  holeContext,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -67,13 +93,38 @@ export function ScorerSummaryRow({
     : null;
 
   let teeChip: React.ReactNode = null;
-  if (tee && teeColor && teeLabel) {
-    // Two visual styles for the same data:
+  if (holeContext && tee && teeColor) {
+    // Per-hole meta line: [swatch] [tee name] · [per-hole yds] · Par X · Hcp Y
+    // No pill, no chevron — viewing/scoring Holes tab share this look.
+    const parts: string[] = [];
+    if (holeContext.yardage != null) {
+      parts.push(`${holeContext.yardage.toLocaleString()} yds`);
+    }
+    parts.push(`Par ${holeContext.par}`);
+    if (holeContext.handicapIndex != null) {
+      parts.push(`Hcp ${holeContext.handicapIndex}`);
+    }
+    teeChip = (
+      <View style={styles.teeBare}>
+        <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
+        <Text style={styles.teeBareName} numberOfLines={1}>
+          {tee.name}
+        </Text>
+        {parts.map((p) => (
+          <View key={p} style={styles.teeMetaPart}>
+            <Text style={styles.teeBareSep}>·</Text>
+            <Text style={styles.teeBareYds} numberOfLines={1}>
+              {p}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  } else if (tee && teeColor && teeLabel) {
+    // Two visual styles for the total-yardage variant:
     //   - editing (onPressTee set):  pill button with chevron — looks
     //     tappable so the user discovers the picker.
-    //   - read-only (no onPressTee): bare swatch + name · yardage,
-    //     matching `HoleContextSummary` so every viewing surface
-    //     presents tees the same way.
+    //   - read-only (no onPressTee): bare swatch + name · yardage.
     if (onPressTee) {
       teeChip = (
         <Pressable
@@ -180,6 +231,11 @@ function makeStyles(colors: ThemeColors) {
       gap: 6,
       alignSelf: 'flex-start',
       flexWrap: 'wrap',
+    },
+    teeMetaPart: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     teeBareName: {
       fontSize: 11.5,
