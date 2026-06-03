@@ -25,7 +25,7 @@ import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
 import {
   effectiveEnabledTags,
 } from '@/library/golf/achievementTags';
-import { formatScore, playerProgress } from '@/library/golf/scoring';
+import { holeScoreDisplay } from '@/library/golf/holeScoreDisplay';
 import { getHoleStats } from '@/library/golf/teeGrouping';
 import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
@@ -52,7 +52,7 @@ export function ScoringHolesBody({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const scorers = useRoundScorers(round);
-  const { getTags, toggleTag } = useRoundAchievementTags(round.id);
+  const { getValues, setTagValue } = useRoundAchievementTags(round.id);
   const { getOverride, setOverride } = useRoundTrackedStats(round.id);
   const { getContributors, setContributors } = useRoundShotAttributions(
     round.id
@@ -60,7 +60,6 @@ export function ScoringHolesBody({
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
-  const isCompleted = !!round.completedAt;
 
   const currentHole = round.course.holes.find(
     (h) => h.number === currentHoleNumber
@@ -96,23 +95,15 @@ export function ScoringHolesBody({
         />
       </View>
       {scorers.map((s) => {
-        const progress = playerProgress(round, s.id);
-        const hasScores = progress.thru > 0;
-        const runningText = hasScores ? formatScore(progress.rel) : 'E';
-        const tone: 'over' | 'under' | 'even' = !hasScores
-          ? 'even'
-          : progress.rel > 0
-            ? 'over'
-            : progress.rel < 0
-              ? 'under'
-              : 'even';
-        const thruText =
-          !isCompleted && hasScores ? `THRU ${progress.thru}` : undefined;
-
         const currentHoleScore = round.scores.find(
           (sc) => sc.scorerId === s.id && sc.holeNumber === currentHoleNumber
         );
-        const tappedTags = getTags(s.id, currentHoleNumber);
+        const strokes = currentHoleScore?.strokes ?? null;
+
+        // Per-hole hero score (replaces running totals).
+        const display = holeScoreDisplay(strokes, currentHole.par);
+
+        const values = getValues(s.id, currentHoleNumber);
         const override = getOverride(s.id);
         const enabledTags = effectiveEnabledTags(round.scoringRule, override);
         const contributorIds = isScramble
@@ -135,9 +126,9 @@ export function ScoringHolesBody({
             key={s.id}
             members={s.members}
             name={s.name}
-            scoreText={runningText}
-            scoreTone={tone}
-            scoreSub={thruText}
+            scoreText={display.scoreText}
+            scoreTone={display.tone}
+            scoreSub={display.scoreSub}
             tee={s.tee}
             holeContext={{
               par: holeStats.par,
@@ -146,18 +137,18 @@ export function ScoringHolesBody({
             }}
             holeNumber={currentHoleNumber}
             par={currentHole.par}
-            strokes={currentHoleScore ? currentHoleScore.strokes : null}
+            strokes={strokes}
             onChange={
               onChangeScore
-                ? (strokes) => onChangeScore(s.id, currentHoleNumber, strokes)
+                ? (next) => onChangeScore(s.id, currentHoleNumber, next)
                 : undefined
             }
             scorerId={s.id}
             scoringRule={round.scoringRule}
-            tappedTags={tappedTags}
+            values={values}
             enabledTags={enabledTags}
-            onToggleTag={(tagKey) => {
-              void toggleTag(s.id, currentHoleNumber, tagKey);
+            onSetValue={(tagKey, value) => {
+              void setTagValue(s.id, currentHoleNumber, tagKey, value);
             }}
             onChangeEnabledTags={(next) => {
               void setOverride(s.id, next);

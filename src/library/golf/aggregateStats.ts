@@ -3,25 +3,24 @@
  * per-(scorer, hole) tag rows into round-level counts for the
  * Summary tab tiles.
  *
- * For the four default tags (Fairway / GIR / OB / Sand Trap) we
- * produce both a numerator (count of holes where the tag is set)
- * and, where it makes sense, a denominator:
+ * Three-state semantics: each tracked tag for a hole is either 'yes',
+ * 'no', or unset. Numerators count holes where the tag is 'yes';
+ * denominators count holes where the tag has an explicit value
+ * (yes OR no — unset doesn't contribute to the rate). This matches
+ * the user's mental model — "I committed to tracking fairways, so my
+ * FIR rate is computed against the holes I actually filled in".
  *
- *   - **Fairway** : x of (non-par-3 in-range holes that have a tag row).
- *     Par-3s never count toward "fairway in regulation" by definition
- *     (no fairway shot). Holes the scorer hasn't recorded any tags
- *     on don't count toward the denominator either — we don't want
- *     to penalise scorers who entered tags for only a subset.
- *   - **GIR**     : x of (in-range holes that have a tag row).
- *   - **OB**      : count of in-range holes with the `ob` tag.
- *   - **Sand**    : count of in-range holes with the `sand_trap` tag.
- *
- * Returned shape mirrors what `SummaryAggregateTiles` consumes —
- * `{ value, denom? }` per metric, computed only from the scorer's
- * tag rows + the round's holesInRange. No PowerSync queries here.
+ * Tile breakdown:
+ *   - Fairway : 'yes' count over (non-par-3) holes with a value.
+ *   - GIR     : 'yes' count over holes with a value.
+ *   - OB      : 'yes' count. No denominator — raw occurrence count.
+ *   - Sand    : 'yes' count. No denominator — raw occurrence count.
  */
 
-import { type TagKey, type TagRow } from './achievementTags';
+import {
+  type TagRow,
+  type TagKey,
+} from './achievementTags';
 import type { Hole } from '@/types/golf';
 
 export type AggregateTile = {
@@ -55,14 +54,12 @@ export function computeScorerAggregates(
   const parByHole = new Map<number, number>();
   for (const h of holesInRange) parByHole.set(h.number, h.par);
 
-  // Build a per-scorer-hole tag-set view restricted to in-range holes.
+  // Holes with at least one tracked-stat value entered, for the
+  // scorer, within the active hole range.
   const scorerRows = rows.filter(
     (r) => r.scorer_id === scorerId && allowedHoles.has(r.hole_number)
   );
 
-  // Denominator for FIR / GIR: only holes the scorer recorded tags
-  // on (i.e. they were paying attention to that hole). FIR also
-  // excludes par-3s.
   let girDenom = 0;
   let fairwayDenom = 0;
   let girNum = 0;
@@ -71,16 +68,26 @@ export function computeScorerAggregates(
   let sandCount = 0;
 
   for (const row of scorerRows) {
-    girDenom += 1;
     const par = parByHole.get(row.hole_number);
     const isPar3 = par === 3;
-    if (!isPar3) fairwayDenom += 1;
 
-    const tagSet = new Set<TagKey>(row.tags);
-    if (tagSet.has('gir')) girNum += 1;
-    if (tagSet.has('fairway') && !isPar3) fairwayNum += 1;
-    if (tagSet.has('ob')) obCount += 1;
-    if (tagSet.has('sand_trap')) sandCount += 1;
+    // Fairway: denominator excludes par-3s (no fairway shot exists).
+    const fwVal = row.values.fairway;
+    if (fwVal === 'yes' || fwVal === 'no') {
+      if (!isPar3) {
+        fairwayDenom += 1;
+        if (fwVal === 'yes') fairwayNum += 1;
+      }
+    }
+
+    const girVal = row.values.gir;
+    if (girVal === 'yes' || girVal === 'no') {
+      girDenom += 1;
+      if (girVal === 'yes') girNum += 1;
+    }
+
+    if (row.values.ob === 'yes') obCount += 1;
+    if (row.values.sand_trap === 'yes') sandCount += 1;
   }
 
   return {

@@ -6,14 +6,13 @@
  *
  *   [HoleStepperCombo]
  *   per scorer:
- *     [ScorerSummaryRow with per-hole context + running hero score]
- *     [AchievementTagRow mode="read"]
- *     [ShotSequence] (scramble only)
- *
- * Earlier this surface had a `<ScorerPickPill>` that let the viewer
- * focus a single scorer at a time. We retired the pill in favour of
- * showing every scorer simultaneously — same as the scoring surface —
- * so the feed/scoring views share an at-a-glance presentation.
+ *     [ScorerSummaryRow with per-hole context + per-hole hero score]
+ *     [AchievementTagRow mode="read"]  — same 3-state pills, with
+ *                                        DID WELL / HURT ME headers.
+ *                                        Unset pills render plain so
+ *                                        the viewer sees what the
+ *                                        scorer committed to track.
+ *     [ShotSequence] (scramble + whose_shots enabled)
  *
  * The hole context (par / hcp / yardage) comes from `getHoleStats`
  * so legacy rounds whose `course_snapshot` predates the per-tee
@@ -32,13 +31,14 @@ import { ScorerSummaryRow } from './ScorerSummaryRow';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
 import { ShotSequence } from '@/components/scoring/ShotSequence';
 import {
-  formatScore,
-  playerProgress,
-} from '@/library/golf/scoring';
+  effectiveEnabledTags,
+} from '@/library/golf/achievementTags';
+import { holeScoreDisplay } from '@/library/golf/holeScoreDisplay';
 import { getHoleStats } from '@/library/golf/teeGrouping';
 import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
+import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -52,12 +52,12 @@ export function HolesTabContent({ round }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const scorers = useRoundScorers(round);
-  const { getTags } = useRoundAchievementTags(round.id);
+  const { getValues } = useRoundAchievementTags(round.id);
+  const { getOverride } = useRoundTrackedStats(round.id);
   const { getContributors } = useRoundShotAttributions(round.id);
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
-  const isCompleted = !!round.completedAt;
 
   // Hole-focus state. In-flight rounds default to the live current
   // hole; completed rounds default to the first playable hole. We
@@ -96,22 +96,11 @@ export function HolesTabContent({ round }: Props) {
         />
       </View>
       {scorers.map((s, i) => {
-        const progress = playerProgress(round, s.id);
-        const hasScores = progress.thru > 0;
-        const scoreText = hasScores ? formatScore(progress.rel) : 'E';
-        const tone: 'over' | 'under' | 'even' = !hasScores
-          ? 'even'
-          : progress.rel > 0
-            ? 'over'
-            : progress.rel < 0
-              ? 'under'
-              : 'even';
-        const scoreSub =
-          !isCompleted && hasScores
-            ? `THRU ${progress.thru}`
-            : isCompleted
-              ? 'FINAL'
-              : undefined;
+        const scoreForHole = round.scores.find(
+          (sc) => sc.scorerId === s.id && sc.holeNumber === focusedHole
+        );
+        const strokes = scoreForHole?.strokes ?? null;
+        const display = holeScoreDisplay(strokes, hole.par);
 
         // Per-hole context for this scorer's tee. When the scorer
         // has no tee, fall back to the scalar Hole row so the meta
@@ -120,11 +109,20 @@ export function HolesTabContent({ round }: Props) {
           ? getHoleStats(s.tee, focusedHole, hole)
           : { par: hole.par, handicapIndex: hole.handicapIndex };
 
-        const tappedTags = getTags(s.id, focusedHole);
+        const values = getValues(s.id, focusedHole);
+        const enabledTags = effectiveEnabledTags(
+          round.scoringRule,
+          getOverride(s.id)
+        );
         const contributorIds = isScramble
           ? getContributors(s.id, focusedHole)
           : [];
-        const hasBody = tappedTags.length > 0 || contributorIds.length > 0;
+        // Show the body when there's anything to render: tracked-stat
+        // pills, or scramble shot attribution.
+        const hasTagBody =
+          enabledTags.filter((k) => k !== 'whose_shots').length > 0;
+        const hasShotBody = isScramble && contributorIds.length > 0;
+        const hasBody = hasTagBody || hasShotBody;
 
         return (
           <View key={s.id} style={i > 0 ? styles.rowSep : styles.row}>
@@ -132,9 +130,9 @@ export function HolesTabContent({ round }: Props) {
               members={s.members}
               name={s.name}
               tee={s.tee ?? null}
-              scoreText={scoreText}
-              tone={tone}
-              scoreSub={scoreSub}
+              scoreText={display.scoreText}
+              tone={display.tone}
+              scoreSub={display.scoreSub}
               holeContext={{
                 par: holeStats.par,
                 handicapIndex: holeStats.handicapIndex,
@@ -143,14 +141,15 @@ export function HolesTabContent({ round }: Props) {
             />
             {hasBody ? (
               <View style={styles.body}>
-                {tappedTags.length > 0 ? (
+                {hasTagBody ? (
                   <AchievementTagRow
                     mode="read"
-                    tags={tappedTags}
+                    values={values}
+                    enabledTags={enabledTags}
                     isScramble={isScramble}
                   />
                 ) : null}
-                {isScramble && contributorIds.length > 0 ? (
+                {hasShotBody ? (
                   <ShotSequence
                     contributorIds={contributorIds}
                     members={s.members}

@@ -1,34 +1,30 @@
 /**
  * ScoreEntryAccordion — per-scorer entry block for the scoring
- * Holes tab. The name is historical: there is no longer an accordion.
- * Everything is shown inline so the user sees the score chips AND the
- * stat-tracking section without an extra tap.
+ * Holes tab. (Name is historical; there is no longer an accordion.)
+ * Everything renders inline:
  *
- * Layout (top → bottom):
- *   [ScorerSummaryRow]         ← shared with Summary tab for parity
- *   [ScoreChipRow]             ← −2 / −1 / E / +1 / +2 / custom
- *   [Stat tracking section]    ← AchievementTagRow or filter chips,
- *                                with a small inline gear toggle in
- *                                the top-right corner.
- *   [Whose shots (scramble)]   ← ShotPicker, when whose_shots enabled
+ *   [ScorerSummaryRow with per-hole context + per-hole hero score]
+ *   [ScoreChipRow  +  Stats labelled-pill]   ← same row, chips left,
+ *                                              stats button right.
+ *   [AchievementTagRow (edit | filter)]
+ *   [Whose shots (scramble + whose_shots enabled)]
  *
- * Per Phase-5 design, the gear toggle swaps the stat tracking section
- * between two modes:
- *   - "edit" (default): per-hole tag entry — shows enabled tags only,
- *     tap to mark "Did well" / "Hurt me".
- *   - "filter": per-scorer enabled-set editor — shows every available
- *     tag with on/off toggle (dashed-border off, solid-border on).
+ * Tapping the Stats pill swaps the AchievementTagRow body between:
+ *   - "edit" (default): per-hole yes/no/unset cycling pills for
+ *     every enabled stat (DID WELL + HURT ME headers always show).
+ *   - "filter": per-scorer enabled-set editor — every available tag
+ *     with on/off toggles (dashed-border = off, solid = on).
  *
- * State: gear toggle is local per scorer per session. We don't
- * persist it across navigation — re-entering the Holes tab lands you
+ * State: filter mode is local per scorer per session. We don't
+ * persist it across navigation — re-entering the Holes tab lands
  * back in edit mode.
  */
 
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { AchievementTagRow } from './AchievementTagRow';
-import { GearToggleButton } from './GearToggleButton';
 import { ScoreChipRow } from './ScoreChipRow';
 import {
   ScorerSummaryRow,
@@ -41,6 +37,8 @@ import {
   ACHIEVEMENT_TAGS,
   defaultEnabledTagsFor,
   type TagKey,
+  type TagValue,
+  type TagValueMap,
 } from '@/library/golf/achievementTags';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -50,10 +48,10 @@ type Props = {
   // Identity / summary props
   members: readonly AvatarMember[];
   name: string;
-  /** Hero score text (e.g. "−3", "E", "+5") for the right-edge column. */
+  /** Hero score text (e.g. "−2", "E", "+1") for the right-edge column. */
   scoreText: string;
   scoreTone: ScoreTone;
-  /** Sub-label under the hero score (e.g. "THRU 11", "FINAL"). */
+  /** Sub-label under the hero score (e.g. "3 STROKES"). */
   scoreSub?: string;
   tee?: Tee;
   onPressTee?: () => void;
@@ -74,29 +72,26 @@ type Props = {
   // Achievement-tag props
   scorerId: string;
   scoringRule: ScoringRule;
-  /** Tags currently tapped for this (scorer, hole) tuple. */
-  tappedTags: readonly TagKey[];
+  /** Per-tag values for this (scorer, hole) tuple. */
+  values: TagValueMap;
   /**
-   * Tags enabled for this scorer in this round. Phase 4 always uses
-   * `defaultEnabledTagsFor(scoringRule)`; Phase 5 wires per-scorer
-   * overrides here. If null/undefined we fall back to defaults.
+   * Tags enabled for this scorer in this round. Pre-fixed by
+   * `defaultEnabledTagsFor(scoringRule)` unless an override exists.
+   * If null/undefined we fall back to defaults.
    */
   enabledTags?: readonly TagKey[] | null;
-  onToggleTag: (tagKey: TagKey) => void;
+  onSetValue: (tagKey: TagKey, value: TagValue | undefined) => void;
   /**
-   * Phase 5: per-scorer tracked-stats override writer. When set, the
-   * stat section shows a small gear button in its top-right corner.
-   * Tapping it swaps the body to a filter panel listing every
-   * available tag. Calls back with the new enabled set.
+   * Per-scorer tracked-stats override writer. When set, the chip row
+   * surfaces a "Stats" labelled pill; tapping it swaps the body to a
+   * filter panel listing every available tag.
    */
   onChangeEnabledTags?: (next: readonly TagKey[]) => void;
 
   /**
-   * Phase 6: scramble shot attribution. When `scoringRule` is
-   * 'scramble' and these props are wired, the section also renders
-   * a "Whose shots" subsection with `ShotPicker`. The stroke count
-   * comes from the current `strokes` prop; team members come from
-   * this list.
+   * Scramble shot attribution. When `scoringRule` is 'scramble' and
+   * these props are wired, the section also renders a "Whose shots"
+   * subsection with `ShotPicker`.
    */
   teamMembers?: readonly AvatarMember[];
   contributorIds?: readonly string[];
@@ -118,9 +113,9 @@ export function ScoreEntryAccordion({
   onChange,
   scorerId: _scorerId,
   scoringRule,
-  tappedTags,
+  values,
   enabledTags,
-  onToggleTag,
+  onSetValue,
   onChangeEnabledTags,
   teamMembers,
   contributorIds,
@@ -163,11 +158,9 @@ export function ScoreEntryAccordion({
     strokes != null &&
     strokes > 0;
 
-  // The stat-tracking section is hidden entirely (along with the
-  // gear) only when the scorer has nothing enabled AND there's no
-  // override writer wired (i.e. no way to add anything back). With
-  // a writer wired, we still want the gear visible so the user can
-  // re-enable a tag.
+  // The stat-tracking section is hidden entirely only when nothing is
+  // enabled AND there's no override writer wired. With a writer wired,
+  // the Stats button stays visible so the user can re-enable a tag.
   const showStatSection = hasEnabled || onChangeEnabledTags !== undefined;
 
   return (
@@ -183,7 +176,7 @@ export function ScoreEntryAccordion({
         holeContext={holeContext}
       />
       {onChange ? (
-        <View style={styles.chipsWrap}>
+        <View style={styles.chipsRow}>
           <ScoreChipRow
             scorerName={name}
             holeNumber={holeNumber}
@@ -191,34 +184,53 @@ export function ScoreEntryAccordion({
             strokes={strokes}
             onChange={onChange}
           />
+          <View style={styles.chipsSpacer} />
+          {onChangeEnabledTags ? (
+            <Pressable
+              onPress={() => setFilterMode((v) => !v)}
+              style={[
+                styles.statsBtn,
+                filterMode ? styles.statsBtnActive : null,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={
+                filterMode ? 'Close stats settings' : 'Edit tracked stats'
+              }
+              accessibilityState={{ selected: filterMode }}>
+              <Ionicons
+                name="funnel-outline"
+                size={13}
+                color={filterMode ? '#fff' : colors.textTitle}
+              />
+              <Text
+                style={[
+                  styles.statsBtnLabel,
+                  filterMode ? styles.statsBtnLabelActive : null,
+                ]}>
+                Stats
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
       {showStatSection ? (
         <View style={styles.statSection}>
-          {onChangeEnabledTags ? (
-            <View style={styles.gearRow}>
-              <GearToggleButton
-                active={filterMode}
-                onToggle={() => setFilterMode((v) => !v)}
-              />
-            </View>
-          ) : null}
           {filterMode && onChangeEnabledTags ? (
             <AchievementTagRow
               mode="filter"
-              tags={effectiveEnabled}
-              enabledTags={availableTags}
+              values={{}}
+              enabledTags={effectiveEnabled}
               isScramble={scoringRule === 'scramble'}
-              onToggle={handleFilterToggle}
+              onToggleEnabled={handleFilterToggle}
             />
           ) : hasEnabled ? (
             <>
               <AchievementTagRow
                 mode="edit"
-                tags={tappedTags}
+                values={values}
                 enabledTags={effectiveEnabled}
                 isScramble={scoringRule === 'scramble'}
-                onToggle={onToggleTag}
+                onSetValue={onSetValue}
               />
               {showShotPicker ? (
                 <View style={styles.shotsGroup}>
@@ -234,7 +246,7 @@ export function ScoreEntryAccordion({
             </>
           ) : (
             <Text style={styles.emptyHint}>
-              No stats tracked for this round. Tap the gear to enable some.
+              No stats tracked for this round. Tap Stats to enable some.
             </Text>
           )}
         </View>
@@ -252,15 +264,40 @@ function makeStyles(colors: ThemeColors) {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.hairline,
     },
-    chipsWrap: {
-      paddingLeft: 4,
+    chipsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    chipsSpacer: {
+      flex: 1,
+    },
+    statsBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBg,
+    },
+    statsBtnActive: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primary,
+    },
+    statsBtnLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+      color: colors.textTitle,
+    },
+    statsBtnLabelActive: {
+      color: '#fff',
     },
     statSection: {
       gap: 6,
-    },
-    gearRow: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
     },
     shotsGroup: {
       marginTop: 10,
