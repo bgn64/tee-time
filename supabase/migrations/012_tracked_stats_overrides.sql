@@ -18,13 +18,16 @@
 -- the parent scorecards row and rejects mismatches.
 --
 -- Run once against your Supabase project after migrations 001
--- through 011 have been applied.
+-- through 011 have been applied. Re-runs are idempotent (`if not
+-- exists` on table/indexes, `drop … if exists` before each trigger
+-- and policy, `create or replace` on the function) so a partial
+-- apply can be retried safely.
 
 -- =====================================================
 -- Table
 -- =====================================================
 
-create table public.scorecard_tracked_stats (
+create table if not exists public.scorecard_tracked_stats (
   id text primary key,
   scorecard_id text not null references public.scorecards (id) on delete cascade,
   owner_user_id uuid not null references auth.users (id) on delete cascade,
@@ -37,10 +40,10 @@ create table public.scorecard_tracked_stats (
     check (jsonb_typeof(enabled_tags) = 'array')
 );
 
-create index scorecard_tracked_stats_scorecard_idx
+create index if not exists scorecard_tracked_stats_scorecard_idx
   on public.scorecard_tracked_stats (scorecard_id);
 
-create index scorecard_tracked_stats_owner_idx
+create index if not exists scorecard_tracked_stats_owner_idx
   on public.scorecard_tracked_stats (owner_user_id);
 
 -- =====================================================
@@ -76,10 +79,16 @@ begin
 end;
 $$;
 
+drop trigger if exists scorecard_tracked_stats_owner_trg
+  on public.scorecard_tracked_stats;
+
 create trigger scorecard_tracked_stats_owner_trg
   before insert or update on public.scorecard_tracked_stats
   for each row
   execute function public.scorecard_tracked_stats_fill_owner();
+
+drop trigger if exists scorecard_tracked_stats_touch_trg
+  on public.scorecard_tracked_stats;
 
 create trigger scorecard_tracked_stats_touch_trg
   before update on public.scorecard_tracked_stats
@@ -98,6 +107,9 @@ create trigger scorecard_tracked_stats_touch_trg
 -- aggregates the same way the owner does.
 
 alter table public.scorecard_tracked_stats enable row level security;
+
+drop policy if exists "tracked stats in owned scorecards"
+  on public.scorecard_tracked_stats;
 
 create policy "tracked stats in owned scorecards"
   on public.scorecard_tracked_stats

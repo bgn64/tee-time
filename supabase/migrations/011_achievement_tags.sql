@@ -20,13 +20,16 @@
 --     lets us recompute aggregates without scanning every hole.
 --
 -- Run once against your Supabase project after migrations 001
--- through 010 have been applied.
+-- through 010 have been applied. Re-runs are idempotent (`if not
+-- exists` on table/indexes, `drop … if exists` before each trigger
+-- and policy, `create or replace` on the function) so a partial
+-- apply can be retried safely.
 
 -- =====================================================
 -- Table
 -- =====================================================
 
-create table public.scorecard_achievement_tags (
+create table if not exists public.scorecard_achievement_tags (
   id text primary key,
   scorecard_id text not null references public.scorecards (id) on delete cascade,
   owner_user_id uuid not null references auth.users (id) on delete cascade,
@@ -40,10 +43,10 @@ create table public.scorecard_achievement_tags (
     check (jsonb_typeof(tags) = 'array')
 );
 
-create index scorecard_achievement_tags_scorecard_idx
+create index if not exists scorecard_achievement_tags_scorecard_idx
   on public.scorecard_achievement_tags (scorecard_id);
 
-create index scorecard_achievement_tags_owner_idx
+create index if not exists scorecard_achievement_tags_owner_idx
   on public.scorecard_achievement_tags (owner_user_id);
 
 -- =====================================================
@@ -80,6 +83,9 @@ begin
 end;
 $$;
 
+drop trigger if exists scorecard_achievement_tags_owner_trg
+  on public.scorecard_achievement_tags;
+
 create trigger scorecard_achievement_tags_owner_trg
   before insert or update on public.scorecard_achievement_tags
   for each row
@@ -91,6 +97,9 @@ create trigger scorecard_achievement_tags_owner_trg
 -- Reuse public.touch_updated_at (defined in migration 008).
 -- Fires AFTER the fill_owner trigger because triggers on the same
 -- event run in name-alphabetical order; "owner_trg" < "touch_trg".
+
+drop trigger if exists scorecard_achievement_tags_touch_trg
+  on public.scorecard_achievement_tags;
 
 create trigger scorecard_achievement_tags_touch_trg
   before update on public.scorecard_achievement_tags
@@ -110,6 +119,9 @@ create trigger scorecard_achievement_tags_touch_trg
 -- pattern from migration 002.
 
 alter table public.scorecard_achievement_tags enable row level security;
+
+drop policy if exists "achievement tags in owned scorecards"
+  on public.scorecard_achievement_tags;
 
 create policy "achievement tags in owned scorecards"
   on public.scorecard_achievement_tags
