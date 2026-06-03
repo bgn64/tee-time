@@ -30,7 +30,11 @@ import { StyleSheet, Text, View } from 'react-native';
 import { AchievementTagRow } from './AchievementTagRow';
 import { GearToggleButton } from './GearToggleButton';
 import { ScoreChipRow } from './ScoreChipRow';
-import { ScorerSummaryRow, type ScoreTone } from './ScorerSummaryRow';
+import {
+  ScorerSummaryRow,
+  type HoleContext,
+  type ScoreTone,
+} from './ScorerSummaryRow';
 import { ShotPicker } from '@/components/scoring/ShotPicker';
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
@@ -53,6 +57,13 @@ type Props = {
   scoreSub?: string;
   tee?: Tee;
   onPressTee?: () => void;
+  /**
+   * Per-hole context (yardage · par · hcp) for the meta line under
+   * the name. Wired by `ScoringHolesBody` from the focused hole's
+   * row + the scorer's tee, so the editing surface looks identical
+   * to the viewing surface (`HolesTabContent`).
+   */
+  holeContext?: HoleContext;
 
   // Score-chip props (current hole context)
   holeNumber: number;
@@ -100,6 +111,7 @@ export function ScoreEntryAccordion({
   scoreSub,
   tee,
   onPressTee,
+  holeContext,
   holeNumber,
   par,
   strokes,
@@ -168,6 +180,7 @@ export function ScoreEntryAccordion({
         tone={scoreTone}
         scoreSub={scoreSub}
         onPressTee={onPressTee}
+        holeContext={holeContext}
       />
       {onChange ? (
         <View style={styles.chipsWrap}>

@@ -19,7 +19,6 @@ import { StyleSheet, View } from 'react-native';
 import { ScorerSummaryRow } from './ScorerSummaryRow';
 import { SummaryAggregateTiles } from './SummaryAggregateTiles';
 import { TeamContributionRow } from './TeamContributionRow';
-import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
   computeScorerAggregates,
   filterAggregatesByEnabled,
@@ -27,14 +26,13 @@ import {
 import {
   effectiveEnabledTags,
 } from '@/library/golf/achievementTags';
-import { findTee } from '@/library/golf/courseHelpers';
 import {
   formatScore,
   holesInRange,
   playerProgress,
 } from '@/library/golf/scoring';
-import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import {
   summarizeContributions,
   useRoundShotAttributions,
@@ -43,7 +41,7 @@ import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
-import type { Round, Tee } from '@/types/golf';
+import type { Round } from '@/types/golf';
 
 type Props = {
   round: Round;
@@ -57,17 +55,11 @@ type Props = {
   onPressTeeForScorer?: (scorerId: string) => void;
 };
 
-type Scorer = {
-  id: string;
-  name: string;
-  members: AvatarMember[];
-};
-
 export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const resolver = useParticipantResolver(round.playerIds ?? []);
+  const scorers = useRoundScorers(round);
   const { rows: tagRows } = useRoundAchievementTags(round.id);
   const { getOverride } = useRoundTrackedStats(round.id);
   const { rows: shotRows } = useRoundShotAttributions(round.id);
@@ -81,46 +73,6 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
     () => holesInRange(round.course.holes, round.holeRange),
     [round.course.holes, round.holeRange]
   );
-
-  const scorers: Scorer[] = useMemo(() => {
-    if (isScramble) {
-      return (round.teams ?? []).map((team) => {
-        const members: AvatarMember[] = team.playerIds.map((pid) => {
-          const r = resolver.get(pid);
-          return {
-            id: pid,
-            name: r?.displayName || 'Player',
-            color: r?.avatarColor || colors.primary,
-          };
-        });
-        return { id: team.id, name: team.name, members };
-      });
-    }
-    return (round.playerIds ?? []).map((pid) => {
-      const r = resolver.get(pid);
-      const name = r?.displayName || 'Player';
-      const color = r?.avatarColor || colors.primary;
-      return {
-        id: pid,
-        name,
-        members: [{ id: pid, name, color }],
-      };
-    });
-  }, [isScramble, round.teams, round.playerIds, resolver, colors.primary]);
-
-  function resolveScorerTee(scorerId: string): Tee | undefined {
-    if (isScramble) {
-      const team = round.teams?.find((t) => t.id === scorerId);
-      const firstMember = team?.playerIds[0];
-      if (!firstMember) return undefined;
-      const p = round.participants.find(
-        (q) => q.participantKey === firstMember
-      );
-      return findTee(round.course, p?.teeId);
-    }
-    const p = round.participants.find((q) => q.participantKey === scorerId);
-    return findTee(round.course, p?.teeId);
-  }
 
   return (
     <View style={styles.list}>
@@ -142,8 +94,6 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
               ? 'FINAL'
               : undefined;
 
-        const tee = resolveScorerTee(s.id);
-
         // Stat tiles are gated on (a) the scorer having engaged with
         // the stats feature at all (any tag row / override / shot
         // attribution), and (b) the result of their per-round
@@ -162,7 +112,7 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
             <ScorerSummaryRow
               members={s.members}
               name={s.name}
-              tee={tee ?? null}
+              tee={s.tee ?? null}
               scoreText={scoreText}
               tone={tone}
               scoreSub={thruText}
