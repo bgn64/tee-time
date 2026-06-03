@@ -68,26 +68,44 @@ export function ScorerSummaryRow({
 
   let teeChip: React.ReactNode = null;
   if (tee && teeColor && teeLabel) {
-    const inner = (
-      <>
-        <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
-        <Text style={styles.teeLabel} numberOfLines={1}>
-          {teeLabel}
-        </Text>
-        {onPressTee ? <Text style={styles.teeChev}>▾</Text> : null}
-      </>
-    );
-    teeChip = onPressTee ? (
-      <Pressable
-        onPress={onPressTee}
-        style={styles.teeChip}
-        accessibilityRole="button"
-        accessibilityLabel={`Change tee from ${tee.name}`}>
-        {inner}
-      </Pressable>
-    ) : (
-      <View style={styles.teeChip}>{inner}</View>
-    );
+    // Two visual styles for the same data:
+    //   - editing (onPressTee set):  pill button with chevron — looks
+    //     tappable so the user discovers the picker.
+    //   - read-only (no onPressTee): bare swatch + name · yardage,
+    //     matching `HoleContextSummary` so every viewing surface
+    //     presents tees the same way.
+    if (onPressTee) {
+      teeChip = (
+        <Pressable
+          onPress={onPressTee}
+          style={styles.teeChip}
+          accessibilityRole="button"
+          accessibilityLabel={`Change tee from ${tee.name}`}>
+          <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
+          <Text style={styles.teeLabel} numberOfLines={1}>
+            {teeLabel}
+          </Text>
+          <Text style={styles.teeChev}>▾</Text>
+        </Pressable>
+      );
+    } else {
+      teeChip = (
+        <View style={styles.teeBare}>
+          <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
+          <Text style={styles.teeBareName} numberOfLines={1}>
+            {tee.name}
+          </Text>
+          {tee.totalYardage ? (
+            <>
+              <Text style={styles.teeBareSep}>·</Text>
+              <Text style={styles.teeBareYds} numberOfLines={1}>
+                {tee.totalYardage.toLocaleString()} yds
+              </Text>
+            </>
+          ) : null}
+        </View>
+      );
+    }
   } else if (onPressTee) {
     // Editing surface with no tee picked yet → show a dashed
     // placeholder so the user can reach the picker mid-round.
@@ -154,6 +172,28 @@ function makeStyles(colors: ThemeColors) {
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.border,
       alignSelf: 'flex-start',
+    },
+    teeBare: {
+      marginTop: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      alignSelf: 'flex-start',
+      flexWrap: 'wrap',
+    },
+    teeBareName: {
+      fontSize: 11.5,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    teeBareSep: {
+      fontSize: 11.5,
+      color: colors.border,
+    },
+    teeBareYds: {
+      fontSize: 11.5,
+      fontWeight: '600',
+      color: colors.textMuted,
     },
     teeChipEmpty: {
       marginTop: 4,

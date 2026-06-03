@@ -1,22 +1,18 @@
 /**
- * RoundActionBar — two-column Like + Comments action bar that sits
- * at the bottom of every round card surface.
+ * RoundActionBar — action bar at the bottom of every round card.
  *
- * Layout: equal-width Like and Comments segments separated by a
- * hairline divider above them. Like-tap calls `onToggleLike`;
- * Comments-tap calls `onOpenComments`. Each handler is optional —
- * Phase 1 wires the visual button regardless; the real Like write
- * path lands in Phase 7, and Comments-open is wired by the parent
- * card to mount `CommentsSheet`.
+ * Layout: equal-width Like + Comments segments, with an optional Edit
+ * segment appended when `onEdit` is wired (typically only on the
+ * owner's completed rounds — feed cards leave it undefined).
  *
  * Per the mockup, the heart fills with the accent colour when
  * `liked` is true; the label flips between "Like"/"Liked" and the
  * count is shown when > 0 ("3 likes" / "3 liked").
  *
  * Icon choice: Ionicons (already a dep via `@expo/vector-icons`);
- * `heart-outline` / `heart` and `chatbubble-outline` give us the
- * line + filled looks the mockup uses without bringing in a
- * second icon library.
+ * `heart-outline` / `heart` + `chatbubble-outline` + `create-outline`
+ * give us the line + filled looks the mockup uses without bringing in
+ * a second icon library.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -32,6 +28,13 @@ type Props = {
   commentCount?: number;
   onToggleLike?: () => void;
   onOpenComments?: () => void;
+  /**
+   * When wired, an "Edit" segment is rendered after Comments. The
+   * RoundListCard passes this only when the signed-in user owns the
+   * round AND it's completed — feed cards for friends' rounds leave
+   * it undefined so the segment is hidden.
+   */
+  onEdit?: () => void;
 };
 
 export function RoundActionBar({
@@ -40,6 +43,7 @@ export function RoundActionBar({
   commentCount = 0,
   onToggleLike,
   onOpenComments,
+  onEdit,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -79,6 +83,20 @@ export function RoundActionBar({
         />
         <Text style={styles.segLabel}>{commentLabel}</Text>
       </Pressable>
+      {onEdit ? (
+        <Pressable
+          style={styles.seg}
+          onPress={onEdit}
+          accessibilityRole="button"
+          accessibilityLabel="Edit this round">
+          <Ionicons
+            name="create-outline"
+            size={22}
+            color={colors.textTitle}
+          />
+          <Text style={styles.segLabel}>Edit</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

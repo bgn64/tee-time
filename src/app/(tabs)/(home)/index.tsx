@@ -122,13 +122,7 @@ export default function HomeFeedScreen() {
       contentContainerStyle={styles.content}>
       <IncomingRequestsBanner style={styles.banner} />
       {feedRounds.map((round) => (
-        <RoundListCard
-          key={round.id}
-          round={round}
-          onOpen={() =>
-            router.push(`/(tabs)/(home)/round/${round.id}` as never)
-          }
-        />
+        <RoundListCard key={round.id} round={round} />
       ))}
     </ScrollView>
   );

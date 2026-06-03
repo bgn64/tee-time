@@ -41,7 +41,6 @@ type Props = {
   currentHoleNumber: number;
   onChangeCurrentHole: (n: number) => void;
   onChangeScore?: (scorerId: string, holeNumber: number, strokes: number) => void;
-  onPressTeeForScorer?: (scorerId: string) => void;
 };
 
 type Scorer = {
@@ -55,7 +54,6 @@ export function ScoringHolesBody({
   currentHoleNumber,
   onChangeCurrentHole,
   onChangeScore,
-  onPressTeeForScorer,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -184,9 +182,6 @@ export function ScoringHolesBody({
             scoreTone={tone}
             scoreSub={thruText}
             tee={tee}
-            onPressTee={
-              onPressTeeForScorer ? () => onPressTeeForScorer(s.id) : undefined
-            }
             holeNumber={currentHoleNumber}
             par={currentHole?.par ?? 0}
             strokes={currentHoleScore ? currentHoleScore.strokes : null}
