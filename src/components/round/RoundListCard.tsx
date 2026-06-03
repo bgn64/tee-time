@@ -1,7 +1,7 @@
 /**
  * RoundListCard — at-a-glance card used by the home feed.
  *
- * Phase 1 redesign — the card is now an edge-to-edge tabbed surface:
+ * Edge-to-edge tabbed surface:
  *
  *   1. `<EditorialHeader>` — live strip (in-flight only) + small-caps
  *      meta line + course name + sub-line. The owner avatar, format
@@ -9,27 +9,22 @@
  *      into the per-scorer rows on the Summary tab.
  *   2. `<TabbedRoundShell>` — `SUMMARY · SCORECARD · HOLES` segmented
  *      selector. Always lands on Summary on mount; no persistence
- *      across navigation.
- *      - Summary  : `<SummaryTabContent>` (Phase 1 baseline — no
- *                   aggregate tiles yet).
- *      - Scorecard: existing `<ReadOnlyScorecard>` (Phase 2 replaces
- *                   with `<HorizontalScorecard>`).
- *      - Holes    : "Coming soon" placeholder (Phase 3 lands the
- *                   read-only per-hole viewer; Phase 4 adds tags).
+ *      across navigation. The HOLES tab is hidden when the round has
+ *      no per-hole stat data — pre-feature rounds and brand-new rounds
+ *      that haven't been tagged don't surface an empty tab.
  *   3. `<RoundActionBar>` — Like + Comments. Comments-tap opens the
- *      `<CommentsSheet>` modal hosted by this card. Like-tap is a
- *      visual no-op until Phase 7 ships the likes table.
+ *      `<CommentsSheet>` modal hosted by this card.
  *
- * `onOpen` is preserved as the navigation hook into the round's
- * detail route. The Summary tab body is wrapped in a Pressable so
- * any tap on the summary surface (avoid interactive subviews —
- * Summary has none in Phase 1) opens the detail screen. Tabs other
- * than Summary do NOT navigate — the user uses them to read in
- * place.
+ * The card is intentionally NOT tappable as a whole. Everything is
+ * shown inline now — the previous "tap to view details" hover affordance
+ * was retired so the cards behave like static social-feed posts. Likes
+ * and comments are the only interactive surfaces on the card; tabs are
+ * used in place to read details.
  */
 
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
 
 import { CommentsSheet } from './CommentsSheet';
 import { EditorialHeader } from './EditorialHeader';
@@ -46,34 +41,27 @@ import {
 } from '@/library/golf/scoring';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
+import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
+import { useAccount } from '@/library/social/AccountContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
 
 type Props = {
   round: Round;
-  /**
-   * Fires when the user taps the Summary tab area (anywhere not on an
-   * interactive subview). Typically pushes the appropriate
-   * `round/[id]` route for the parent tab stack.
-   */
-  onOpen: () => void;
-  /** Accessibility label suffix for the Summary tap-through. */
-  detailsAccessibilityLabel?: string;
 };
 
-export function RoundListCard({
-  round,
-  onOpen,
-  detailsAccessibilityLabel,
-}: Props) {
+export function RoundListCard({ round }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const router = useRouter();
 
+  const { account } = useAccount();
   const { count: commentCount } = useCommentSummary(round.id);
   const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
     round.id
   );
+  const engagement = useRoundStatEngagement(round.id);
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const { topLineLeft, topLineRight } = useMemo(
@@ -83,6 +71,11 @@ export function RoundListCard({
   const subtitle = useMemo(() => deriveSubtitle(round), [round]);
 
   const isInProgress = !round.completedAt;
+  // Edit affordance is owner-only for completed rounds. In-progress
+  // rounds resume editing via the scoring tab, not via the card.
+  const isOwner =
+    !!account?.userId && account.userId === (round.ownerUserId ?? '');
+  const canEdit = isOwner && !isInProgress;
 
   return (
     <View style={styles.card}>
@@ -94,23 +87,13 @@ export function RoundListCard({
         subtitle={subtitle}
       />
       <TabbedRoundShell
-        summary={
-          <Pressable
-            onPress={onOpen}
-            accessibilityRole="button"
-            accessibilityLabel={
-              detailsAccessibilityLabel ??
-              `View round details for ${round.course.name}`
-            }>
-            <SummaryTabContent round={round} />
-          </Pressable>
-        }
+        summary={<SummaryTabContent round={round} />}
         scorecard={
           <View style={styles.tabBody}>
             <HorizontalScorecard round={round} />
           </View>
         }
-        holes={<HolesTabContent round={round} />}
+        holes={engagement.hasAny ? <HolesTabContent round={round} /> : undefined}
       />
       <RoundActionBar
         liked={likedByMe}
@@ -118,6 +101,14 @@ export function RoundListCard({
         commentCount={commentCount}
         onToggleLike={toggleLike}
         onOpenComments={() => setSheetVisible(true)}
+        onEdit={
+          canEdit
+            ? () =>
+                router.push(
+                  `/(tabs)/(score)/previous/${round.id}/edit` as never
+                )
+            : undefined
+        }
       />
       <CommentsSheet
         visible={sheetVisible}

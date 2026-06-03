@@ -47,6 +47,7 @@ import {
   scorerIdForUser,
 } from '@/library/golf/scoring';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
+import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -105,6 +106,7 @@ export function RoundDetailView({
   const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
     round.id
   );
+  const engagement = useRoundStatEngagement(round.id);
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const { topLineLeft, topLineRight } = useMemo(
@@ -114,22 +116,26 @@ export function RoundDetailView({
   const subtitle = useMemo(() => deriveSubtitle(round), [round]);
   const isInProgress = !round.completedAt;
 
-  // Holes tab body — editing surface uses per-scorer entry blocks
-  // (ScoreEntryAccordion) inside `ScoringHolesBody`. Read-only feed
-  // surfaces use `HolesTabContent` (scorer-pick + stepper + hole
-  // context + read-only tags).
-  const holesBody =
-    isEditing && currentHoleNumber != null && onChangeCurrentHole ? (
-      <ScoringHolesBody
-        round={round}
-        currentHoleNumber={currentHoleNumber}
-        onChangeCurrentHole={onChangeCurrentHole}
-        onChangeScore={onChangeScore}
-        onPressTeeForScorer={onPressTeeForScorer}
-      />
-    ) : (
-      <HolesTabContent round={round} />
-    );
+  // Holes tab visibility: editing mode always shows it (it's where
+  // score entry lives). Viewing mode only shows it when at least one
+  // scorer has tracked-stat data — otherwise the tab has nothing
+  // useful to render and we hide it to keep the segmented control
+  // focused on tabs with real content.
+  const showHolesTab = isEditing || engagement.hasAny;
+  const holesBody = showHolesTab
+    ? isEditing && currentHoleNumber != null && onChangeCurrentHole
+      ? (
+          <ScoringHolesBody
+            round={round}
+            currentHoleNumber={currentHoleNumber}
+            onChangeCurrentHole={onChangeCurrentHole}
+            onChangeScore={onChangeScore}
+          />
+        )
+      : (
+          <HolesTabContent round={round} />
+        )
+    : undefined;
 
   return (
     <View style={styles.shell}>
@@ -144,7 +150,12 @@ export function RoundDetailView({
           subtitle={subtitle}
         />
         <TabbedRoundShell
-          summary={<SummaryTabContent round={round} />}
+          summary={
+            <SummaryTabContent
+              round={round}
+              onPressTeeForScorer={isEditing ? onPressTeeForScorer : undefined}
+            />
+          }
           scorecard={
             <View style={styles.tabBody}>
               <HorizontalScorecard

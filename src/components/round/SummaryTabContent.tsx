@@ -39,6 +39,7 @@ import {
   summarizeContributions,
   useRoundShotAttributions,
 } from '@/library/golf/useRoundShotAttributions';
+import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -46,6 +47,14 @@ import type { Round, Tee } from '@/types/golf';
 
 type Props = {
   round: Round;
+  /**
+   * When set, the tee chip below each scorer's name becomes a
+   * Pressable that calls back with the scorer's id. Used by the
+   * scoring/editing surface so the user can change tees from Summary
+   * mid-round. Read-only surfaces (feed cards, completed-round
+   * detail) leave it undefined and the chip renders bare.
+   */
+  onPressTeeForScorer?: (scorerId: string) => void;
 };
 
 type Scorer = {
@@ -54,7 +63,7 @@ type Scorer = {
   members: AvatarMember[];
 };
 
-export function SummaryTabContent({ round }: Props) {
+export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -62,6 +71,7 @@ export function SummaryTabContent({ round }: Props) {
   const { rows: tagRows } = useRoundAchievementTags(round.id);
   const { getOverride } = useRoundTrackedStats(round.id);
   const { rows: shotRows } = useRoundShotAttributions(round.id);
+  const engagement = useRoundStatEngagement(round.id);
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
@@ -134,17 +144,18 @@ export function SummaryTabContent({ round }: Props) {
 
         const tee = resolveScorerTee(s.id);
 
-        // Aggregate tiles — derived from the scorer's tag rows
-        // filtered through their per-round enabled set. Empty array
-        // (e.g. scorer turned every stat off) → SummaryAggregateTiles
-        // renders nothing.
-        const rawAggregates = computeScorerAggregates(
-          tagRows,
-          s.id,
-          visibleHoles
-        );
-        const enabled = effectiveEnabledTags(round.scoringRule, getOverride(s.id));
-        const tiles = filterAggregatesByEnabled(rawAggregates, enabled);
+        // Stat tiles are gated on (a) the scorer having engaged with
+        // the stats feature at all (any tag row / override / shot
+        // attribution), and (b) the result of their per-round
+        // enabled-set filter. Pre-feature rounds never engaged, so
+        // they show no tiles — matching the user's expectation that
+        // old rounds shouldn't surface a row of zeros.
+        const tiles = engagement.hasFor(s.id)
+          ? filterAggregatesByEnabled(
+              computeScorerAggregates(tagRows, s.id, visibleHoles),
+              effectiveEnabledTags(round.scoringRule, getOverride(s.id))
+            )
+          : [];
 
         return (
           <View key={s.id} style={i > 0 ? styles.rowSep : styles.row}>
@@ -155,9 +166,14 @@ export function SummaryTabContent({ round }: Props) {
               scoreText={scoreText}
               tone={tone}
               scoreSub={thruText}
+              onPressTee={
+                onPressTeeForScorer
+                  ? () => onPressTeeForScorer(s.id)
+                  : undefined
+              }
             />
             <SummaryAggregateTiles tiles={tiles} />
-            {isScramble ? (
+            {isScramble && engagement.hasFor(s.id) ? (
               <TeamContributionRow
                 contributions={summarizeContributions(
                   shotRows,

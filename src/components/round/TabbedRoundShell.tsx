@@ -30,12 +30,18 @@ type TabSlot = ReactNode | (() => ReactNode);
 type Props = {
   summary: TabSlot;
   scorecard: TabSlot;
-  holes: TabSlot;
+  /**
+   * Optional Holes tab. When omitted (e.g. round-views in viewing
+   * mode for a round with no per-hole stat data), the segmented
+   * control hides the HOLES button entirely so the surface doesn't
+   * advertise an empty tab.
+   */
+  holes?: TabSlot;
   /** Optional override for the initial tab. Defaults to 'summary'. */
   defaultTab?: TabKey;
 };
 
-const TABS: readonly { key: TabKey; label: string }[] = [
+const ALL_TABS: readonly { key: TabKey; label: string }[] = [
   { key: 'summary', label: 'SUMMARY' },
   { key: 'scorecard', label: 'SCORECARD' },
   { key: 'holes', label: 'HOLES' },
@@ -50,17 +56,33 @@ export function TabbedRoundShell({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  const tabs = useMemo(
+    () => ALL_TABS.filter((t) => t.key !== 'holes' || holes !== undefined),
+    [holes]
+  );
+
   const [active, setActive] = useState<TabKey>(defaultTab);
 
+  // If the active tab disappears (defensive: holes slot was wired
+  // earlier in the render tree but isn't now), fall back to summary
+  // so we don't render an unrelated slot.
+  const effectiveActive = tabs.some((t) => t.key === active)
+    ? active
+    : 'summary';
+
   const slot =
-    active === 'summary' ? summary : active === 'scorecard' ? scorecard : holes;
+    effectiveActive === 'summary'
+      ? summary
+      : effectiveActive === 'scorecard'
+        ? scorecard
+        : holes;
 
   return (
     <View>
       <View style={styles.pager}>
         <View style={styles.segmented}>
-          {TABS.map((tab) => {
-            const isActive = tab.key === active;
+          {tabs.map((tab) => {
+            const isActive = tab.key === effectiveActive;
             return (
               <Pressable
                 key={tab.key}

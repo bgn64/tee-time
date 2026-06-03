@@ -127,9 +127,11 @@ export function HorizontalScorecard({
 
     const filtered = courseTees.filter((t) => playedTeeIds.has(t.id));
     if (filtered.length > 0) return filtered;
-    // No scorer specified a tee — fall back to the first course tee
-    // so the grid has something rather than collapsing to empty.
-    return [courseTees[0]];
+    // No scorer specified a tee. Rather than collapsing to just the
+    // first tee, surface every course tee so the user still sees the
+    // full set of options for the course; scorers without a teeId
+    // get bucketed into the first group below.
+    return courseTees;
   }, [round.course.tees, round.participants, round.scoringRule, round.teams]);
 
   const teeColorMap = useMemo(() => assignTeeColors(tees), [tees]);

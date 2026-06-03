@@ -338,13 +338,7 @@ export default function RoundsListScreen() {
             <View key={group.key ?? `flat-${gi}`}>
               {group.key ? <Text style={styles.monthLabel}>{group.key}</Text> : null}
               {group.rounds.map((round) => (
-                <RoundListCard
-                  key={round.id}
-                  round={round}
-                  onOpen={() =>
-                    router.push(`/(tabs)/(score)/previous/${round.id}` as never)
-                  }
-                />
+                <RoundListCard key={round.id} round={round} />
               ))}
             </View>
           ))
