@@ -23,14 +23,16 @@
 --     migration 005, matching the comments table from migration 007.
 --
 -- Run once against your Supabase project after migrations 001
--- through 013 have been applied. Idempotent re-runs are out of
--- scope: drop the table manually if you need to re-apply.
+-- through 013 have been applied. Re-runs are idempotent (`if not
+-- exists` on table/indexes, `drop … if exists` before each trigger
+-- and policy, `create or replace` on the function) so a partial
+-- apply can be retried safely.
 
 -- =====================================================
 -- Table
 -- =====================================================
 
-create table public.round_likes (
+create table if not exists public.round_likes (
   id text primary key,
   round_id text not null references public.scorecards (id) on delete cascade,
   liker_user_id uuid not null references auth.users (id) on delete cascade,
@@ -40,13 +42,13 @@ create table public.round_likes (
     unique (round_id, liker_user_id)
 );
 
-create index round_likes_round_idx
+create index if not exists round_likes_round_idx
   on public.round_likes (round_id);
 
-create index round_likes_owner_idx
+create index if not exists round_likes_owner_idx
   on public.round_likes (owner_user_id);
 
-create index round_likes_liker_idx
+create index if not exists round_likes_liker_idx
   on public.round_likes (liker_user_id);
 
 -- =====================================================
@@ -84,6 +86,8 @@ begin
 end;
 $$;
 
+drop trigger if exists round_likes_owner_trg on public.round_likes;
+
 create trigger round_likes_owner_trg
   before insert or update on public.round_likes
   for each row
@@ -103,6 +107,7 @@ alter table public.round_likes enable row level security;
 -- SELECT — anyone who can see the parent scorecard can see its
 -- likes. Same predicate as `comments select self or friend` from
 -- migration 007 so visibility stays consistent across surfaces.
+drop policy if exists "round_likes select self or friend" on public.round_likes;
 create policy "round_likes select self or friend" on public.round_likes
   for select using (
     exists (
@@ -117,6 +122,7 @@ create policy "round_likes select self or friend" on public.round_likes
 -- A viewer who lost visibility between buffering and upload sees
 -- the row rejected; the PowerSync upload connector discards on a
 -- 42501 (insufficient privilege) error.
+drop policy if exists "round_likes insert if visible" on public.round_likes;
 create policy "round_likes insert if visible" on public.round_likes
   for insert with check (
     liker_user_id = auth.uid()
@@ -131,6 +137,7 @@ create policy "round_likes insert if visible" on public.round_likes
 -- DELETE — liker-only. Other users (including the round owner)
 -- cannot remove someone else's like. A user un-liking a round they
 -- can no longer see is still allowed — the row is theirs.
+drop policy if exists "round_likes delete own" on public.round_likes;
 create policy "round_likes delete own" on public.round_likes
   for delete using (liker_user_id = auth.uid());
 

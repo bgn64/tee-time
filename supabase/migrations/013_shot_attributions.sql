@@ -21,13 +21,16 @@
 --     element is the tee shot per Q6 (plan.md §Phase 6 risks).
 --
 -- Run once against your Supabase project after migrations 001
--- through 012 have been applied.
+-- through 012 have been applied. Re-runs are idempotent (`if not
+-- exists` on table/indexes, `drop … if exists` before each trigger
+-- and policy, `create or replace` on the function) so a partial
+-- apply can be retried safely.
 
 -- =====================================================
 -- Table
 -- =====================================================
 
-create table public.scorecard_shot_attributions (
+create table if not exists public.scorecard_shot_attributions (
   id text primary key,
   scorecard_id text not null references public.scorecards (id) on delete cascade,
   owner_user_id uuid not null references auth.users (id) on delete cascade,
@@ -41,10 +44,10 @@ create table public.scorecard_shot_attributions (
     check (jsonb_typeof(contributor_ids) = 'array')
 );
 
-create index scorecard_shot_attributions_scorecard_idx
+create index if not exists scorecard_shot_attributions_scorecard_idx
   on public.scorecard_shot_attributions (scorecard_id);
 
-create index scorecard_shot_attributions_owner_idx
+create index if not exists scorecard_shot_attributions_owner_idx
   on public.scorecard_shot_attributions (owner_user_id);
 
 -- =====================================================
@@ -80,10 +83,16 @@ begin
 end;
 $$;
 
+drop trigger if exists scorecard_shot_attributions_owner_trg
+  on public.scorecard_shot_attributions;
+
 create trigger scorecard_shot_attributions_owner_trg
   before insert or update on public.scorecard_shot_attributions
   for each row
   execute function public.scorecard_shot_attributions_fill_owner();
+
+drop trigger if exists scorecard_shot_attributions_touch_trg
+  on public.scorecard_shot_attributions;
 
 create trigger scorecard_shot_attributions_touch_trg
   before update on public.scorecard_shot_attributions
@@ -99,6 +108,9 @@ create trigger scorecard_shot_attributions_touch_trg
 -- =====================================================
 
 alter table public.scorecard_shot_attributions enable row level security;
+
+drop policy if exists "shot attributions in owned scorecards"
+  on public.scorecard_shot_attributions;
 
 create policy "shot attributions in owned scorecards"
   on public.scorecard_shot_attributions
