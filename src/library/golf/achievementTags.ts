@@ -119,25 +119,70 @@ export function effectiveEnabledTags(
 }
 
 /**
- * Pluck the tags array for a specific (scorer, hole) tuple from a
- * row list. Returns an empty array when no row matches — UI maps
- * absent rows to "untapped".
+ * Per-(scorer, hole) tag values. The new 3-state model:
+ *   - 'yes'   : the outcome happened (Fairway hit, OB hit, etc.)
+ *   - 'no'    : the outcome explicitly did NOT happen
+ *   - absent  : not yet entered — UI renders the pill as "unset"
+ *
+ * Storage shape evolved from a simple `tags: TagKey[]` array to a
+ * `{ [TagKey]: 'yes' | 'no' }` object. The reader auto-detects both
+ * shapes so existing rounds (where tapping = "this happened") keep
+ * rendering — every legacy entry is normalised to 'yes' which matches
+ * the original semantics (did_well + tap = positive event; hurt_me +
+ * tap = negative event happened). The writer always produces the new
+ * object shape.
  */
+export type TagValue = 'yes' | 'no';
+export type TagValueMap = { [K in TagKey]?: TagValue };
+
 export type TagRow = {
   scorer_id: string;
   hole_number: number;
-  tags: readonly TagKey[];
+  values: TagValueMap;
 };
 
-export function tagsForHole(
+/**
+ * Look up the values map for a (scorer, hole) tuple. Returns an empty
+ * object when no row matches.
+ */
+export function valuesForHole(
   rows: readonly TagRow[],
   scorerId: string,
   holeNumber: number
-): readonly TagKey[] {
+): TagValueMap {
   for (const row of rows) {
     if (row.scorer_id === scorerId && row.hole_number === holeNumber) {
-      return row.tags;
+      return row.values;
     }
   }
-  return [];
+  return {};
+}
+
+/**
+ * Map a (group, value) pair to the outcome tone. "good" means the
+ * cell should render in the positive palette (green), "bad" in the
+ * negative palette (red). The tone is what the user cares about —
+ * whether the value is good or bad for their round — not what they
+ * literally tapped. Did-well groups behave the obvious way; hurt-me
+ * groups flip ('yes' = bad thing happened, 'no' = bad thing didn't).
+ */
+export function valueTone(
+  group: TagGroup,
+  value: TagValue
+): 'good' | 'bad' {
+  if (group === 'hurt_me') {
+    return value === 'yes' ? 'bad' : 'good';
+  }
+  // did_well + scramble_only
+  return value === 'yes' ? 'good' : 'bad';
+}
+
+/**
+ * Cycle a pill's value: unset → yes → no → unset. Used by the
+ * single-toggle stat pill on the Holes editing surface.
+ */
+export function cycleTagValue(current: TagValue | undefined): TagValue | undefined {
+  if (current === undefined) return 'yes';
+  if (current === 'yes') return 'no';
+  return undefined;
 }

@@ -1,29 +1,35 @@
 /**
  * Achievement tags — local data layer for a single round.
  *
- * Read path: `useRoundAchievementTags(roundId)` watches the local
- * `scorecard_achievement_tags` table via PowerSync `useQuery`,
- * parses each row's `tags` JSON column, and returns a memoised
- * tuple lookup `getTags(scorerId, holeNumber)`.
+ * Read path: watches `scorecard_achievement_tags` via PowerSync
+ * `useQuery`, parses each row's `tags` JSON column into a `TagValueMap`,
+ * and returns a memoised tuple lookup `getValues(scorerId, holeNumber)`.
  *
- * Write path: `toggleTag(scorerId, holeNumber, tagKey)` performs a
- * read-modify-write on the row (creating it with the single key
- * if absent, removing the key if already present). The PowerSync
- * connector uploads asynchronously; RLS server-side ensures the
- * write goes against the owner's row only. Used by the scoring
- * surface (write) and feed surfaces (read only).
+ * Write path: `setTagValue(scorerId, holeNumber, tagKey, value)`
+ * performs a read-modify-write on the row (creating it with the single
+ * pair if absent). Passing `undefined` for `value` clears the key
+ * from the map ("unset" state). When the resulting map is empty we
+ * still leave the row in place (matches the storage convention of
+ * "absent row = never engaged" vs "empty map = explicitly cleared").
  *
- * No coupling to RoundContext — this hook works for any round id
- * (in-flight on the scoring tab, completed on a previous-round
- * route, or a friend's round in the feed). Writes only succeed when
- * the signed-in user is the round owner (server RLS); read access
- * follows whichever sync stream the row landed via.
+ * Storage compat: the on-disk `tags` JSON column historically held a
+ * `TagKey[]` array. The reader auto-detects array vs object form so
+ * existing rounds keep rendering — array entries are normalised to
+ * `'yes'` which matches the original semantics (a tap meant "this
+ * outcome happened"). The writer always produces the new object form
+ * `{ [TagKey]: 'yes' | 'no' }`.
  */
 
 import { useQuery } from '@powersync/react';
 import { useCallback, useMemo, useRef } from 'react';
 
-import { type TagKey, type TagRow, tagsForHole } from '@/library/golf/achievementTags';
+import {
+  type TagKey,
+  type TagRow,
+  type TagValue,
+  type TagValueMap,
+  valuesForHole,
+} from '@/library/golf/achievementTags';
 import { newAchievementTagId } from '@/library/golf/ids';
 import {
   SCORECARD_ACHIEVEMENT_TAGS_TABLE,
@@ -34,32 +40,58 @@ import { useAccount } from '@/library/social/AccountContext';
 
 export type UseRoundAchievementTagsResult = {
   rows: readonly TagRow[];
-  getTags: (scorerId: string, holeNumber: number) => readonly TagKey[];
+  getValues: (scorerId: string, holeNumber: number) => TagValueMap;
   /**
-   * Toggle one tag for a (scorer, hole) tuple. No-op if there's no
-   * round id, no signed-in user, or a previous toggle for the same
-   * tuple is still in flight.
+   * Set one tag's value for a (scorer, hole) tuple. Passing
+   * `undefined` clears the entry (returns the pill to its unset
+   * state). No-op if there's no round id, no signed-in user, or a
+   * previous write for the same (scorer, hole, tag) is still in
+   * flight.
    */
-  toggleTag: (
+  setTagValue: (
     scorerId: string,
     holeNumber: number,
-    tagKey: TagKey
+    tagKey: TagKey,
+    value: TagValue | undefined
   ) => Promise<void>;
 };
 
-function parseTagsValue(raw: unknown): TagKey[] {
+/**
+ * Parse the on-disk `tags` JSON column. Accepts both the legacy
+ * `TagKey[]` array form and the new `{ [TagKey]: TagValue }` object
+ * form. Array entries normalise to `'yes'` so legacy rounds keep
+ * rendering correctly with the new pill UI.
+ */
+function parseValuesField(raw: unknown): TagValueMap {
+  let parsed: unknown = raw;
   if (typeof raw === 'string') {
-    if (raw.trim().length === 0) return [];
+    if (raw.trim().length === 0) return {};
     try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.filter((k): k is TagKey => typeof k === 'string');
+      parsed = JSON.parse(raw);
     } catch {
-      return [];
+      return {};
     }
-  } else if (Array.isArray(raw)) {
-    return raw.filter((k): k is TagKey => typeof k === 'string');
   }
-  return [];
+  if (Array.isArray(parsed)) {
+    // Legacy: ['fairway', 'gir'] → { fairway: 'yes', gir: 'yes' }.
+    const out: TagValueMap = {};
+    for (const k of parsed) {
+      if (typeof k === 'string') {
+        (out as Record<string, TagValue>)[k] = 'yes';
+      }
+    }
+    return out;
+  }
+  if (parsed && typeof parsed === 'object') {
+    const out: TagValueMap = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (v === 'yes' || v === 'no') {
+        (out as Record<string, TagValue>)[k] = v;
+      }
+    }
+    return out;
+  }
+  return {};
 }
 
 export function useRoundAchievementTags(
@@ -69,8 +101,8 @@ export function useRoundAchievementTags(
   const { account } = useAccount();
   const signedInUserId = account?.userId ?? null;
 
-  // Map keyed by `${scorerId}::${holeNumber}` so concurrent toggles
-  // on different cells don't block each other.
+  // Map keyed by `${scorerId}::${holeNumber}::${tagKey}` so concurrent
+  // writes on different cells don't block each other.
   const inFlight = useRef<Set<string>>(new Set());
 
   const { data } = useQuery<ScorecardAchievementTagRecord & { id: string }>(
@@ -87,13 +119,12 @@ export function useRoundAchievementTags(
       out.push({
         scorer_id: row.scorer_id,
         hole_number: row.hole_number,
-        tags: parseTagsValue(row.tags),
+        values: parseValuesField(row.tags),
       });
     }
     return out;
   }, [data]);
 
-  // Keep the raw rows around with their ids for the write path.
   const idByTuple = useMemo(() => {
     const m = new Map<string, string>();
     for (const row of data) {
@@ -103,14 +134,14 @@ export function useRoundAchievementTags(
     return m;
   }, [data]);
 
-  const getTags = useCallback(
+  const getValues = useCallback(
     (scorerId: string, holeNumber: number) =>
-      tagsForHole(rows, scorerId, holeNumber),
+      valuesForHole(rows, scorerId, holeNumber),
     [rows]
   );
 
-  const toggleTag = useCallback<UseRoundAchievementTagsResult['toggleTag']>(
-    async (scorerId, holeNumber, tagKey) => {
+  const setTagValue = useCallback<UseRoundAchievementTagsResult['setTagValue']>(
+    async (scorerId, holeNumber, tagKey, value) => {
       if (!roundId || !signedInUserId) return;
       const guardKey = `${scorerId}::${holeNumber}::${tagKey}`;
       if (inFlight.current.has(guardKey)) return;
@@ -118,11 +149,13 @@ export function useRoundAchievementTags(
       try {
         const tupleKey = `${scorerId}::${holeNumber}`;
         const rowId = idByTuple.get(tupleKey);
-        const current = getTags(scorerId, holeNumber);
-        const has = current.includes(tagKey);
-        const next: TagKey[] = has
-          ? current.filter((k) => k !== tagKey)
-          : [...current, tagKey];
+        const current = getValues(scorerId, holeNumber);
+        const next: TagValueMap = { ...current };
+        if (value === undefined) {
+          delete (next as Record<string, TagValue>)[tagKey];
+        } else {
+          (next as Record<string, TagValue>)[tagKey] = value;
+        }
         const now = new Date().toISOString();
         const json = JSON.stringify(next);
         if (rowId) {
@@ -148,8 +181,8 @@ export function useRoundAchievementTags(
         inFlight.current.delete(guardKey);
       }
     },
-    [roundId, signedInUserId, idByTuple, getTags, system]
+    [roundId, signedInUserId, idByTuple, getValues, system]
   );
 
-  return { rows, getTags, toggleTag };
+  return { rows, getValues, setTagValue };
 }
