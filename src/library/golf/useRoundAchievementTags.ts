@@ -6,10 +6,15 @@
  * and returns a memoised tuple lookup `getValues(scorerId, holeNumber)`.
  *
  * Write path: `setTagValue(scorerId, holeNumber, tagKey, value)`
- * performs a read-modify-write on the row (creating it with the single
- * pair if absent). Passing `undefined` for `value` clears the key
- * from the map ("unset" state). When the resulting map is empty we
- * still leave the row in place (matches the storage convention of
+ * performs the read-modify-write inside a PowerSync `writeTransaction`
+ * so the row's current `tags` map is read from local SQLite (not from
+ * a stale React closure) and the conditional INSERT/UPDATE happens
+ * atomically. Concurrent calls on the same `(scorer, hole)` tuple are
+ * chained per tuple via an in-memory promise queue so a burst of taps
+ * across different pills all apply in order rather than racing and
+ * overwriting each other. Passing `undefined` for `value` clears the
+ * key from the map ("unset" state). When the resulting map is empty
+ * we still leave the row in place (matches the storage convention of
  * "absent row = never engaged" vs "empty map = explicitly cleared").
  *
  * Storage compat: the on-disk `tags` JSON column historically held a
@@ -44,9 +49,10 @@ export type UseRoundAchievementTagsResult = {
   /**
    * Set one tag's value for a (scorer, hole) tuple. Passing
    * `undefined` clears the entry (returns the pill to its unset
-   * state). No-op if there's no round id, no signed-in user, or a
-   * previous write for the same (scorer, hole, tag) is still in
-   * flight.
+   * state). No-op if there's no round id or no signed-in user.
+   * Calls for the same (scorer, hole) tuple are serialised via an
+   * in-memory queue so each tap eventually applies in the order it
+   * was made.
    */
   setTagValue: (
     scorerId: string,
@@ -101,9 +107,12 @@ export function useRoundAchievementTags(
   const { account } = useAccount();
   const signedInUserId = account?.userId ?? null;
 
-  // Map keyed by `${scorerId}::${holeNumber}::${tagKey}` so concurrent
-  // writes on different cells don't block each other.
-  const inFlight = useRef<Set<string>>(new Set());
+  // Map keyed by `${scorerId}::${holeNumber}` holding the tail of the
+  // promise chain for each tuple. New taps chain onto the previous
+  // promise so writes serialise per tuple while different tuples stay
+  // independent. Chains are catch-wrapped so a single failed tap does
+  // not poison subsequent ones.
+  const inFlight = useRef<Map<string, Promise<void>>>(new Map());
 
   const { data } = useQuery<ScorecardAchievementTagRecord & { id: string }>(
     roundId
@@ -125,15 +134,6 @@ export function useRoundAchievementTags(
     return out;
   }, [data]);
 
-  const idByTuple = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const row of data) {
-      if (!row.scorer_id || row.hole_number == null) continue;
-      m.set(`${row.scorer_id}::${row.hole_number}`, row.id);
-    }
-    return m;
-  }, [data]);
-
   const getValues = useCallback(
     (scorerId: string, holeNumber: number) =>
       valuesForHole(rows, scorerId, holeNumber),
@@ -143,45 +143,65 @@ export function useRoundAchievementTags(
   const setTagValue = useCallback<UseRoundAchievementTagsResult['setTagValue']>(
     async (scorerId, holeNumber, tagKey, value) => {
       if (!roundId || !signedInUserId) return;
-      const guardKey = `${scorerId}::${holeNumber}::${tagKey}`;
-      if (inFlight.current.has(guardKey)) return;
-      inFlight.current.add(guardKey);
+      const tupleKey = `${scorerId}::${holeNumber}`;
+      const previous = inFlight.current.get(tupleKey) ?? Promise.resolve();
+
+      const next = previous.then(() =>
+        system.powersync.writeTransaction(async (tx) => {
+          // Re-read the row from local SQLite inside the transaction
+          // so we always start from the latest committed state rather
+          // than a stale React snapshot.
+          const existing = await tx.getOptional<{ id: string; tags: string | null }>(
+            `SELECT id, tags FROM ${SCORECARD_ACHIEVEMENT_TAGS_TABLE}
+             WHERE scorecard_id = ? AND scorer_id = ? AND hole_number = ?`,
+            [roundId, scorerId, holeNumber]
+          );
+          const current = parseValuesField(existing?.tags ?? null);
+          const updated: TagValueMap = { ...current };
+          if (value === undefined) {
+            delete (updated as Record<string, TagValue>)[tagKey];
+          } else {
+            (updated as Record<string, TagValue>)[tagKey] = value;
+          }
+          const now = new Date().toISOString();
+          const json = JSON.stringify(updated);
+          if (existing) {
+            await tx.execute(
+              `UPDATE ${SCORECARD_ACHIEVEMENT_TAGS_TABLE}
+                 SET tags = ?, updated_at = ?
+                 WHERE id = ?`,
+              [json, now, existing.id]
+            );
+          } else {
+            // Use the dedicated achievement-tag id generator. The
+            // server-side trigger fills in owner_user_id from the
+            // parent scorecard row.
+            const id = newAchievementTagId();
+            await tx.execute(
+              `INSERT INTO ${SCORECARD_ACHIEVEMENT_TAGS_TABLE}
+                 (id, scorecard_id, owner_user_id, scorer_id, hole_number, tags, updated_at)
+               VALUES (?, ?, NULL, ?, ?, ?, ?)`,
+              [id, roundId, scorerId, holeNumber, json, now]
+            );
+          }
+        })
+      );
+
+      // Catch so a failed tap doesn't poison subsequent taps in the
+      // chain, but await the original (uncaught) promise so callers
+      // still see errors from their own tap.
+      const tracked = next.catch(() => {});
+      inFlight.current.set(tupleKey, tracked);
       try {
-        const tupleKey = `${scorerId}::${holeNumber}`;
-        const rowId = idByTuple.get(tupleKey);
-        const current = getValues(scorerId, holeNumber);
-        const next: TagValueMap = { ...current };
-        if (value === undefined) {
-          delete (next as Record<string, TagValue>)[tagKey];
-        } else {
-          (next as Record<string, TagValue>)[tagKey] = value;
-        }
-        const now = new Date().toISOString();
-        const json = JSON.stringify(next);
-        if (rowId) {
-          await system.powersync.execute(
-            `UPDATE ${SCORECARD_ACHIEVEMENT_TAGS_TABLE}
-               SET tags = ?, updated_at = ?
-               WHERE id = ?`,
-            [json, now, rowId]
-          );
-        } else {
-          // Use the dedicated achievement-tag id generator. The
-          // server-side trigger fills in owner_user_id from the
-          // parent scorecard row.
-          const id = newAchievementTagId();
-          await system.powersync.execute(
-            `INSERT INTO ${SCORECARD_ACHIEVEMENT_TAGS_TABLE}
-               (id, scorecard_id, owner_user_id, scorer_id, hole_number, tags, updated_at)
-             VALUES (?, ?, NULL, ?, ?, ?, ?)`,
-            [id, roundId, scorerId, holeNumber, json, now]
-          );
-        }
+        await next;
       } finally {
-        inFlight.current.delete(guardKey);
+        // Only clear the slot if no newer tap has chained onto it.
+        if (inFlight.current.get(tupleKey) === tracked) {
+          inFlight.current.delete(tupleKey);
+        }
       }
     },
-    [roundId, signedInUserId, idByTuple, getValues, system]
+    [roundId, signedInUserId, system]
   );
 
   return { rows, getValues, setTagValue };
