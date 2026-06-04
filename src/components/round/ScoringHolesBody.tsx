@@ -4,7 +4,9 @@
  * Composes:
  *   [HoleStepperCombo]
  *   per scorer:
- *     [ScoreEntryAccordion]   ← ScorerSummaryRow + chips + stat section
+ *     [ScoreEntryAccordion]   ← ScorerSummaryRow + chips + per-stat
+ *                               HoleDetailRow stack + scramble shot
+ *                               picker
  *
  * Mirrors the layout of `HolesTabContent` (the viewing surface) so
  * the live-scoring and live-viewing surfaces look like the same
@@ -12,9 +14,10 @@
  * and pass per-hole context to `ScorerSummaryRow` so the meta line
  * (yardage · Par · Hcp) is identical across surfaces.
  *
- * Lives in `src/components/round/` (not `scoring/`) because it's
- * scoped to the round-detail surface and reads through the round +
- * tags hooks, not the scoring screen's local state.
+ * Stats wiring: only scorers in `round.trackedScorerIds` receive
+ * the per-stat input section. Each gets a row per stat that's both
+ * enabled for the round AND applicable to the current hole's par
+ * (`applicableStatsForHole`).
  */
 
 import { useMemo } from 'react';
@@ -22,15 +25,12 @@ import { StyleSheet, View } from 'react-native';
 
 import { ScoreEntryAccordion } from './ScoreEntryAccordion';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
-import {
-  effectiveEnabledTags,
-} from '@/library/golf/achievementTags';
+import { applicableStatsForHole } from '@/library/golf/builtInStats';
 import { holeScoreDisplay } from '@/library/golf/holeScoreDisplay';
 import { getHoleStats } from '@/library/golf/teeGrouping';
-import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
-import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -52,8 +52,7 @@ export function ScoringHolesBody({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const scorers = useRoundScorers(round);
-  const { getValues, setTagValue } = useRoundAchievementTags(round.id);
-  const { getOverride, setOverride } = useRoundTrackedStats(round.id);
+  const { getValues, setValue } = useRoundHoleDetails(round.id);
   const { getContributors, setContributors } = useRoundShotAttributions(
     round.id
   );
@@ -63,6 +62,19 @@ export function ScoringHolesBody({
 
   const currentHole = round.course.holes.find(
     (h) => h.number === currentHoleNumber
+  );
+
+  const trackedSet = useMemo(
+    () => new Set(round.trackedScorerIds),
+    [round.trackedScorerIds]
+  );
+
+  const statsForThisHole = useMemo(
+    () =>
+      currentHole
+        ? applicableStatsForHole(round.enabledStatKeys, currentHole)
+        : [],
+    [round.enabledStatKeys, currentHole]
   );
 
   // Per-scorer strokes map for the hole-jump grid in the stepper.
@@ -100,12 +112,11 @@ export function ScoringHolesBody({
         );
         const strokes = currentHoleScore?.strokes ?? null;
 
-        // Per-hole hero score (replaces running totals).
         const display = holeScoreDisplay(strokes, currentHole.par);
 
-        const values = getValues(s.id, currentHoleNumber);
-        const override = getOverride(s.id);
-        const enabledTags = effectiveEnabledTags(round.scoringRule, override);
+        const tracked = trackedSet.has(s.id);
+        const applicableStats = tracked ? statsForThisHole : [];
+        const values = tracked ? getValues(s.id, currentHoleNumber) : {};
         const contributorIds = isScramble
           ? getContributors(s.id, currentHoleNumber)
           : undefined;
@@ -143,16 +154,15 @@ export function ScoringHolesBody({
                 ? (next) => onChangeScore(s.id, currentHoleNumber, next)
                 : undefined
             }
-            scorerId={s.id}
-            scoringRule={round.scoringRule}
+            applicableStats={applicableStats}
             values={values}
-            enabledTags={enabledTags}
-            onSetValue={(tagKey, value) => {
-              void setTagValue(s.id, currentHoleNumber, tagKey, value);
-            }}
-            onChangeEnabledTags={(next) => {
-              void setOverride(s.id, next);
-            }}
+            onChangeStat={
+              tracked
+                ? (statKey, value) => {
+                    void setValue(s.id, currentHoleNumber, statKey, value);
+                  }
+                : undefined
+            }
             teamMembers={teamMembers}
             contributorIds={contributorIds}
             onChangeContributors={

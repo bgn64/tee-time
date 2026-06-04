@@ -1,44 +1,48 @@
 /**
- * SummaryTabContent — Phase 1 baseline for the Summary tab body.
+ * SummaryTabContent — per-scorer summary row + (when stats are
+ * tracked for the scorer) an inline aggregate tile strip.
  *
- * Renders one row per scorer with avatar(s), name, tee chip, and the
- * scorer's hero score on the right (current ±total + `THRU N`
- * sub-label while in-flight). No accordion, no aggregate tiles yet —
- * Phase 5 grows this with inline per-scorer aggregate metrics
- * (Fairways / GIR / OB / Sand) and scramble team-contribution rows.
+ * Tiles are built here, not in a helper, because the per-stat
+ * type discrimination + tone wiring is small enough that a
+ * separate helper would just hide the structure. The renderer
+ * (`SummaryAggregateTiles`) only owns presentation.
  *
  * Derivations match `ScorerStack`: stroke rounds get one row per
  * participant; scramble rounds get one row per team. Display
- * identity comes from `useParticipantResolver`; running totals come
- * from `playerProgress` so the row matches every other surface.
+ * identity comes from `useParticipantResolver`; running totals
+ * come from `playerProgress` so the row matches every other
+ * surface.
  */
 
 import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ScorerSummaryRow } from './ScorerSummaryRow';
-import { SummaryAggregateTiles } from './SummaryAggregateTiles';
+import {
+  SummaryAggregateTiles,
+  type AggregateTile,
+} from './SummaryAggregateTiles';
 import { TeamContributionRow } from './TeamContributionRow';
 import {
-  computeScorerAggregates,
-  filterAggregatesByEnabled,
-} from '@/library/golf/aggregateStats';
+  aggregateBinary,
+  aggregateInteger,
+} from '@/library/golf/aggregateHoleDetails';
 import {
-  effectiveEnabledTags,
-} from '@/library/golf/achievementTags';
+  BUILT_IN_STATS,
+  getStat,
+} from '@/library/golf/builtInStats';
 import {
   formatScore,
   holesInRange,
   playerProgress,
 } from '@/library/golf/scoring';
-import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import {
   summarizeContributions,
   useRoundShotAttributions,
 } from '@/library/golf/useRoundShotAttributions';
 import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
-import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -48,9 +52,10 @@ type Props = {
   /**
    * When set, the tee chip below each scorer's name becomes a
    * Pressable that calls back with the scorer's id. Used by the
-   * scoring/editing surface so the user can change tees from Summary
-   * mid-round. Read-only surfaces (feed cards, completed-round
-   * detail) leave it undefined and the chip renders bare.
+   * scoring/editing surface so the user can change tees from
+   * Summary mid-round. Read-only surfaces (feed cards,
+   * completed-round detail) leave it undefined and the chip
+   * renders bare.
    */
   onPressTeeForScorer?: (scorerId: string) => void;
 };
@@ -60,8 +65,7 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const scorers = useRoundScorers(round);
-  const { rows: tagRows } = useRoundAchievementTags(round.id);
-  const { getOverride } = useRoundTrackedStats(round.id);
+  const { rows: detailsRows } = useRoundHoleDetails(round.id);
   const { rows: shotRows } = useRoundShotAttributions(round.id);
   const engagement = useRoundStatEngagement(round.id);
 
@@ -72,6 +76,19 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
   const visibleHoles = useMemo(
     () => holesInRange(round.course.holes, round.holeRange),
     [round.course.holes, round.holeRange]
+  );
+
+  // Resolve the round's enabled stat keys to definitions, in
+  // canonical registry order. Unknown keys (e.g., a future custom
+  // stat the client doesn't know about) are skipped.
+  const enabledStats = useMemo(() => {
+    const enabledSet = new Set(round.enabledStatKeys);
+    return BUILT_IN_STATS.filter((s) => enabledSet.has(s.key));
+  }, [round.enabledStatKeys]);
+
+  const trackedSet = useMemo(
+    () => new Set(round.trackedScorerIds),
+    [round.trackedScorerIds]
   );
 
   return (
@@ -94,18 +111,47 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
               ? 'FINAL'
               : undefined;
 
-        // Stat tiles are gated on (a) the scorer having engaged with
-        // the stats feature at all (any tag row / override / shot
-        // attribution), and (b) the result of their per-round
-        // enabled-set filter. Pre-feature rounds never engaged, so
-        // they show no tiles — matching the user's expectation that
-        // old rounds shouldn't surface a row of zeros.
-        const tiles = engagement.hasFor(s.id)
-          ? filterAggregatesByEnabled(
-              computeScorerAggregates(tagRows, s.id, visibleHoles),
-              effectiveEnabledTags(round.scoringRule, getOverride(s.id))
-            )
-          : [];
+        // Stat tiles are gated on (a) the scorer being in the
+        // round's tracked set AND (b) actually having engaged with
+        // any stat. Pre-feature rounds + scorers who never tagged
+        // anything show no tiles.
+        const tracked = trackedSet.has(s.id);
+        const tiles: AggregateTile[] =
+          tracked && engagement.hasFor(s.id)
+            ? enabledStats.map((stat) => {
+                const def = getStat(stat.key);
+                if (!def) {
+                  return {
+                    kind: 'integer',
+                    label: stat.label,
+                    sum: 0,
+                    taggedCount: 0,
+                    totalApplicable: 0,
+                    tone: 'neutral',
+                  };
+                }
+                if (def.type === 'binary') {
+                  const agg = aggregateBinary(detailsRows, s.id, def, visibleHoles);
+                  return {
+                    kind: 'binary',
+                    label: def.label,
+                    num: agg.num,
+                    denom: agg.denom,
+                    totalApplicable: agg.totalApplicable,
+                    tone: def.yesTone,
+                  };
+                }
+                const agg = aggregateInteger(detailsRows, s.id, def, visibleHoles);
+                return {
+                  kind: 'integer',
+                  label: def.label,
+                  sum: agg.sum,
+                  taggedCount: agg.taggedCount,
+                  totalApplicable: agg.totalApplicable,
+                  tone: def.aggregateTone,
+                };
+              })
+            : [];
 
         return (
           <View key={s.id} style={i > 0 ? styles.rowSep : styles.row}>

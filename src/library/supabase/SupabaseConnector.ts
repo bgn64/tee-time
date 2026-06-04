@@ -146,9 +146,15 @@ export class SupabaseConnector implements PowerSyncBackendConnector {
 // back into objects before sending to Supabase so the jsonb column
 // receives an object literal — not a quoted string scalar.
 const JSON_COLUMNS_BY_TABLE: Record<string, readonly string[]> = {
-  scorecards: ['course_snapshot', 'participants', 'player_ids', 'teams'],
-  scorecard_achievement_tags: ['tags'],
-  scorecard_tracked_stats: ['enabled_tags'],
+  scorecards: [
+    'course_snapshot',
+    'participants',
+    'player_ids',
+    'teams',
+    'enabled_stat_keys',
+    'tracked_scorer_ids'
+  ],
+  scorecard_hole_details: ['details'],
   scorecard_shot_attributions: ['contributor_ids']
 };
 

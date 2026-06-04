@@ -26,7 +26,7 @@
  */
 
 import { Redirect, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -38,6 +38,11 @@ import {
 
 import { ScrambleBody } from '@/components/scoring/ScrambleBody';
 import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
+import {
+  BUILT_IN_STATS,
+  defaultEnabledStatKeys,
+  type StatKey,
+} from '@/library/golf/builtInStats';
 import { defaultTeeIdForCourse } from '@/library/golf/courseHelpers';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRound } from '@/library/golf/RoundContext';
@@ -152,6 +157,54 @@ export default function FormatScreen() {
   const scrambleCanStart =
     scrambleTeams.length > 0 && scrambleTeams.every((t) => t.playerIds.length > 0);
 
+  // Per-hole-details config. The "track for" set defaults to the
+  // signed-in user only (stroke = their participantKey; scramble =
+  // the team containing them, if any). The stat set defaults to
+  // every built-in stat. Selection state is committed at
+  // `handleStart` time; until then it lives locally here.
+  const defaultTrackedScorerIds = useMemo<string[]>(() => {
+    if (!selfParticipantKey) return [];
+    if (scoringRule === 'scramble') {
+      const myTeam = scrambleTeams.find((t) =>
+        t.playerIds.includes(selfParticipantKey)
+      );
+      return myTeam ? [myTeam.id] : [];
+    }
+    return playerIds.includes(selfParticipantKey) ? [selfParticipantKey] : [];
+  }, [selfParticipantKey, scoringRule, scrambleTeams, playerIds]);
+
+  const [trackedScorerIds, setTrackedScorerIds] = useState<readonly string[]>(
+    defaultTrackedScorerIds
+  );
+  // Re-seed the selection when the default changes (scoring rule
+  // flip, scramble team membership change). Users who explicitly
+  // edited the selection lose their edit on these changes — an
+  // acceptable trade-off because both events fundamentally change
+  // the scorerId universe.
+  const lastDefaultKeyRef = useRef<string>('');
+  useEffect(() => {
+    const key = [...defaultTrackedScorerIds].sort().join(',');
+    if (key !== lastDefaultKeyRef.current) {
+      lastDefaultKeyRef.current = key;
+      setTrackedScorerIds(defaultTrackedScorerIds);
+    }
+  }, [defaultTrackedScorerIds]);
+
+  const [enabledStatKeys, setEnabledStatKeys] = useState<readonly StatKey[]>(
+    () => defaultEnabledStatKeys()
+  );
+
+  const toggleScorerId = (id: string) => {
+    setTrackedScorerIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+  const toggleStatKey = (key: StatKey) => {
+    setEnabledStatKeys((prev) =>
+      prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]
+    );
+  };
+
   if (!roundHydrated) {
     return (
       <View style={[styles.centered, { backgroundColor: colors.background }]}>
@@ -207,6 +260,10 @@ export default function FormatScreen() {
     setStarting(true);
     setStartError(null);
     try {
+      // Only persist enabled stat keys when at least one scorer is
+      // being tracked; otherwise stats are off for the round.
+      const finalEnabledStatKeys =
+        trackedScorerIds.length > 0 ? enabledStatKeys : [];
       if (scoringRule === 'scramble') {
         if (!scrambleCanStart || scrambleTeams.length === 0) {
           throw new Error('Every team needs at least one player.');
@@ -218,6 +275,8 @@ export default function FormatScreen() {
           teeIds: scrambleTeeIdByParticipant,
           scoringRule: 'scramble',
           teams: scrambleTeams,
+          enabledStatKeys: finalEnabledStatKeys,
+          trackedScorerIds,
         });
       } else {
         await startRound({
@@ -225,6 +284,8 @@ export default function FormatScreen() {
           playerIds,
           holeRange: 'all',
           teeIds,
+          enabledStatKeys: finalEnabledStatKeys,
+          trackedScorerIds,
         });
       }
       // Atomically rebuild the Rounds-tab stack as [hub, scoring].
@@ -380,6 +441,104 @@ export default function FormatScreen() {
             {startError}
           </Text>
         )}
+
+        <Text style={[styles.title, { marginTop: 18, marginBottom: 8 }]}>
+          Track stats?
+        </Text>
+
+        <Text style={styles.statsSectionLabel}>Track for</Text>
+        <View style={styles.list}>
+          {scoringRule === 'scramble'
+            ? scrambleTeams.map((team) => {
+                const checked = trackedScorerIds.includes(team.id);
+                const isEmpty = team.playerIds.length === 0;
+                return (
+                  <Pressable
+                    key={team.id}
+                    disabled={isEmpty}
+                    onPress={() => toggleScorerId(team.id)}
+                    style={[
+                      styles.checkRow,
+                      checked && styles.checkRowOn,
+                      isEmpty && styles.checkRowDisabled,
+                    ]}>
+                    <View
+                      style={[
+                        styles.checkBox,
+                        checked && styles.checkBoxOn,
+                      ]}>
+                      {checked && <Text style={styles.checkBoxMark}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkLabel} numberOfLines={1}>
+                      {team.name}
+                    </Text>
+                  </Pressable>
+                );
+              })
+            : playerIds.map((id) => {
+                const checked = trackedScorerIds.includes(id);
+                return (
+                  <Pressable
+                    key={id}
+                    onPress={() => toggleScorerId(id)}
+                    style={[
+                      styles.checkRow,
+                      checked && styles.checkRowOn,
+                    ]}>
+                    <View
+                      style={[
+                        styles.checkBox,
+                        checked && styles.checkBoxOn,
+                      ]}>
+                      {checked && <Text style={styles.checkBoxMark}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkLabel} numberOfLines={1}>
+                      {resolveName(id)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+        </View>
+
+        {trackedScorerIds.length > 0 && (
+          <>
+            <Text style={[styles.statsSectionLabel, { marginTop: 12 }]}>
+              Stats to track
+            </Text>
+            <Text style={styles.statsSectionSub}>
+              Same stats apply to everyone selected above.
+            </Text>
+            <View style={styles.list}>
+              {BUILT_IN_STATS.map((stat) => {
+                const checked = enabledStatKeys.includes(stat.key);
+                return (
+                  <Pressable
+                    key={stat.key}
+                    onPress={() => toggleStatKey(stat.key)}
+                    style={[
+                      styles.checkRow,
+                      checked && styles.checkRowOn,
+                    ]}>
+                    <View
+                      style={[
+                        styles.checkBox,
+                        checked && styles.checkBoxOn,
+                      ]}>
+                      {checked && <Text style={styles.checkBoxMark}>✓</Text>}
+                    </View>
+                    <Text style={styles.checkLabel}>{stat.label}</Text>
+                    <Text style={styles.checkMeta}>
+                      {stat.type}
+                      {stat.appliesToPar && stat.appliesToPar.length > 0
+                        ? ` · par ${stat.appliesToPar.join(' + ')}`
+                        : ''}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </>
+        )}
       </ScrollView>
 
       <View style={styles.footer}>
@@ -489,6 +648,68 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginTop: 2,
     },
     list: { gap: 8 },
+    statsSectionLabel: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textMuted,
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+      marginBottom: 6,
+    },
+    statsSectionSub: {
+      fontSize: 11.5,
+      color: colors.textMuted,
+      marginBottom: 8,
+    },
+    checkRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 10,
+      backgroundColor: colors.cardBg,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    checkRowOn: {
+      borderColor: colors.primary,
+      backgroundColor: colors.chipBg,
+    },
+    checkRowDisabled: {
+      opacity: 0.5,
+    },
+    checkBox: {
+      width: 20,
+      height: 20,
+      borderRadius: 5,
+      borderWidth: 1.5,
+      borderColor: colors.textMuted,
+      backgroundColor: 'transparent',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkBoxOn: {
+      backgroundColor: colors.primary,
+      borderColor: colors.primary,
+    },
+    checkBoxMark: {
+      color: '#fff',
+      fontSize: 12,
+      fontWeight: '900',
+    },
+    checkLabel: {
+      flex: 1,
+      fontSize: 13.5,
+      fontWeight: '700',
+      color: colors.textTitle,
+    },
+    checkMeta: {
+      fontSize: 10.5,
+      fontWeight: '700',
+      color: colors.textMuted,
+      letterSpacing: 0.3,
+      textTransform: 'uppercase',
+    },
     rowCard: {
       flexDirection: 'row',
       alignItems: 'center',

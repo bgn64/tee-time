@@ -2,8 +2,7 @@ import { column, Schema, Table } from '@powersync/common';
 
 export const SCORECARDS_TABLE = 'scorecards';
 export const SCORECARD_SCORES_TABLE = 'scorecard_scores';
-export const SCORECARD_ACHIEVEMENT_TAGS_TABLE = 'scorecard_achievement_tags';
-export const SCORECARD_TRACKED_STATS_TABLE = 'scorecard_tracked_stats';
+export const SCORECARD_HOLE_DETAILS_TABLE = 'scorecard_hole_details';
 export const SCORECARD_SHOT_ATTRIBUTIONS_TABLE = 'scorecard_shot_attributions';
 export const PROFILES_TABLE = 'profiles';
 export const FRIENDSHIPS_TABLE = 'friendships';
@@ -13,11 +12,12 @@ export const COMMENTS_TABLE = 'comments';
 export const ROUND_LIKES_TABLE = 'round_likes';
 
 // JSON-shaped columns (course_snapshot, participants, player_ids,
-// teams) are declared as `column.text` here because PowerSync's local
-// SQLite only supports TEXT/INTEGER/REAL. Serialization happens at the
-// read/write boundary inside `RoundContext`; the upload connector also
-// re-parses these columns before forwarding to Supabase (where they're
-// jsonb).
+// teams, enabled_stat_keys, tracked_scorer_ids) are declared as
+// `column.text` here because PowerSync's local SQLite only supports
+// TEXT/INTEGER/REAL. Serialization happens at the read/write
+// boundary inside `RoundContext`; the upload connector also
+// re-parses these columns before forwarding to Supabase (where
+// they're jsonb).
 const scorecards = new Table(
   {
     owner_user_id: column.text,
@@ -28,6 +28,8 @@ const scorecards = new Table(
     participants: column.text,
     teams: column.text,
     hole_range: column.text,
+    enabled_stat_keys: column.text,
+    tracked_scorer_ids: column.text,
     started_at: column.text,
     completed_at: column.text,
     updated_at: column.text
@@ -144,47 +146,29 @@ const round_likes = new Table(
   }
 );
 
-// Per-(scorer, hole) achievement tags. `tags` is a JSON array of
-// opaque string keys (the client owns the vocabulary in
-// `src/library/golf/achievementTags.ts`). PowerSync local SQLite
-// stores it as TEXT; the upload connector re-parses it into jsonb
-// before posting to Supabase (see SupabaseConnector's
-// JSON_COLUMNS_BY_TABLE map). `owner_user_id` is filled by the
-// server-side trigger from the parent scorecards row.
-const scorecard_achievement_tags = new Table(
+// Per-(scorer, hole) generic details (added with migration 017,
+// replacing the deprecated scorecard_achievement_tags +
+// scorecard_tracked_stats tables). `details` is a JSON object whose
+// values are either boolean (binary stats like GIR/FIR) or integer
+// (count stats like OB/Putts). The DB column is open — any
+// stat_key string may be written; client-side `builtInStats.ts` is
+// the source of truth for known stats. PowerSync local SQLite
+// stores the column as TEXT; the upload connector re-parses to
+// jsonb. `owner_user_id` is filled by the server-side trigger from
+// the parent scorecards row.
+const scorecard_hole_details = new Table(
   {
     scorecard_id: column.text,
     owner_user_id: column.text,
     scorer_id: column.text,
     hole_number: column.integer,
-    tags: column.text,
+    details: column.text,
     updated_at: column.text
   },
   {
     indexes: {
       by_scorecard: ['scorecard_id'],
       by_scorer_hole: ['scorecard_id', 'scorer_id', 'hole_number']
-    }
-  }
-);
-
-// Per-(scorer, round) tracked-stats overrides. Storage convention:
-// row absent = use defaults; row with empty list = scorer turned
-// every tag off; row with non-empty list = use as-is. `enabled_tags`
-// is a JSON array of TagKey strings stored as TEXT locally; the
-// upload connector re-parses to jsonb.
-const scorecard_tracked_stats = new Table(
-  {
-    scorecard_id: column.text,
-    owner_user_id: column.text,
-    scorer_id: column.text,
-    enabled_tags: column.text,
-    updated_at: column.text
-  },
-  {
-    indexes: {
-      by_scorecard: ['scorecard_id'],
-      by_scorer: ['scorecard_id', 'scorer_id']
     }
   }
 );
@@ -219,8 +203,7 @@ export const AppSchema = new Schema({
   custom_players,
   comments,
   round_likes,
-  scorecard_achievement_tags,
-  scorecard_tracked_stats,
+  scorecard_hole_details,
   scorecard_shot_attributions
 });
 
@@ -233,6 +216,5 @@ export type FriendRequestRecord = Database['friend_requests'];
 export type CustomPlayerRecord = Database['custom_players'];
 export type CommentRecord = Database['comments'];
 export type RoundLikeRecord = Database['round_likes'];
-export type ScorecardAchievementTagRecord = Database['scorecard_achievement_tags'];
-export type ScorecardTrackedStatsRecord = Database['scorecard_tracked_stats'];
+export type ScorecardHoleDetailsRecord = Database['scorecard_hole_details'];
 export type ScorecardShotAttributionRecord = Database['scorecard_shot_attributions'];

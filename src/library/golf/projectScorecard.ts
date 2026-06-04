@@ -39,6 +39,8 @@ export type ScorecardRowShape = {
   participants: string | null;
   teams: string | null;
   hole_range: string | null;
+  enabled_stat_keys: string | null;
+  tracked_scorer_ids: string | null;
   started_at: string | null;
   completed_at: string | null;
   updated_at: string | null;
@@ -78,6 +80,16 @@ export function projectScorecardRow(
   );
   const playerIds = safeParse<string[]>(row.player_ids, [], 'scorecards.player_ids');
   const teams = safeParse<Team[]>(row.teams, [], 'scorecards.teams');
+  const enabledStatKeys = safeParse<string[]>(
+    row.enabled_stat_keys,
+    [],
+    'scorecards.enabled_stat_keys'
+  );
+  const trackedScorerIds = safeParse<string[]>(
+    row.tracked_scorer_ids,
+    [],
+    'scorecards.tracked_scorer_ids'
+  );
   return {
     id: row.id,
     ownerUserId: row.owner_user_id,
@@ -92,5 +104,7 @@ export function projectScorecardRow(
     startedAt: row.started_at ?? new Date().toISOString(),
     lastScoreAt: row.updated_at ?? undefined,
     completedAt: row.completed_at ?? undefined,
+    enabledStatKeys,
+    trackedScorerIds,
   };
 }

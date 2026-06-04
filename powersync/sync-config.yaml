@@ -233,57 +233,6 @@ streams:
     auto_subscribe: true
 
   # ---------------------------------------------------------------
-  # Achievement tags (added with migration 010_achievement_tags.sql).
-  #
-  # Mirrors the scorecard_scores / friend_scorecard_scores pair —
-  # one stream for tags on the user's own scorecards, one for tags
-  # on friend scorecards. The denormalized `owner_user_id` on each
-  # row scopes the streams without a JOIN.
-  #
-  # The `tags` column is jsonb on the server, TEXT in local
-  # PowerSync SQLite, and re-parsed at the upload boundary by
-  # SupabaseConnector's JSON_COLUMNS_BY_TABLE map.
-  # ---------------------------------------------------------------
-
-  scorecard_achievement_tags:
-    query: |
-      SELECT *
-      FROM scorecard_achievement_tags
-      WHERE owner_user_id = auth.user_id()
-    auto_subscribe: true
-
-  friend_scorecard_achievement_tags:
-    query: |
-      SELECT scorecard_achievement_tags.*
-      FROM scorecard_achievement_tags
-      JOIN friendships ON friendships.friend_user_id = scorecard_achievement_tags.owner_user_id
-      WHERE friendships.user_id = auth.user_id()
-    auto_subscribe: true
-
-  # ---------------------------------------------------------------
-  # Tracked-stats overrides (added with migration 011).
-  #
-  # Same own + friend pair pattern as achievement tags. Friends
-  # need read access so they compute aggregates using the same
-  # enabled-tag set the owner picked.
-  # ---------------------------------------------------------------
-
-  scorecard_tracked_stats:
-    query: |
-      SELECT *
-      FROM scorecard_tracked_stats
-      WHERE owner_user_id = auth.user_id()
-    auto_subscribe: true
-
-  friend_scorecard_tracked_stats:
-    query: |
-      SELECT scorecard_tracked_stats.*
-      FROM scorecard_tracked_stats
-      JOIN friendships ON friendships.friend_user_id = scorecard_tracked_stats.owner_user_id
-      WHERE friendships.user_id = auth.user_id()
-    auto_subscribe: true
-
-  # ---------------------------------------------------------------
   # Shot attribution (added with migration 012).
   #
   # Per-(team, hole) ordered contributor list for scramble rounds.
@@ -303,5 +252,33 @@ streams:
       SELECT scorecard_shot_attributions.*
       FROM scorecard_shot_attributions
       JOIN friendships ON friendships.friend_user_id = scorecard_shot_attributions.owner_user_id
+      WHERE friendships.user_id = auth.user_id()
+    auto_subscribe: true
+
+  # ---------------------------------------------------------------
+  # Per-hole details (added with migration 017_hole_details.sql).
+  #
+  # Generic per-(scorer, hole) binary/integer stats. Replaces the
+  # deprecated scorecard_achievement_tags + scorecard_tracked_stats
+  # streams that lived here before migration 016.
+  #
+  # The `details` column is jsonb on the server, TEXT in local
+  # PowerSync SQLite, and re-parsed at the upload boundary by
+  # SupabaseConnector's JSON_COLUMNS_BY_TABLE map. Same own + friend
+  # pair pattern as the other scorecard child streams.
+  # ---------------------------------------------------------------
+
+  scorecard_hole_details:
+    query: |
+      SELECT *
+      FROM scorecard_hole_details
+      WHERE owner_user_id = auth.user_id()
+    auto_subscribe: true
+
+  friend_scorecard_hole_details:
+    query: |
+      SELECT scorecard_hole_details.*
+      FROM scorecard_hole_details
+      JOIN friendships ON friendships.friend_user_id = scorecard_hole_details.owner_user_id
       WHERE friendships.user_id = auth.user_id()
     auto_subscribe: true
