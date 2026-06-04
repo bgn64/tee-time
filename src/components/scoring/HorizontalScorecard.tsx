@@ -382,7 +382,13 @@ export function HorizontalScorecard({
                     round={round}
                     totals={totals}
                     teeColor={
-                      teeColorMap.get(scorer.teeId ?? group.tees[0].id) ?? null
+                      // Only resolve a swatch when the scorer has
+                      // explicitly picked a tee. Falling back to the
+                      // first tee in the matched group would paint a
+                      // misleading colour next to the avatar (e.g.
+                      // blue for a no-tee scorer in a Blue/White/Red
+                      // course).
+                      scorer.teeId ? (teeColorMap.get(scorer.teeId) ?? null) : null
                     }
                     onPressParticipant={onPressParticipant}
                     styles={styles}
