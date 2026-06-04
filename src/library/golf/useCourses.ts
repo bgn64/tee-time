@@ -68,6 +68,20 @@ function mapHoles(raw: unknown): Hole[] {
     const par = toNumberOrUndefined(obj.par);
     if (number === undefined || par === undefined) continue;
 
+    // Accept the same handicap-index field aliases the live-API
+    // enrichment supports (handicap_index / handicap / stroke_index)
+    // for forwards-compat with rows enriched by future code paths.
+    // The canonical key for DB-stored rows is `handicapIndex` (set
+    // by both the live enrichment in courseEnrichment.ts and the
+    // reenrich-opengolf script).
+    const rawHcp = toNumberOrUndefined(
+      obj.handicapIndex ?? obj.handicap_index ?? obj.handicap ?? obj.stroke_index
+    );
+    const handicapIndex =
+      rawHcp !== undefined && rawHcp >= 1 && rawHcp <= 18
+        ? Math.round(rawHcp)
+        : undefined;
+
     let yardages: Record<string, number> | undefined;
     if (obj.yardages && typeof obj.yardages === 'object' && !Array.isArray(obj.yardages)) {
       const yMap: Record<string, number> = {};
@@ -85,6 +99,7 @@ function mapHoles(raw: unknown): Hole[] {
     out.push({
       number,
       par,
+      handicapIndex,
       yardages,
       yardage: longest && longest > 0 ? longest : undefined,
     });

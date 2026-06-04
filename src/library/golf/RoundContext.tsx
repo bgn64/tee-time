@@ -371,7 +371,20 @@ export function RoundProvider({ children }: { children: ReactNode }) {
 
       const participants: RoundParticipant[] = playerIds.map((pid) => {
         const parsed = parseParticipantKey(pid);
-        const teeId = teeIds && pid in teeIds ? teeIds[pid] : defaultTee;
+        // No fallback to defaultTee: if the caller explicitly didn't
+        // supply a tee for this participant, that means "no tee
+        // selected", not "use the first tee on the course". The
+        // scramble path already pre-fills its own per-team tees via
+        // `buildInitialScrambleState`; stroke rounds leave teeIds
+        // entries as `undefined` so the avatar swatch on the
+        // scorecard stays empty until the user opts in.
+        const explicit = teeIds ? teeIds[pid] : undefined;
+        const teeId =
+          explicit ??
+          // Scramble teams must end up with a tee (scoring math
+          // depends on it). For scramble we still fall back to the
+          // course default when no per-participant value is set.
+          (scoringRule === 'scramble' ? defaultTee : undefined);
         const teamId = teamIdByParticipant.get(pid);
         const base: RoundParticipant = { participantKey: pid, teeId };
         if (teamId) base.teamId = teamId;
