@@ -38,6 +38,7 @@ import {
 
 import { ScrambleBody } from '@/components/scoring/ScrambleBody';
 import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
+import { ToggleRow } from '@/components/widgets/ToggleRow';
 import {
   BUILT_IN_STATS,
   defaultEnabledStatKeys,
@@ -161,21 +162,11 @@ export default function FormatScreen() {
   const scrambleCanStart =
     scrambleTeams.length > 0 && scrambleTeams.every((t) => t.playerIds.length > 0);
 
-  // Per-hole-details config. The "track for" set defaults to the
-  // signed-in user only (stroke = their participantKey; scramble =
-  // the team containing them, if any). The stat set defaults to
-  // every built-in stat. Selection state is committed at
-  // `handleStart` time; until then it lives locally here.
-  const defaultTrackedScorerIds = useMemo<string[]>(() => {
-    if (!selfParticipantKey) return [];
-    if (scoringRule === 'scramble') {
-      const myTeam = scrambleTeams.find((t) =>
-        t.playerIds.includes(selfParticipantKey)
-      );
-      return myTeam ? [myTeam.id] : [];
-    }
-    return playerIds.includes(selfParticipantKey) ? [selfParticipantKey] : [];
-  }, [selfParticipantKey, scoringRule, scrambleTeams, playerIds]);
+  // Per-hole-details config. V1 default is "no one tracked" —
+  // users opt into tracking via the slider toggles on this screen,
+  // then a second card pops in below offering per-stat toggles
+  // (all on by default, matching `defaultEnabledStatKeys`).
+  const defaultTrackedScorerIds = useMemo<string[]>(() => [], []);
 
   const [trackedScorerIds, setTrackedScorerIds] = useState<readonly string[]>(
     defaultTrackedScorerIds
@@ -446,102 +437,84 @@ export default function FormatScreen() {
           </Text>
         )}
 
-        <Text style={[styles.title, { marginTop: 18, marginBottom: 8 }]}>
+        <Text style={[styles.title, { marginTop: 18, marginBottom: 4 }]}>
           Track stats?
         </Text>
+        <Text style={styles.trackHelp}>
+          Turn on tracking for the players you want stats recorded for.
+        </Text>
 
-        <Text style={styles.statsSectionLabel}>Track for</Text>
-        <View style={styles.list}>
+        <View style={styles.configCard}>
+          <Text style={styles.configCardLabel}>Track for</Text>
           {scoringRule === 'scramble'
-            ? scrambleTeams.map((team) => {
-                const checked = trackedScorerIds.includes(team.id);
+            ? scrambleTeams.map((team, i) => {
                 const isEmpty = team.playerIds.length === 0;
+                const checked = trackedScorerIds.includes(team.id);
                 return (
-                  <Pressable
+                  <View
                     key={team.id}
-                    disabled={isEmpty}
-                    onPress={() => toggleScorerId(team.id)}
-                    style={[
-                      styles.checkRow,
-                      checked && styles.checkRowOn,
-                      isEmpty && styles.checkRowDisabled,
-                    ]}>
-                    <View
-                      style={[
-                        styles.checkBox,
-                        checked && styles.checkBoxOn,
-                      ]}>
-                      {checked && <Text style={styles.checkBoxMark}>✓</Text>}
-                    </View>
-                    <Text style={styles.checkLabel} numberOfLines={1}>
-                      {team.name}
-                    </Text>
-                  </Pressable>
+                    style={i > 0 ? styles.toggleRowSep : null}>
+                    <ToggleRow
+                      label={team.name}
+                      value={checked}
+                      onToggle={() => toggleScorerId(team.id)}
+                      disabled={isEmpty}
+                    />
+                  </View>
                 );
               })
-            : playerIds.map((id) => {
+            : playerIds.map((id, i) => {
                 const checked = trackedScorerIds.includes(id);
+                const color = resolveColor(id);
+                const letter = (resolveName(id)[0] ?? '?').toUpperCase();
                 return (
-                  <Pressable
-                    key={id}
-                    onPress={() => toggleScorerId(id)}
-                    style={[
-                      styles.checkRow,
-                      checked && styles.checkRowOn,
-                    ]}>
-                    <View
-                      style={[
-                        styles.checkBox,
-                        checked && styles.checkBoxOn,
-                      ]}>
-                      {checked && <Text style={styles.checkBoxMark}>✓</Text>}
-                    </View>
-                    <Text style={styles.checkLabel} numberOfLines={1}>
-                      {resolveName(id)}
-                    </Text>
-                  </Pressable>
+                  <View key={id} style={i > 0 ? styles.toggleRowSep : null}>
+                    <ToggleRow
+                      label={resolveName(id)}
+                      value={checked}
+                      onToggle={() => toggleScorerId(id)}
+                      leading={
+                        <View
+                          style={[
+                            styles.miniAv,
+                            { backgroundColor: color },
+                          ]}>
+                          <Text style={styles.miniAvText}>{letter}</Text>
+                        </View>
+                      }
+                    />
+                  </View>
                 );
               })}
         </View>
 
         {trackedScorerIds.length > 0 && (
-          <>
-            <Text style={[styles.statsSectionLabel, { marginTop: 12 }]}>
-              Stats to track
-            </Text>
+          <View style={styles.configCard}>
+            <Text style={styles.configCardLabel}>Stats to track</Text>
             <Text style={styles.statsSectionSub}>
-              Same stats apply to everyone selected above.
+              Applies to everyone selected above.
             </Text>
-            <View style={styles.list}>
-              {BUILT_IN_STATS.map((stat) => {
-                const checked = enabledStatKeys.includes(stat.key);
-                return (
-                  <Pressable
-                    key={stat.key}
-                    onPress={() => toggleStatKey(stat.key)}
-                    style={[
-                      styles.checkRow,
-                      checked && styles.checkRowOn,
-                    ]}>
-                    <View
-                      style={[
-                        styles.checkBox,
-                        checked && styles.checkBoxOn,
-                      ]}>
-                      {checked && <Text style={styles.checkBoxMark}>✓</Text>}
-                    </View>
-                    <Text style={styles.checkLabel}>{stat.label}</Text>
-                    <Text style={styles.checkMeta}>
-                      {stat.type}
-                      {stat.appliesToPar && stat.appliesToPar.length > 0
-                        ? ` · par ${stat.appliesToPar.join(' + ')}`
-                        : ''}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </>
+            {BUILT_IN_STATS.map((stat, i) => {
+              const checked = enabledStatKeys.includes(stat.key);
+              const sub =
+                stat.type +
+                (stat.appliesToPar && stat.appliesToPar.length > 0
+                  ? ` · par ${stat.appliesToPar.join(' + ')}`
+                  : '');
+              return (
+                <View
+                  key={stat.key}
+                  style={i > 0 ? styles.toggleRowSep : null}>
+                  <ToggleRow
+                    label={stat.label}
+                    sub={sub}
+                    value={checked}
+                    onToggle={() => toggleStatKey(stat.key)}
+                  />
+                </View>
+              );
+            })}
+          </View>
         )}
       </ScrollView>
 
@@ -652,67 +625,49 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginTop: 2,
     },
     list: { gap: 8 },
-    statsSectionLabel: {
-      fontSize: 11,
-      fontWeight: '800',
+    trackHelp: {
+      fontSize: 12.5,
       color: colors.textMuted,
+      marginBottom: 12,
+      lineHeight: 17,
+    },
+    configCard: {
+      backgroundColor: colors.cardBg,
+      borderRadius: 14,
+      paddingHorizontal: 14,
+      paddingVertical: 6,
+      marginBottom: 12,
+      ...colors.shadowCard,
+    },
+    configCardLabel: {
+      fontSize: 10,
+      fontWeight: '900',
       letterSpacing: 0.5,
+      color: colors.textMuted,
       textTransform: 'uppercase',
-      marginBottom: 6,
+      marginTop: 8,
+      marginBottom: 2,
     },
     statsSectionSub: {
       fontSize: 11.5,
       color: colors.textMuted,
-      marginBottom: 8,
+      marginBottom: 4,
     },
-    checkRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      padding: 10,
-      backgroundColor: colors.cardBg,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
+    toggleRowSep: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.hairline,
     },
-    checkRowOn: {
-      borderColor: colors.primary,
-      backgroundColor: colors.chipBg,
-    },
-    checkRowDisabled: {
-      opacity: 0.5,
-    },
-    checkBox: {
-      width: 20,
-      height: 20,
-      borderRadius: 5,
-      borderWidth: 1.5,
-      borderColor: colors.textMuted,
-      backgroundColor: 'transparent',
+    miniAv: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    checkBoxOn: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary,
-    },
-    checkBoxMark: {
+    miniAvText: {
       color: '#fff',
       fontSize: 12,
       fontWeight: '900',
-    },
-    checkLabel: {
-      flex: 1,
-      fontSize: 13.5,
-      fontWeight: '700',
-      color: colors.textTitle,
-    },
-    checkMeta: {
-      fontSize: 10.5,
-      fontWeight: '700',
-      color: colors.textMuted,
-      letterSpacing: 0.3,
-      textTransform: 'uppercase',
     },
     rowCard: {
       flexDirection: 'row',

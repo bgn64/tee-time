@@ -62,11 +62,22 @@ export type BinaryStatDefinition = BaseStatDefinition & {
 export type IntegerStatDefinition = BaseStatDefinition & {
   type: 'integer';
   /**
-   * Quick-pick values surfaced as chips in the per-hole input
-   * row. The custom-value sheet ("x" button) handles values
-   * outside this set.
+   * Default value pre-loaded into the +/- stepper when the user
+   * hasn't entered anything yet, AND eagerly written to storage
+   * the first time a stroke count is entered for a (scorer, hole)
+   * the stat applies to. See `useRoundHoleDetails.seedDefaults`
+   * for the write path. Picked per stat: OB defaults to 0 (no
+   * penalties is the common case), Putts defaults to 0 too (any
+   * non-zero putt count is a real data point the user must enter).
    */
-  quickPicks: readonly number[];
+  defaultValue: number;
+  /**
+   * Minimum value the stepper will allow. The `-` button is
+   * disabled when the current value is at `min`. Negative
+   * integer stats aren't meaningful for any built-in so this
+   * defaults to 0 for both Putts and OB.
+   */
+  min: number;
   /**
    * Tone applied to the aggregate tile (the sum). Per-hole
    * integer chips are always neutrally styled — value-by-value
@@ -115,7 +126,8 @@ export const BUILT_IN_STATS: readonly StatDefinition[] = [
     key: 'putts',
     label: 'Putts',
     type: 'integer',
-    quickPicks: [1, 2, 3],
+    defaultValue: 0,
+    min: 0,
     aggregateTone: 'neutral',
     defaultEnabled: true,
   },
@@ -123,7 +135,8 @@ export const BUILT_IN_STATS: readonly StatDefinition[] = [
     key: 'ob',
     label: 'OB',
     type: 'integer',
-    quickPicks: [0, 1, 2],
+    defaultValue: 0,
+    min: 0,
     aggregateTone: 'bad',
     defaultEnabled: true,
   },
