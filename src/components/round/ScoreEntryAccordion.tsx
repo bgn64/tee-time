@@ -141,13 +141,9 @@ export function ScoreEntryAccordion({
                   key={stat.key}
                   stat={stat}
                   value={values[stat.key] ?? null}
-                  onChange={
-                    onChangeStat
-                      ? (next) => onChangeStat(stat.key, next)
-                      : undefined
+                  onChange={(next) =>
+                    onChangeStat?.(stat.key, next)
                   }
-                  scorerName={name}
-                  holeNumber={holeNumber}
                 />
               ))
             : null}

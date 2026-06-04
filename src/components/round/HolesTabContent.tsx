@@ -1,16 +1,18 @@
 /**
  * HolesTabContent — read-only per-hole viewer for the feed /
  * completed round detail surfaces. Mirrors the layout of the
- * editing surface (`ScoringHolesBody`) so toggling between
- * live-scoring and live-viewing doesn't look like two different
- * apps:
+ * editing surface (`ScoringHolesBody`) but presents stats as
+ * inline typography (`HoleStatsLine`) rather than tappable
+ * controls — the editing surface uses chips/steppers/radios that
+ * would mislead readers into thinking this surface is editable.
  *
  *   [HoleStepperCombo]
  *   per scorer:
  *     [ScorerSummaryRow with per-hole context + per-hole hero score]
- *     [HoleDetailRow read-only × N]   one per stat the scorer
- *                                     was tracking and that
- *                                     applies to this hole's par
+ *     [HoleStatsLine]                 one-line comma-separated
+ *                                     summary of the stats the
+ *                                     scorer was tracking and
+ *                                     that apply to this hole's par
  *     [ShotSequence]                  scramble + at least one
  *                                     contributor recorded
  *
@@ -26,7 +28,7 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { HoleDetailRow } from './HoleDetailRow';
+import { HoleStatsLine } from './HoleStatsLine';
 import { ScorerSummaryRow } from './ScorerSummaryRow';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
 import { ShotSequence } from '@/components/scoring/ShotSequence';
@@ -144,15 +146,7 @@ export function HolesTabContent({ round }: Props) {
             {hasBody ? (
               <View style={styles.body}>
                 {hasStatsBody ? (
-                  <View style={styles.statsList}>
-                    {applicableStats.map((stat) => (
-                      <HoleDetailRow
-                        key={stat.key}
-                        stat={stat}
-                        value={values[stat.key] ?? null}
-                      />
-                    ))}
-                  </View>
+                  <HoleStatsLine stats={applicableStats} values={values} />
                 ) : null}
                 {hasShotBody ? (
                   <ShotSequence
@@ -193,9 +187,6 @@ function makeStyles(colors: ThemeColors) {
     },
     body: {
       gap: 10,
-    },
-    statsList: {
-      gap: 8,
     },
   });
 }

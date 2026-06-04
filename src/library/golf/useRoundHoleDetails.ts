@@ -31,6 +31,7 @@ import { useCallback, useMemo, useRef } from 'react';
 
 import { newAchievementTagId } from '@/library/golf/ids';
 import type {
+  IntegerStatDefinition,
   StatKey,
   StatValue,
   StatValueMap,
@@ -63,6 +64,26 @@ export type UseRoundHoleDetailsResult = {
     holeNumber: number,
     statKey: StatKey,
     value: StatValue | null
+  ) => Promise<void>;
+  /**
+   * Eagerly write `defaultValue` for any of the provided integer
+   * stats that don't already have a value on the (scorer, hole)
+   * tuple. Fired by `ScoringHolesBody` the first time a stroke
+   * count is entered for a hole, so the user sees the stepper
+   * pre-populated and the recorded value matches what the UI
+   * shows.
+   *
+   * The whole fill runs inside a single PowerSync
+   * `writeTransaction` so concurrent reads-then-writes can't lose
+   * a default. Stats whose key is already present (even with the
+   * same value) are left untouched. No-op when none of the
+   * provided stats need seeding, or when there's no round / no
+   * signed-in user.
+   */
+  seedDefaults: (
+    scorerId: string,
+    holeNumber: number,
+    stats: readonly IntegerStatDefinition[]
   ) => Promise<void>;
 };
 
@@ -207,5 +228,68 @@ export function useRoundHoleDetails(
     [roundId, signedInUserId, system]
   );
 
-  return { rows, getValues, setValue };
+  const seedDefaults = useCallback<UseRoundHoleDetailsResult['seedDefaults']>(
+    async (scorerId, holeNumber, stats) => {
+      if (!roundId || !signedInUserId) return;
+      if (stats.length === 0) return;
+      const tupleKey = `${scorerId}::${holeNumber}`;
+      const previous = inFlight.current.get(tupleKey) ?? Promise.resolve();
+
+      const next = previous.then(() =>
+        system.powersync.writeTransaction(async (tx) => {
+          const existing = await tx.getOptional<{
+            id: string;
+            details: string | null;
+          }>(
+            `SELECT id, details FROM ${SCORECARD_HOLE_DETAILS_TABLE}
+             WHERE scorecard_id = ? AND scorer_id = ? AND hole_number = ?`,
+            [roundId, scorerId, holeNumber]
+          );
+          const current = parseDetailsField(existing?.details ?? null);
+          const updated: StatValueMap = { ...current };
+          let changed = false;
+          for (const stat of stats) {
+            // Only fill keys that are completely absent. An
+            // explicit 0 from a prior +/- interaction is preserved.
+            if (updated[stat.key] === undefined) {
+              updated[stat.key] = stat.defaultValue;
+              changed = true;
+            }
+          }
+          if (!changed) return;
+          const now = new Date().toISOString();
+          const json = JSON.stringify(updated);
+          if (existing) {
+            await tx.execute(
+              `UPDATE ${SCORECARD_HOLE_DETAILS_TABLE}
+                 SET details = ?, updated_at = ?
+                 WHERE id = ?`,
+              [json, now, existing.id]
+            );
+          } else {
+            const id = newAchievementTagId();
+            await tx.execute(
+              `INSERT INTO ${SCORECARD_HOLE_DETAILS_TABLE}
+                 (id, scorecard_id, owner_user_id, scorer_id, hole_number, details, updated_at)
+               VALUES (?, ?, NULL, ?, ?, ?, ?)`,
+              [id, roundId, scorerId, holeNumber, json, now]
+            );
+          }
+        })
+      );
+
+      const tracked = next.catch(() => {});
+      inFlight.current.set(tupleKey, tracked);
+      try {
+        await next;
+      } finally {
+        if (inFlight.current.get(tupleKey) === tracked) {
+          inFlight.current.delete(tupleKey);
+        }
+      }
+    },
+    [roundId, signedInUserId, system]
+  );
+
+  return { rows, getValues, setValue, seedDefaults };
 }

@@ -125,7 +125,6 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
                     kind: 'integer',
                     label: stat.label,
                     sum: 0,
-                    taggedCount: 0,
                     totalApplicable: 0,
                     tone: 'neutral',
                   };
@@ -146,7 +145,6 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
                   kind: 'integer',
                   label: def.label,
                   sum: agg.sum,
-                  taggedCount: agg.taggedCount,
                   totalApplicable: agg.totalApplicable,
                   tone: def.aggregateTone,
                 };

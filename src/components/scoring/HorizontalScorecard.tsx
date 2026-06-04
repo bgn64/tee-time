@@ -300,7 +300,7 @@ export function HorizontalScorecard({
                         );
                       })}
                       {totals.showOut ? (
-                        <Cell style={[styles.cellYds, styles.cellTot]}>
+                        <Cell style={[styles.cellYds, styles.cellTotOutIn]}>
                           <Text
                             style={[styles.cellYdsText, { color: teeHex }]}>
                             {sumYardages(tee, visibleHoles, 'front9')}
@@ -308,7 +308,7 @@ export function HorizontalScorecard({
                         </Cell>
                       ) : null}
                       {totals.showIn ? (
-                        <Cell style={[styles.cellYds, styles.cellTot]}>
+                        <Cell style={[styles.cellYds, styles.cellTotOutIn]}>
                           <Text
                             style={[styles.cellYdsText, { color: teeHex }]}>
                             {sumYardages(tee, visibleHoles, 'back9')}
@@ -341,14 +341,14 @@ export function HorizontalScorecard({
                     </Cell>
                   ))}
                   {totals.showOut ? (
-                    <Cell style={[styles.cellPar, styles.cellTot]}>
+                    <Cell style={[styles.cellPar, styles.cellTotOutIn]}>
                       <Text style={styles.cellParText}>
                         {sumPar(group.holes, 'front9')}
                       </Text>
                     </Cell>
                   ) : null}
                   {totals.showIn ? (
-                    <Cell style={[styles.cellPar, styles.cellTot]}>
+                    <Cell style={[styles.cellPar, styles.cellTotOutIn]}>
                       <Text style={styles.cellParText}>
                         {sumPar(group.holes, 'back9')}
                       </Text>
@@ -380,10 +380,10 @@ export function HorizontalScorecard({
                       </Cell>
                     ))}
                     {totals.showOut ? (
-                      <Cell style={[styles.cellHcp, styles.cellTot]} />
+                      <Cell style={[styles.cellHcp, styles.cellTotOutIn]} />
                     ) : null}
                     {totals.showIn ? (
-                      <Cell style={[styles.cellHcp, styles.cellTot]} />
+                      <Cell style={[styles.cellHcp, styles.cellTotOutIn]} />
                     ) : null}
                     <Cell style={[styles.cellHcp, styles.cellTot]} />
                   </View>
@@ -444,7 +444,9 @@ function sumYardages(
       any = true;
     }
   }
-  return any ? total.toLocaleString() : '';
+  // No thousand separators — the fixed-width totals cells are
+  // sized to fit "7250" without commas; a "7,250" would overflow.
+  return any ? String(total) : '';
 }
 
 function sumPar(
@@ -510,12 +512,12 @@ function HoleHeaderRow({
         );
       })}
       {totals.showOut ? (
-        <View style={[styles.cellHead, styles.cellTot]}>
+        <View style={[styles.cellHead, styles.cellTotOutIn]}>
           <Text style={styles.cellHeadText}>OUT</Text>
         </View>
       ) : null}
       {totals.showIn ? (
-        <View style={[styles.cellHead, styles.cellTot]}>
+        <View style={[styles.cellHead, styles.cellTotOutIn]}>
           <Text style={styles.cellHeadText}>IN</Text>
         </View>
       ) : null}
@@ -599,12 +601,12 @@ function ScorerRow({
         );
       })}
       {frontRel != null ? (
-        <View style={[styles.cellScorer, styles.cellTot]}>
+        <View style={[styles.cellScorer, styles.cellTotOutIn]}>
           <Text style={styles.cellRelText}>{formatRelative(frontRel.rel, frontRel.any)}</Text>
         </View>
       ) : null}
       {backRel != null ? (
-        <View style={[styles.cellScorer, styles.cellTot]}>
+        <View style={[styles.cellScorer, styles.cellTotOutIn]}>
           <Text style={styles.cellRelText}>{formatRelative(backRel.rel, backRel.any)}</Text>
         </View>
       ) : null}
@@ -687,7 +689,7 @@ function makeStyles(colors: ThemeColors) {
       borderTopColor: colors.hairline,
     },
     cellLabel: {
-      width: 60,
+      width: 56,
       paddingLeft: 4,
       paddingVertical: 5,
       flexDirection: 'row',
@@ -716,7 +718,7 @@ function makeStyles(colors: ThemeColors) {
       letterSpacing: 0.4,
     },
     cellHead: {
-      minWidth: 28,
+      width: 26,
       paddingVertical: 4,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -732,7 +734,7 @@ function makeStyles(colors: ThemeColors) {
       color: colors.primaryDark,
     },
     cellYds: {
-      minWidth: 28,
+      width: 26,
       paddingVertical: 3,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -743,7 +745,7 @@ function makeStyles(colors: ThemeColors) {
       fontWeight: '700',
     },
     cellPar: {
-      minWidth: 28,
+      width: 26,
       paddingVertical: 5,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -755,7 +757,7 @@ function makeStyles(colors: ThemeColors) {
       color: colors.textTitle,
     },
     cellHcp: {
-      minWidth: 28,
+      width: 26,
       paddingVertical: 3,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -767,7 +769,7 @@ function makeStyles(colors: ThemeColors) {
       color: colors.textMuted,
     },
     cellScorer: {
-      minWidth: 28,
+      width: 26,
       paddingVertical: 7,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -779,6 +781,15 @@ function makeStyles(colors: ThemeColors) {
       color: colors.textTitle,
     },
     cellTot: {
+      // TOT column: wider to fit "7250" totals without bulging
+      // the row. OUT/IN columns use `cellTotOutIn` (narrower)
+      // because their values cap around 3500. Layered last in the
+      // style array so it overrides the base cell's width.
+      width: 46,
+      backgroundColor: colors.chipBg,
+    },
+    cellTotOutIn: {
+      width: 42,
       backgroundColor: colors.chipBg,
     },
     cellDivergent: {

@@ -25,7 +25,10 @@ import { StyleSheet, View } from 'react-native';
 
 import { ScoreEntryAccordion } from './ScoreEntryAccordion';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
-import { applicableStatsForHole } from '@/library/golf/builtInStats';
+import {
+  applicableStatsForHole,
+  type IntegerStatDefinition,
+} from '@/library/golf/builtInStats';
 import { holeScoreDisplay } from '@/library/golf/holeScoreDisplay';
 import { getHoleStats } from '@/library/golf/teeGrouping';
 import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
@@ -52,7 +55,7 @@ export function ScoringHolesBody({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const scorers = useRoundScorers(round);
-  const { getValues, setValue } = useRoundHoleDetails(round.id);
+  const { getValues, setValue, seedDefaults } = useRoundHoleDetails(round.id);
   const { getContributors, setContributors } = useRoundShotAttributions(
     round.id
   );
@@ -151,7 +154,33 @@ export function ScoringHolesBody({
             strokes={strokes}
             onChange={
               onChangeScore
-                ? (next) => onChangeScore(s.id, currentHoleNumber, next)
+                ? (next) => {
+                    // Eager-default seed runs on the very first
+                    // score entry for this (scorer, hole) tuple
+                    // when the scorer is tracked AND any integer
+                    // stat applies to the hole. The seed writes
+                    // `stat.defaultValue` for each missing key
+                    // atomically, so the user sees the stepper
+                    // pre-populated and the stored aggregate
+                    // matches what's on screen. See
+                    // `useRoundHoleDetails.seedDefaults` for the
+                    // single-transaction implementation.
+                    const wasEmpty = strokes == null;
+                    onChangeScore(s.id, currentHoleNumber, next);
+                    if (wasEmpty && tracked && next > 0) {
+                      const integerStats = applicableStats.filter(
+                        (st): st is IntegerStatDefinition =>
+                          st.type === 'integer'
+                      );
+                      if (integerStats.length > 0) {
+                        void seedDefaults(
+                          s.id,
+                          currentHoleNumber,
+                          integerStats
+                        );
+                      }
+                    }
+                  }
                 : undefined
             }
             applicableStats={applicableStats}
