@@ -48,7 +48,13 @@ import { RangeDropdown, rangeLabel } from '@/components/scoring/RangeDropdown';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
 import { RoundDetailView } from '@/components/round/RoundDetailView';
 import { useRound } from '@/library/golf/RoundContext';
+import {
+  computeRoundCompletionGaps,
+  formatCompletionWarning,
+} from '@/library/golf/roundCompletion';
 import { holesInRange } from '@/library/golf/scoring';
+import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useTheme } from '@/library/theme/ThemeContext';
 import { confirmAsync } from '@/library/utils/alert';
 
@@ -72,6 +78,18 @@ export default function ScoringScreen() {
   const [teeEditTarget, setTeeEditTarget] = useState<string | null>(null);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
+  // Per-hole-details rows + participant resolver are read here so
+  // the Finish handler can synchronously compute missing-score AND
+  // missing-stat warnings without spinning up another fetch.
+  // PowerSync dedupes queries; this subscription joins the same
+  // local SQLite watch the round's tabs already drive.
+  const { rows: detailsRows } = useRoundHoleDetails(currentRound?.id ?? null);
+  const resolverKeys = useMemo<string[]>(
+    () => currentRound?.playerIds ?? [],
+    [currentRound]
+  );
+  const resolver = useParticipantResolver(resolverKeys);
+
   // Stash handlers in refs so background-back / focus listeners hold
   // the freshest closures (Android back fires after a render snapshot
   // already captured the prior value).
@@ -79,27 +97,28 @@ export default function ScoringScreen() {
   useEffect(() => {
     currentRoundRef.current = currentRound;
   });
+  const detailsRowsRef = useRef(detailsRows);
+  useEffect(() => {
+    detailsRowsRef.current = detailsRows;
+  });
+  const resolverRef = useRef(resolver);
+  useEffect(() => {
+    resolverRef.current = resolver;
+  });
 
   const handleFinish = useCallback(async () => {
     const round = currentRoundRef.current;
     if (!round) return;
-    const inRange = holesInRange(round.course.holes, round.holeRange);
-    const isScramble =
-      round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
-    const requiredScorerIds = isScramble
-      ? round.teams!.map((t) => t.id)
-      : round.playerIds;
-    const fullyScored = inRange.every((h) =>
-      requiredScorerIds.every((sid) =>
-        round.scores.some(
-          (s) => s.scorerId === sid && s.holeNumber === h.number
-        )
-      )
+    const gaps = computeRoundCompletionGaps(
+      round,
+      detailsRowsRef.current,
+      (pk) => resolverRef.current.get(pk)?.displayName
     );
-    if (!fullyScored) {
+    if (!gaps.isComplete) {
+      const body = formatCompletionWarning(gaps);
       const ok = await confirmAsync(
-        'Finish with missing scores?',
-        `Not every hole has a score yet (${inRange.length} total). You can finish anyway — completed rounds aren't editable later in this milestone.`
+        'Finish with missing data?',
+        `${body}\n\nYou can finish anyway — completed rounds aren’t editable later in this milestone.`
       );
       if (!ok) return;
     }

@@ -76,6 +76,16 @@ type RoundContextValue = {
     scoringRule?: ScoringRule;
     /** Required when `scoringRule === 'scramble'`. Used to set `teamId` on participants. */
     teams?: Team[];
+    /**
+     * Stat keys enabled for this round. Defaults to empty array
+     * (no stats tracked). Set at round creation, immutable.
+     */
+    enabledStatKeys?: readonly string[];
+    /**
+     * Scorer ids that have stats tracked for them. Defaults to
+     * empty array (no tracking).
+     */
+    trackedScorerIds?: readonly string[];
   }) => Promise<string>;
   setCustomHoleScore: (scorerId: string, holeNumber: number, strokes: number) => Promise<void>;
   /**
@@ -252,6 +262,16 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       [],
       'scorecards.teams'
     );
+    const enabledStatKeys = safeParse<string[]>(
+      scorecardRow.enabled_stat_keys,
+      [],
+      'scorecards.enabled_stat_keys'
+    );
+    const trackedScorerIds = safeParse<string[]>(
+      scorecardRow.tracked_scorer_ids,
+      [],
+      'scorecards.tracked_scorer_ids'
+    );
     const scores: RoundScore[] = scoreRows.map((r) => ({
       scorerId: r.scorer_id ?? '',
       holeNumber: Number(r.hole_number ?? 0),
@@ -271,6 +291,8 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       startedAt: scorecardRow.started_at ?? new Date().toISOString(),
       lastScoreAt: scorecardRow.updated_at ?? undefined,
       completedAt: scorecardRow.completed_at ?? undefined,
+      enabledStatKeys,
+      trackedScorerIds,
     };
   }, [scorecardRow, scoreRows, currentHole]);
 
@@ -282,7 +304,16 @@ export function RoundProvider({ children }: { children: ReactNode }) {
   });
 
   const startRound = useCallback<RoundContextValue['startRound']>(
-    async ({ course, playerIds, holeRange = 'all', teeIds, scoringRule = 'stroke', teams }) => {
+    async ({
+      course,
+      playerIds,
+      holeRange = 'all',
+      teeIds,
+      scoringRule = 'stroke',
+      teams,
+      enabledStatKeys = [],
+      trackedScorerIds = [],
+    }) => {
       if (!userId) {
         throw new Error('You must be signed in to start a round.');
       }
@@ -360,8 +391,10 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         await tx.execute(
           `INSERT INTO ${SCORECARDS_TABLE}
              (id, owner_user_id, course_id, course_snapshot, scoring_rule,
-              player_ids, participants, teams, hole_range, started_at, completed_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
+              player_ids, participants, teams, hole_range,
+              enabled_stat_keys, tracked_scorer_ids,
+              started_at, completed_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
           [
             id,
             userId,
@@ -372,6 +405,8 @@ export function RoundProvider({ children }: { children: ReactNode }) {
             JSON.stringify(participants),
             JSON.stringify(teamsToPersist),
             holeRange,
+            JSON.stringify([...enabledStatKeys]),
+            JSON.stringify([...trackedScorerIds]),
             now,
             now,
           ]

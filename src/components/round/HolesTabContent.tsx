@@ -1,18 +1,18 @@
 /**
- * HolesTabContent — read-only per-hole viewer for the feed / completed
- * round detail surfaces. Mirrors the layout of the editing surface
- * (`ScoringHolesBody`) so toggling between live-scoring and live-viewing
- * doesn't look like two different apps:
+ * HolesTabContent — read-only per-hole viewer for the feed /
+ * completed round detail surfaces. Mirrors the layout of the
+ * editing surface (`ScoringHolesBody`) so toggling between
+ * live-scoring and live-viewing doesn't look like two different
+ * apps:
  *
  *   [HoleStepperCombo]
  *   per scorer:
  *     [ScorerSummaryRow with per-hole context + per-hole hero score]
- *     [AchievementTagRow mode="read"]  — same 3-state pills, with
- *                                        DID WELL / HURT ME headers.
- *                                        Unset pills render plain so
- *                                        the viewer sees what the
- *                                        scorer committed to track.
- *     [ShotSequence] (scramble + whose_shots enabled)
+ *     [HoleDetailRow read-only × N]   one per stat the scorer
+ *                                     was tracking and that
+ *                                     applies to this hole's par
+ *     [ShotSequence]                  scramble + at least one
+ *                                     contributor recorded
  *
  * The hole context (par / hcp / yardage) comes from `getHoleStats`
  * so legacy rounds whose `course_snapshot` predates the per-tee
@@ -26,19 +26,16 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { AchievementTagRow } from './AchievementTagRow';
+import { HoleDetailRow } from './HoleDetailRow';
 import { ScorerSummaryRow } from './ScorerSummaryRow';
 import { HoleStepperCombo } from '@/components/scoring/HoleStepperCombo';
 import { ShotSequence } from '@/components/scoring/ShotSequence';
-import {
-  effectiveEnabledTags,
-} from '@/library/golf/achievementTags';
+import { applicableStatsForHole } from '@/library/golf/builtInStats';
 import { holeScoreDisplay } from '@/library/golf/holeScoreDisplay';
 import { getHoleStats } from '@/library/golf/teeGrouping';
-import { useRoundAchievementTags } from '@/library/golf/useRoundAchievementTags';
+import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
-import { useRoundTrackedStats } from '@/library/golf/useRoundTrackedStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -52,8 +49,7 @@ export function HolesTabContent({ round }: Props) {
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const scorers = useRoundScorers(round);
-  const { getValues } = useRoundAchievementTags(round.id);
-  const { getOverride } = useRoundTrackedStats(round.id);
+  const { getValues } = useRoundHoleDetails(round.id);
   const { getContributors } = useRoundShotAttributions(round.id);
 
   const isScramble =
@@ -68,6 +64,17 @@ export function HolesTabContent({ round }: Props) {
   );
 
   const hole = round.course.holes.find((h) => h.number === focusedHole);
+
+  const trackedSet = useMemo(
+    () => new Set(round.trackedScorerIds),
+    [round.trackedScorerIds]
+  );
+
+  const statsForThisHole = useMemo(
+    () =>
+      hole ? applicableStatsForHole(round.enabledStatKeys, hole) : [],
+    [round.enabledStatKeys, hole]
+  );
 
   // Per-scorer strokes-by-hole for the stepper's mini-grid. We use
   // the first scorer's perspective; the grid is a navigation aid,
@@ -109,20 +116,15 @@ export function HolesTabContent({ round }: Props) {
           ? getHoleStats(s.tee, focusedHole, hole)
           : { par: hole.par, handicapIndex: hole.handicapIndex };
 
-        const values = getValues(s.id, focusedHole);
-        const enabledTags = effectiveEnabledTags(
-          round.scoringRule,
-          getOverride(s.id)
-        );
+        const tracked = trackedSet.has(s.id);
+        const values = tracked ? getValues(s.id, focusedHole) : {};
+        const applicableStats = tracked ? statsForThisHole : [];
         const contributorIds = isScramble
           ? getContributors(s.id, focusedHole)
           : [];
-        // Show the body when there's anything to render: tracked-stat
-        // pills, or scramble shot attribution.
-        const hasTagBody =
-          enabledTags.filter((k) => k !== 'whose_shots').length > 0;
+        const hasStatsBody = applicableStats.length > 0;
         const hasShotBody = isScramble && contributorIds.length > 0;
-        const hasBody = hasTagBody || hasShotBody;
+        const hasBody = hasStatsBody || hasShotBody;
 
         return (
           <View key={s.id} style={i > 0 ? styles.rowSep : styles.row}>
@@ -141,13 +143,16 @@ export function HolesTabContent({ round }: Props) {
             />
             {hasBody ? (
               <View style={styles.body}>
-                {hasTagBody ? (
-                  <AchievementTagRow
-                    mode="read"
-                    values={values}
-                    enabledTags={enabledTags}
-                    isScramble={isScramble}
-                  />
+                {hasStatsBody ? (
+                  <View style={styles.statsList}>
+                    {applicableStats.map((stat) => (
+                      <HoleDetailRow
+                        key={stat.key}
+                        stat={stat}
+                        value={values[stat.key] ?? null}
+                      />
+                    ))}
+                  </View>
                 ) : null}
                 {hasShotBody ? (
                   <ShotSequence
@@ -188,6 +193,9 @@ function makeStyles(colors: ThemeColors) {
     },
     body: {
       gap: 10,
+    },
+    statsList: {
+      gap: 8,
     },
   });
 }

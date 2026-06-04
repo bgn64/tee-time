@@ -193,4 +193,16 @@ export type Round = {
    * `scorerId` for that round.
    */
   teams?: Team[];
+  /**
+   * Per-hole-details stat keys enabled for this round. Set at round
+   * creation, immutable thereafter. Empty array = no stats tracked.
+   * Same set applies to every scorer in `trackedScorerIds`.
+   */
+  enabledStatKeys: string[];
+  /**
+   * Scorer ids that have stats tracked for them. Empty array = no
+   * tracking. For the common "track stats for myself only" case
+   * this contains just the signed-in user's scorerId.
+   */
+  trackedScorerIds: string[];
 };

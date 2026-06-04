@@ -1,9 +1,12 @@
 /**
  * Per-(team, hole) shot attribution — local data layer.
  *
- * Mirrors `useRoundAchievementTags` for the `scorecard_shot_attributions`
- * table. Read returns rows keyed by `${teamId}::${holeNumber}`; write
- * upserts the `contributor_ids` array for a given (team, hole) tuple.
+ * Sister hook to `useRoundHoleDetails` for the
+ * `scorecard_shot_attributions` table. Read returns rows keyed by
+ * `${teamId}::${holeNumber}`; write upserts the `contributor_ids`
+ * array for a given (team, hole) tuple. This is the "complex"
+ * (non-scalar) stat that doesn't fit the generic binary/integer
+ * shape and keeps its own dedicated table.
  *
  * List length is allowed to drift from the team's stroke count;
  * renderers truncate / pad at read time so the picker UX stays
