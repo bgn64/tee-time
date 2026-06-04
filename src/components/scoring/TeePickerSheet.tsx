@@ -28,20 +28,52 @@ const TEE_COLOR_HEX: Record<string, string> = {
   blue: '#4a90e2',
   white: '#ddd6c4',
   gold: '#c9a64a',
+  yellow: '#f5d020',
   red: '#d54848',
   green: '#7cb342',
-  yellow: '#f5d020',
   burgundy: '#722f37',
+  silver: '#c0c0c0',
+  orange: '#e8742c',
+  purple: '#8e44ad',
 };
 
-function teeSwatch(tee: Tee): string {
-  if (tee.color) {
-    const known = TEE_COLOR_HEX[tee.color.toLowerCase()];
-    if (known) return known;
-    if (tee.color.startsWith('#')) return tee.color;
+// Names tried longest-first so "burgundy" matches before "red"
+// would, etc. Used by the substring fallback below so tee names
+// like "Green Tees" / "Senior Gold" / "Forward Red" still pick
+// up the colour.
+const TEE_COLOR_KEYS_BY_LENGTH = Object.keys(TEE_COLOR_HEX).sort(
+  (a, b) => b.length - a.length
+);
+
+/**
+ * Try to extract a known palette colour from a free-form string —
+ * supports exact matches, contains-matches against
+ * `TEE_COLOR_HEX`, and `#RRGGBB` literals. Returns null when
+ * nothing matches so the caller can fall through.
+ */
+function resolveTeeColorString(raw: string | undefined): string | null {
+  if (!raw) return null;
+  const lower = raw.trim().toLowerCase();
+  if (lower.length === 0) return null;
+  const exact = TEE_COLOR_HEX[lower];
+  if (exact) return exact;
+  if (lower.startsWith('#')) return lower;
+  for (const key of TEE_COLOR_KEYS_BY_LENGTH) {
+    if (lower.includes(key)) return TEE_COLOR_HEX[key];
   }
-  const known = TEE_COLOR_HEX[tee.name.toLowerCase()];
-  return known ?? '#888';
+  return null;
+}
+
+function teeSwatch(tee: Tee): string {
+  // Try the explicit `color` field first (server-supplied), then
+  // the tee's display name (handles "Green Tees", "Senior Gold",
+  // etc.). Falls back to a neutral grey only when neither carries
+  // a recognisable palette term.
+  return (
+    resolveTeeColorString(tee.color) ??
+    resolveTeeColorString(tee.name) ??
+    '#888'
+  );
 }
 
 export function TeePickerSheet({

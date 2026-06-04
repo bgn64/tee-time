@@ -72,11 +72,15 @@ export default function FormatScreen() {
   const { course, loading: courseLoading, enriching: courseEnriching, error: courseError } = useCourse(courseId);
 
   const [scoringRule, setScoringRule] = useState<ScoringRule>('stroke');
+  // Per-player tee selection starts empty — users opt in to a tee
+  // via the "+ Tee" pill on this screen. Default-blue swatches in
+  // the scorecard were confusing because they implied a choice
+  // the user hadn't actually made; the scoring surfaces have a
+  // tee-less fallback path (scalar par / hcp from the Hole row).
   const [teeIds, setTeeIds] = useState<Record<string, string | undefined>>(
     () => {
-      const defaultTee = course ? defaultTeeIdForCourse(course) : undefined;
       const seeded: Record<string, string | undefined> = {};
-      for (const pid of playerIds) seeded[pid] = defaultTee;
+      for (const pid of playerIds) seeded[pid] = undefined;
       return seeded;
     }
   );

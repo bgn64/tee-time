@@ -52,7 +52,6 @@ import {
   computeRoundCompletionGaps,
   formatCompletionWarning,
 } from '@/library/golf/roundCompletion';
-import { holesInRange } from '@/library/golf/scoring';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -184,34 +183,17 @@ export default function ScoringScreen() {
   );
   if (!currentHole) return null;
 
-  const inRangeHoles = holesInRange(round.course.holes, round.holeRange);
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
-  const scorerCount = isScramble
-    ? (round.teams?.length ?? 0)
-    : round.playerIds.length;
-  const isSingleScorer = scorerCount === 1;
 
-  const currentIdxInRange = inRangeHoles.findIndex(
-    (h) => h.number === currentHole.number
-  );
-  const nextInRangeHoleNumber =
-    currentIdxInRange >= 0 && currentIdxInRange < inRangeHoles.length - 1
-      ? inRangeHoles[currentIdxInRange + 1].number
-      : null;
-
-  // Score-change handler wired into ScorerStack. On every entry it
-  // upserts the score, then auto-advances to the next in-range hole
-  // when there's only one scorer (matches the prior solo-flow UX).
+  // Score-change handler wired into ScorerStack. Just upserts the
+  // score for the active hole; no longer auto-advances after entry.
   const handleChangeScore = (
     scorerId: string,
     holeNumber: number,
     strokes: number
   ) => {
     void setCustomHoleScore(scorerId, holeNumber, strokes);
-    if (isSingleScorer && nextInRangeHoleNumber !== null) {
-      void setCurrentHole(nextInRangeHoleNumber);
-    }
   };
 
   const abandonButton = (
