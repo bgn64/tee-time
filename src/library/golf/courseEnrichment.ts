@@ -123,6 +123,11 @@ function dedupeTees(raw: unknown[]): Tee[] {
  * The per-hole `yardages` object is re-keyed from lowercased tee_name
  * onto stable `Tee.id` so the rest of the app can join cleanly
  * without re-lowercasing every name on every render.
+ *
+ * Handicap index (stroke index 1–18) is read from any of the common
+ * upstream field names — the OpenGolfAPI uses `handicap_index` but
+ * the legacy scorecard endpoint and ad-hoc course data sometimes use
+ * `handicap` or `stroke_index`. Sanitised to the 1–18 range.
  */
 function buildHoles(raw: unknown[], tees: Tee[]): Hole[] {
   const teeIdByName = new Map<string, string>();
@@ -135,6 +140,14 @@ function buildHoles(raw: unknown[], tees: Tee[]): Hole[] {
     const number = numOrUndef(obj.hole_number ?? obj.hole);
     const par = numOrUndef(obj.par);
     if (number === undefined || par === undefined) continue;
+
+    const rawHcp = numOrUndef(
+      obj.handicap_index ?? obj.handicap ?? obj.stroke_index
+    );
+    const handicapIndex =
+      rawHcp !== undefined && rawHcp >= 1 && rawHcp <= 18
+        ? Math.round(rawHcp)
+        : undefined;
 
     const yardagesObj = obj.yardages;
     let yardages: Record<string, number> | undefined;
@@ -157,6 +170,7 @@ function buildHoles(raw: unknown[], tees: Tee[]): Hole[] {
     holes.push({
       number,
       par,
+      handicapIndex,
       yardages,
       yardage: longest && longest > 0 ? longest : undefined,
     });
