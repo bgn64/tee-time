@@ -59,6 +59,7 @@
     "lint": "expo lint",
     "ingest:opengolf": "tsx scripts/ingest-opengolf.ts",
     "reenrich:opengolf": "tsx scripts/reenrich-opengolf.ts",
+    "resnapshot:rounds": "tsx scripts/resnapshot-rounds.ts",
     "postinstall": "powersync-web copy-assets"
   },
   "private": true
