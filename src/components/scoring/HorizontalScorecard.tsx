@@ -140,6 +140,19 @@ export function HorizontalScorecard({
     [tees, visibleHoles]
   );
 
+  // Hide the HCP row entirely when no hole on the course carries a
+  // handicap index. Real-world courses either ship a full
+  // stroke-index set or none at all; rendering a row of empty cells
+  // for the "none" case is just visual noise. The global check (not
+  // per-group) keeps the layout consistent across groups when a few
+  // holes happen to be missing data inside a course that mostly has
+  // it.
+  const hasAnyHandicap = useMemo(
+    () =>
+      groups.some((g) => g.holes.some((h) => h.handicapIndex != null)),
+    [groups]
+  );
+
   // Build the scorer list. In scramble mode each team is one scorer
   // (their tee is derived from the first member's participant entry,
   // matching `SummaryTabContent` + `ScorerStack`). In stroke each
@@ -348,30 +361,33 @@ export function HorizontalScorecard({
                   </Cell>
                 </View>
 
-                {/* Shared HCP row. */}
-                <View style={styles.rowHcp}>
-                  <Cell label style={styles.cellLabel}>
-                    <Text style={styles.cellHcpLabelText}>HCP</Text>
-                  </Cell>
-                  {group.holes.map((stats) => (
-                    <Cell key={`hcp-${stats.holeNumber}`} style={styles.cellHcp}>
-                      <Text
-                        style={[
-                          styles.cellHcpText,
-                          stats.hcpDivergent ? styles.cellDivergent : null,
-                        ]}>
-                        {stats.handicapIndex ?? ''}
-                      </Text>
+                {/* Shared HCP row. Skipped entirely for courses
+                    that have no handicap index data anywhere. */}
+                {hasAnyHandicap ? (
+                  <View style={styles.rowHcp}>
+                    <Cell label style={styles.cellLabel}>
+                      <Text style={styles.cellHcpLabelText}>HCP</Text>
                     </Cell>
-                  ))}
-                  {totals.showOut ? (
+                    {group.holes.map((stats) => (
+                      <Cell key={`hcp-${stats.holeNumber}`} style={styles.cellHcp}>
+                        <Text
+                          style={[
+                            styles.cellHcpText,
+                            stats.hcpDivergent ? styles.cellDivergent : null,
+                          ]}>
+                          {stats.handicapIndex ?? ''}
+                        </Text>
+                      </Cell>
+                    ))}
+                    {totals.showOut ? (
+                      <Cell style={[styles.cellHcp, styles.cellTot]} />
+                    ) : null}
+                    {totals.showIn ? (
+                      <Cell style={[styles.cellHcp, styles.cellTot]} />
+                    ) : null}
                     <Cell style={[styles.cellHcp, styles.cellTot]} />
-                  ) : null}
-                  {totals.showIn ? (
-                    <Cell style={[styles.cellHcp, styles.cellTot]} />
-                  ) : null}
-                  <Cell style={[styles.cellHcp, styles.cellTot]} />
-                </View>
+                  </View>
+                ) : null}
 
                 {/* Scorer rows for this group. */}
                 {groupScorers.map((scorer) => (
