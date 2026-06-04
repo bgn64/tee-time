@@ -58,6 +58,7 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "ingest:opengolf": "tsx scripts/ingest-opengolf.ts",
+    "reenrich:opengolf": "tsx scripts/reenrich-opengolf.ts",
     "postinstall": "powersync-web copy-assets"
   },
   "private": true
