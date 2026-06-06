@@ -28,6 +28,7 @@
 
 import { Stack } from 'expo-router';
 
+import { AppHeader } from '@/components/AppHeader';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 export const unstable_settings = {
@@ -39,9 +40,7 @@ export default function HomeLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.tabBar },
-        headerShadowVisible: false,
-        headerTintColor: colors.textTitle,
+        header: (props) => <AppHeader {...props} />,
         contentStyle: { backgroundColor: colors.background }
       }}>
       <Stack.Screen name="index" options={{ title: 'Home' }} />

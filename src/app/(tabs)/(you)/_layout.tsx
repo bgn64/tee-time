@@ -13,6 +13,7 @@
 
 import { Stack } from 'expo-router';
 
+import { AppHeader } from '@/components/AppHeader';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 export default function YouLayout() {
@@ -20,9 +21,7 @@ export default function YouLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.tabBar },
-        headerShadowVisible: false,
-        headerTintColor: colors.textTitle,
+        header: (props) => <AppHeader {...props} />,
         contentStyle: { backgroundColor: colors.background }
       }}>
       <Stack.Screen name="index" options={{ title: 'You' }} />

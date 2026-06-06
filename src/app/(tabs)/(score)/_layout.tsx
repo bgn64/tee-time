@@ -32,6 +32,7 @@
 
 import { Stack } from 'expo-router';
 
+import { AppHeader } from '@/components/AppHeader';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 export const unstable_settings = {
@@ -44,9 +45,7 @@ export default function ScoreLayout() {
     <Stack
       screenOptions={{
         headerShown: true,
-        headerStyle: { backgroundColor: colors.tabBar },
-        headerShadowVisible: false,
-        headerTintColor: colors.textTitle,
+        header: (props) => <AppHeader {...props} />,
         contentStyle: { backgroundColor: colors.background }
       }}>
       <Stack.Screen name="index" options={{ title: 'Rounds' }} />
