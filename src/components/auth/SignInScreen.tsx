@@ -47,6 +47,7 @@ import { useSystem } from '@/library/powersync/system';
 import { useTheme } from '@/library/theme/ThemeContext';
 import { showAlert } from '@/library/utils/alert';
 import { HandleStep } from '@/components/social/HandleStep';
+import { Logo } from '@/components/Logo';
 import { OtpInput } from './OtpInput';
 
 type Step = 'email' | 'code' | 'handle';
@@ -159,6 +160,9 @@ export function SignInScreen({ initialStep = 'email' }: Props) {
       <ScrollView
         contentContainerStyle={styles.body}
         keyboardShouldPersistTaps="handled">
+        <View style={styles.brand}>
+          <Logo size={72} variant="disc" />
+        </View>
         {currentStep === 'email' ? (
           <>
             <Text style={styles.title}>Sign in</Text>
@@ -275,6 +279,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       maxWidth: 480,
       width: '100%',
       alignSelf: 'center'
+    },
+    brand: {
+      alignItems: 'center',
+      marginBottom: 24,
     },
     title: {
       fontSize: 26,

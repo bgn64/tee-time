@@ -10,6 +10,7 @@
 
 import { Stack } from 'expo-router';
 
+import { AppHeader } from '@/components/AppHeader';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 export default function SearchLayout() {
@@ -17,9 +18,7 @@ export default function SearchLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: colors.tabBar },
-        headerShadowVisible: false,
-        headerTintColor: colors.textTitle,
+        header: (props) => <AppHeader {...props} />,
         contentStyle: { backgroundColor: colors.background }
       }}>
       <Stack.Screen name="index" options={{ title: 'Search' }} />
