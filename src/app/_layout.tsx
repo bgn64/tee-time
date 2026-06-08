@@ -3,16 +3,20 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { PowerSyncContext } from '@powersync/react';
+import { QueryClientProvider } from '@tanstack/react-query';
 
 import { SystemContext, system } from '@/library/powersync/system';
+import { queryClient } from '@/library/data/queryClient';
 import { RoundProvider } from '@/library/golf/RoundContext';
 import { ThemeProvider, useTheme } from '@/library/theme/ThemeContext';
 
 export default function RootLayout() {
   return (
-    <ThemeProvider>
-      <RootLayoutInner />
-    </ThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <RootLayoutInner />
+      </ThemeProvider>
+    </QueryClientProvider>
   );
 }
 
