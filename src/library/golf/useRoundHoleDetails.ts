@@ -1,32 +1,22 @@
 /**
- * Per-hole details — local data layer for a single round.
+ * Per-hole details — Supabase REST data layer (React Query).
  *
- * Read path: watches `scorecard_hole_details` via PowerSync
- * `useQuery`, parses each row's `details` JSON object into a
- * `StatValueMap`, and returns a memoised tuple lookup
- * `getValues(scorerId, holeNumber)`.
+ * Read path: useRoundHoleDetails(roundId) fetches the round's
+ * scorecard_hole_details rows from Supabase via React Query and
+ * normalises each jsonb details object into a StatValueMap. RLS scopes
+ * rows to rounds the user can see. Data refreshes on demand / focus
+ * rather than live-syncing.
  *
- * Write path: `setValue(scorerId, holeNumber, statKey, value)`
- * performs the read-modify-write inside a PowerSync
- * `writeTransaction` so the row's current `details` map is read
- * from local SQLite (not from a stale React snapshot) and the
- * conditional INSERT/UPDATE happens atomically. Concurrent calls
- * on the same `(scorer, hole)` tuple are chained per tuple via an
- * in-memory promise queue so a burst of taps across different
- * stats all apply in order rather than racing and overwriting
- * each other. Passing `null` for `value` clears the stat key from
- * the map. When the resulting map is empty we still leave the
- * row in place (matches the convention of "absent row = never
- * engaged" vs "empty map = explicitly cleared").
- *
- * Value validation: the storage layer accepts any boolean or
- * finite number. Per-stat type enforcement (binary vs integer)
- * lives in `builtInStats.ts` and is the caller's responsibility
- * — `setValue` does not introspect the stat registry so custom
- * user-defined stats added later work without changes here.
+ * Write path: setValue() and seedDefaults() optimistically update the
+ * cached tuple, then run an idempotent REST upsert on the natural key
+ * unique (scorecard_id, scorer_id, hole_number). onError rolls back to
+ * the previous cache snapshot and onSettled reconciles against server
+ * truth. details is jsonb over PostgREST, so it is read and written as a
+ * native JS object (no JSON string boundary). owner_user_id is left null
+ * and filled by the server-side trigger from the parent scorecards row.
  */
 
-import { useQuery } from '@powersync/react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useMemo, useRef } from 'react';
 
 import { newAchievementTagId } from '@/library/golf/ids';
@@ -36,12 +26,10 @@ import type {
   StatValue,
   StatValueMap,
 } from '@/library/golf/builtInStats';
-import {
-  SCORECARD_HOLE_DETAILS_TABLE,
-  type ScorecardHoleDetailsRecord,
-} from '@/library/powersync/AppSchema';
-import { useSystem } from '@/library/powersync/system';
+import { supabase } from '@/library/supabase/client';
 import { useAccount } from '@/library/social/AccountContext';
+
+const SCORECARD_HOLE_DETAILS_TABLE = 'scorecard_hole_details';
 
 export type HoleDetailsRow = {
   scorer_id: string;
@@ -73,10 +61,9 @@ export type UseRoundHoleDetailsResult = {
    * pre-populated and the recorded value matches what the UI
    * shows.
    *
-   * The whole fill runs inside a single PowerSync
-   * `writeTransaction` so concurrent reads-then-writes can't lose
-   * a default. Stats whose key is already present (even with the
-   * same value) are left untouched. No-op when none of the
+   * Defaults are merged against the latest cached tuple before the
+   * optimistic upsert. Stats whose key is already present (even with
+   * the same value) are left untouched. No-op when none of the
    * provided stats need seeding, or when there's no round / no
    * signed-in user.
    */
@@ -87,27 +74,41 @@ export type UseRoundHoleDetailsResult = {
   ) => Promise<void>;
 };
 
+type HoleDetailsCloudRow = {
+  id: string;
+  scorecard_id: string;
+  owner_user_id: string | null;
+  scorer_id: string | null;
+  hole_number: number | null;
+  details: unknown;
+  updated_at: string | null;
+};
+
+type HoleDetailsMutation = {
+  id: string;
+  scorerId: string;
+  holeNumber: number;
+  values: StatValueMap;
+};
+
+function tupleKey(scorerId: string, holeNumber: number): string {
+  return `${scorerId}::${holeNumber}`;
+}
+
+export function roundHoleDetailsKey(roundId: string | null, userId: string | null) {
+  return ['scorecard_hole_details', roundId, userId] as const;
+}
+
 /**
- * Parse the on-disk `details` JSON column. The column is stored
- * as TEXT locally; the upload connector re-parses to jsonb at the
- * boundary. Accepts only an object shape; everything else
- * normalises to an empty map.
+ * Normalise the REST jsonb `details` value. PostgREST returns jsonb as
+ * already-parsed JS values; only object shapes are accepted.
  */
 function parseDetailsField(raw: unknown): StatValueMap {
-  let parsed: unknown = raw;
-  if (typeof raw === 'string') {
-    if (raw.trim().length === 0) return {};
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return {};
-    }
-  }
-  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
     return {};
   }
   const out: StatValueMap = {};
-  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     if (typeof v === 'boolean') {
       out[k] = v;
     } else if (typeof v === 'number' && Number.isFinite(v)) {
@@ -117,30 +118,68 @@ function parseDetailsField(raw: unknown): StatValueMap {
   return out;
 }
 
+function rowsWithUpsert(
+  rows: readonly HoleDetailsCloudRow[] | undefined,
+  mutation: HoleDetailsMutation,
+  roundId: string
+): HoleDetailsCloudRow[] {
+  const now = new Date().toISOString();
+  const base = rows ?? [];
+  const nextRow: HoleDetailsCloudRow = {
+    id: mutation.id,
+    scorecard_id: roundId,
+    owner_user_id: null,
+    scorer_id: mutation.scorerId,
+    hole_number: mutation.holeNumber,
+    details: mutation.values,
+    updated_at: now,
+  };
+  let replaced = false;
+  const next = base.map((row) => {
+    if (row.scorer_id === mutation.scorerId && row.hole_number === mutation.holeNumber) {
+      replaced = true;
+      return { ...row, details: mutation.values, updated_at: now };
+    }
+    return row;
+  });
+  if (!replaced) next.push(nextRow);
+  return next;
+}
+
+function findExistingRow(
+  rows: readonly HoleDetailsCloudRow[] | undefined,
+  scorerId: string,
+  holeNumber: number
+): HoleDetailsCloudRow | undefined {
+  return rows?.find((row) => row.scorer_id === scorerId && row.hole_number === holeNumber);
+}
+
 export function useRoundHoleDetails(
   roundId: string | null
 ): UseRoundHoleDetailsResult {
-  const system = useSystem();
   const { account } = useAccount();
   const signedInUserId = account?.userId ?? null;
-
-  // Map keyed by `${scorerId}::${holeNumber}` holding the tail of the
-  // promise chain for each tuple. New writes chain onto the previous
-  // promise so they serialise per tuple while different tuples stay
-  // independent. Chains are catch-wrapped so a single failed write
-  // does not poison subsequent ones.
+  const queryClient = useQueryClient();
   const inFlight = useRef<Map<string, Promise<void>>>(new Map());
 
-  const { data } = useQuery<ScorecardHoleDetailsRecord & { id: string }>(
-    roundId
-      ? `SELECT * FROM ${SCORECARD_HOLE_DETAILS_TABLE} WHERE scorecard_id = ?`
-      : `SELECT * FROM ${SCORECARD_HOLE_DETAILS_TABLE} WHERE 1 = 0`,
-    roundId ? [roundId] : []
-  );
+  const key = roundHoleDetailsKey(roundId, signedInUserId);
+
+  const { data } = useQuery<HoleDetailsCloudRow[]>({
+    queryKey: key,
+    enabled: !!roundId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from(SCORECARD_HOLE_DETAILS_TABLE)
+        .select('*')
+        .eq('scorecard_id', roundId as string);
+      if (error) throw error;
+      return (data ?? []) as HoleDetailsCloudRow[];
+    },
+  });
 
   const rows = useMemo<HoleDetailsRow[]>(() => {
     const out: HoleDetailsRow[] = [];
-    for (const row of data) {
+    for (const row of data ?? []) {
       if (!row.scorer_id || row.hole_number == null) continue;
       out.push({
         scorer_id: row.scorer_id,
@@ -150,6 +189,48 @@ export function useRoundHoleDetails(
     }
     return out;
   }, [data]);
+
+  const { mutateAsync } = useMutation<
+    void,
+    Error,
+    HoleDetailsMutation,
+    { previous?: HoleDetailsCloudRow[] }
+  >({
+    mutationFn: async (mutation) => {
+      if (!roundId || !signedInUserId) return;
+      const { error } = await supabase.from(SCORECARD_HOLE_DETAILS_TABLE).upsert(
+        {
+          id: mutation.id,
+          scorecard_id: roundId,
+          owner_user_id: null,
+          scorer_id: mutation.scorerId,
+          hole_number: mutation.holeNumber,
+          details: mutation.values,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'scorecard_id,scorer_id,hole_number' }
+      );
+      if (error) throw error;
+    },
+    onMutate: async (mutation) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<HoleDetailsCloudRow[]>(key);
+      if (roundId) {
+        queryClient.setQueryData<HoleDetailsCloudRow[]>(key, (old) =>
+          rowsWithUpsert(old, mutation, roundId)
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _mutation, ctx) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData(key, ctx.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
 
   const getValues = useCallback(
     (scorerId: string, holeNumber: number): StatValueMap => {
@@ -166,129 +247,77 @@ export function useRoundHoleDetails(
   const setValue = useCallback<UseRoundHoleDetailsResult['setValue']>(
     async (scorerId, holeNumber, statKey, value) => {
       if (!roundId || !signedInUserId) return;
-      const tupleKey = `${scorerId}::${holeNumber}`;
-      const previous = inFlight.current.get(tupleKey) ?? Promise.resolve();
+      const guard = tupleKey(scorerId, holeNumber);
+      const previous = inFlight.current.get(guard) ?? Promise.resolve();
 
-      const next = previous.then(() =>
-        system.powersync.writeTransaction(async (tx) => {
-          // Re-read the row from local SQLite inside the transaction
-          // so we always start from the latest committed state
-          // rather than a stale React snapshot.
-          const existing = await tx.getOptional<{ id: string; details: string | null }>(
-            `SELECT id, details FROM ${SCORECARD_HOLE_DETAILS_TABLE}
-             WHERE scorecard_id = ? AND scorer_id = ? AND hole_number = ?`,
-            [roundId, scorerId, holeNumber]
-          );
-          const current = parseDetailsField(existing?.details ?? null);
-          const updated: StatValueMap = { ...current };
-          if (value === null) {
-            delete updated[statKey];
-          } else {
-            updated[statKey] = value;
-          }
-          const now = new Date().toISOString();
-          const json = JSON.stringify(updated);
-          if (existing) {
-            await tx.execute(
-              `UPDATE ${SCORECARD_HOLE_DETAILS_TABLE}
-                 SET details = ?, updated_at = ?
-                 WHERE id = ?`,
-              [json, now, existing.id]
-            );
-          } else {
-            // The id helper is shared across per-hole-details rows;
-            // its prefix is opaque to the server (the table primary
-            // key is text). Reusing `newAchievementTagId` avoids
-            // adding a near-identical generator.
-            const id = newAchievementTagId();
-            await tx.execute(
-              `INSERT INTO ${SCORECARD_HOLE_DETAILS_TABLE}
-                 (id, scorecard_id, owner_user_id, scorer_id, hole_number, details, updated_at)
-               VALUES (?, ?, NULL, ?, ?, ?, ?)`,
-              [id, roundId, scorerId, holeNumber, json, now]
-            );
-          }
-        })
-      );
+      const next = previous.then(async () => {
+        const latest = queryClient.getQueryData<HoleDetailsCloudRow[]>(key);
+        const existing = findExistingRow(latest, scorerId, holeNumber);
+        const updated: StatValueMap = { ...parseDetailsField(existing?.details) };
+        if (value === null) {
+          delete updated[statKey];
+        } else {
+          updated[statKey] = value;
+        }
+        await mutateAsync({
+          id: existing?.id ?? newAchievementTagId(),
+          scorerId,
+          holeNumber,
+          values: updated,
+        });
+      });
 
-      // Catch so a failed write doesn't poison subsequent writes
-      // in the chain, but await the original (uncaught) promise so
-      // callers still see errors from their own write.
       const tracked = next.catch(() => {});
-      inFlight.current.set(tupleKey, tracked);
+      inFlight.current.set(guard, tracked);
       try {
         await next;
       } finally {
-        // Only clear the slot if no newer write has chained onto it.
-        if (inFlight.current.get(tupleKey) === tracked) {
-          inFlight.current.delete(tupleKey);
+        if (inFlight.current.get(guard) === tracked) {
+          inFlight.current.delete(guard);
         }
       }
     },
-    [roundId, signedInUserId, system]
+    [roundId, signedInUserId, queryClient, key, mutateAsync]
   );
 
   const seedDefaults = useCallback<UseRoundHoleDetailsResult['seedDefaults']>(
     async (scorerId, holeNumber, stats) => {
       if (!roundId || !signedInUserId) return;
       if (stats.length === 0) return;
-      const tupleKey = `${scorerId}::${holeNumber}`;
-      const previous = inFlight.current.get(tupleKey) ?? Promise.resolve();
+      const guard = tupleKey(scorerId, holeNumber);
+      const previous = inFlight.current.get(guard) ?? Promise.resolve();
 
-      const next = previous.then(() =>
-        system.powersync.writeTransaction(async (tx) => {
-          const existing = await tx.getOptional<{
-            id: string;
-            details: string | null;
-          }>(
-            `SELECT id, details FROM ${SCORECARD_HOLE_DETAILS_TABLE}
-             WHERE scorecard_id = ? AND scorer_id = ? AND hole_number = ?`,
-            [roundId, scorerId, holeNumber]
-          );
-          const current = parseDetailsField(existing?.details ?? null);
-          const updated: StatValueMap = { ...current };
-          let changed = false;
-          for (const stat of stats) {
-            // Only fill keys that are completely absent. An
-            // explicit 0 from a prior +/- interaction is preserved.
-            if (updated[stat.key] === undefined) {
-              updated[stat.key] = stat.defaultValue;
-              changed = true;
-            }
+      const next = previous.then(async () => {
+        const latest = queryClient.getQueryData<HoleDetailsCloudRow[]>(key);
+        const existing = findExistingRow(latest, scorerId, holeNumber);
+        const updated: StatValueMap = { ...parseDetailsField(existing?.details) };
+        let changed = false;
+        for (const stat of stats) {
+          if (updated[stat.key] === undefined) {
+            updated[stat.key] = stat.defaultValue;
+            changed = true;
           }
-          if (!changed) return;
-          const now = new Date().toISOString();
-          const json = JSON.stringify(updated);
-          if (existing) {
-            await tx.execute(
-              `UPDATE ${SCORECARD_HOLE_DETAILS_TABLE}
-                 SET details = ?, updated_at = ?
-                 WHERE id = ?`,
-              [json, now, existing.id]
-            );
-          } else {
-            const id = newAchievementTagId();
-            await tx.execute(
-              `INSERT INTO ${SCORECARD_HOLE_DETAILS_TABLE}
-                 (id, scorecard_id, owner_user_id, scorer_id, hole_number, details, updated_at)
-               VALUES (?, ?, NULL, ?, ?, ?, ?)`,
-              [id, roundId, scorerId, holeNumber, json, now]
-            );
-          }
-        })
-      );
+        }
+        if (!changed) return;
+        await mutateAsync({
+          id: existing?.id ?? newAchievementTagId(),
+          scorerId,
+          holeNumber,
+          values: updated,
+        });
+      });
 
       const tracked = next.catch(() => {});
-      inFlight.current.set(tupleKey, tracked);
+      inFlight.current.set(guard, tracked);
       try {
         await next;
       } finally {
-        if (inFlight.current.get(tupleKey) === tracked) {
-          inFlight.current.delete(tupleKey);
+        if (inFlight.current.get(guard) === tracked) {
+          inFlight.current.delete(guard);
         }
       }
     },
-    [roundId, signedInUserId, system]
+    [roundId, signedInUserId, queryClient, key, mutateAsync]
   );
 
   return { rows, getValues, setValue, seedDefaults };
