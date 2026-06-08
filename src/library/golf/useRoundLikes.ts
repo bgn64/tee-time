@@ -1,133 +1,131 @@
 /**
- * Round likes — local data layer.
+ * Round likes — Supabase REST data layer (React Query).
  *
- * Read path: `useRoundLikes(roundId)` watches the local `round_likes`
- * table via PowerSync `useQuery`. Returns the total like count for
- * the round plus whether the signed-in user has a row.
+ * Read path: useRoundLikes(roundId) fetches the round's like rows from
+ * Supabase via React Query and derives the total count plus whether the
+ * signed-in user has a row. RLS scopes rows to rounds the user can see
+ * (own or friend), mirroring the old PowerSync sync rules. Data refreshes
+ * on demand / focus (pull-to-refresh model) rather than live-syncing.
  *
- * Write path: `toggle()` either inserts a new row (with a
- * client-generated uuid) or deletes the user's existing row. The
- * read of "do I already have a row?" and the conditional
- * INSERT/DELETE happen inside a single PowerSync `writeTransaction`
- * so we never act on a stale React snapshot of `myRow`. Rapid taps
- * chain onto an in-memory promise queue rather than racing — that
- * avoids a double-INSERT pattern that would otherwise trip the
- * `unique (round_id, liker_user_id)` constraint server-side and
- * cause SupabaseConnector to discard the rest of the upload batch.
- * The PowerSync connector uploads asynchronously; RLS server-side
- * validates the round is still visible to the user and that
- * `liker_user_id = auth.uid()`.
- *
- * Cross-friendship edge case: if the user de-friends the round
- * owner, the user's local `round_likes` row syncs out (PowerSync
- * prunes rows that no longer match any subscribed stream). The
- * count + `likedByMe` returned here naturally reflect the local
- * state, so the button shows as "not liked" without any explicit
- * error handling. The original row stays in Supabase (cleanup is
- * cosmetic; the unique constraint still prevents a duplicate insert
- * if friendship is re-established).
+ * Write path: toggle() optimistically flips the cached state, then runs
+ * an idempotent REST write — an upsert that ignores the
+ * unique (round_id, liker_user_id) conflict when liking, or a delete
+ * scoped to the caller's row when un-liking. Idempotency makes rapid taps
+ * safe without an explicit serialization queue; onSettled reconciles
+ * against server truth. owner_user_id is left null and filled by the
+ * server-side trigger from the parent scorecards row. RLS enforces that
+ * the round is visible and that liker_user_id = auth.uid().
  */
 
-import { useQuery } from '@powersync/react';
-import { useCallback, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import { newRoundLikeId } from '@/library/golf/ids';
-import {
-  ROUND_LIKES_TABLE,
-  type RoundLikeRecord
-} from '@/library/powersync/AppSchema';
-import { useSystem } from '@/library/powersync/system';
+import { supabase } from '@/library/supabase/client';
 import { useAccount } from '@/library/social/AccountContext';
 
+const ROUND_LIKES_TABLE = 'round_likes';
+
 export type UseRoundLikesResult = {
-  /** True when the signed-in user has a row for this round in local SQLite. */
+  /** True when the signed-in user has a like row for this round. */
   likedByMe: boolean;
-  /** Total number of like rows currently synced for this round. */
+  /** Total number of like rows visible for this round. */
   count: number;
-  /**
-   * Toggle the signed-in user's like on this round. No-op when no
-   * roundId or no signed-in user. Rapid taps chain onto an
-   * in-memory queue so each tap eventually applies in order.
-   */
+  /** Toggle the signed-in user's like. No-op without a round or session. */
   toggle: () => void;
 };
 
+type LikesData = { count: number; likedByMe: boolean };
+
+export function roundLikesKey(roundId: string | null, userId: string | null) {
+  return ['round_likes', roundId, userId] as const;
+}
+
 export function useRoundLikes(roundId: string | null): UseRoundLikesResult {
-  const system = useSystem();
   const { account } = useAccount();
   const signedInUserId = account?.userId ?? null;
+  const queryClient = useQueryClient();
 
-  // Tail of the per-hook promise chain. New taps chain onto this so
-  // toggles serialise rather than racing. Catch-wrapped so a single
-  // failed tap does not poison subsequent ones.
-  const inFlight = useRef<Promise<void>>(Promise.resolve());
+  const { data } = useQuery<LikesData>({
+    queryKey: roundLikesKey(roundId, signedInUserId),
+    enabled: !!roundId,
+    queryFn: async () => {
+      const { data, count, error } = await supabase
+        .from(ROUND_LIKES_TABLE)
+        .select('liker_user_id', { count: 'exact' })
+        .eq('round_id', roundId as string);
+      if (error) throw error;
+      const rows = (data ?? []) as { liker_user_id: string | null }[];
+      return {
+        count: count ?? rows.length,
+        likedByMe: signedInUserId
+          ? rows.some((r) => r.liker_user_id === signedInUserId)
+          : false,
+      };
+    },
+  });
 
-  // Total likes for the round. Always fires, even when there's no
-  // signed-in user, so cold-load surfaces have a count to render.
-  const { data: countRows } = useQuery<{ count: number }>(
-    roundId
-      ? `SELECT COUNT(*) AS count FROM ${ROUND_LIKES_TABLE} WHERE round_id = ?`
-      : `SELECT 0 AS count`,
-    roundId ? [roundId] : []
-  );
-  const count = Number(countRows[0]?.count ?? 0);
-
-  // Whether the signed-in user has a row. Used for the UI; the
-  // write path re-reads from local SQLite inside the transaction
-  // rather than relying on this snapshot, so it's safe even when
-  // stale by a tick.
-  const { data: mineRows } = useQuery<RoundLikeRecord & { id: string }>(
-    roundId && signedInUserId
-      ? `SELECT * FROM ${ROUND_LIKES_TABLE}
-           WHERE round_id = ? AND liker_user_id = ?
-           LIMIT 1`
-      : `SELECT * FROM ${ROUND_LIKES_TABLE} WHERE 1 = 0`,
-    roundId && signedInUserId ? [roundId, signedInUserId] : []
-  );
-  const likedByMe = (mineRows[0] ?? null) !== null;
+  const { mutate } = useMutation<void, Error, boolean, { previous?: LikesData }>({
+    mutationFn: async (desired: boolean) => {
+      if (!roundId || !signedInUserId) return;
+      if (desired) {
+        const { error } = await supabase.from(ROUND_LIKES_TABLE).upsert(
+          {
+            id: newRoundLikeId(),
+            round_id: roundId,
+            liker_user_id: signedInUserId,
+            owner_user_id: null,
+            created_at: new Date().toISOString(),
+          },
+          { onConflict: 'round_id,liker_user_id', ignoreDuplicates: true }
+        );
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from(ROUND_LIKES_TABLE)
+          .delete()
+          .eq('round_id', roundId)
+          .eq('liker_user_id', signedInUserId);
+        if (error) throw error;
+      }
+    },
+    onMutate: async (desired: boolean) => {
+      const key = roundLikesKey(roundId, signedInUserId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<LikesData>(key);
+      queryClient.setQueryData<LikesData>(key, (old) => {
+        const base = old ?? { count: 0, likedByMe: false };
+        if (base.likedByMe === desired) return base;
+        return {
+          likedByMe: desired,
+          count: Math.max(0, base.count + (desired ? 1 : -1)),
+        };
+      });
+      return { previous };
+    },
+    onError: (_err, _desired, ctx) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData(roundLikesKey(roundId, signedInUserId), ctx.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({
+        queryKey: roundLikesKey(roundId, signedInUserId),
+      });
+    },
+  });
 
   const toggle = useCallback(() => {
     if (!roundId || !signedInUserId) return;
-    const next = inFlight.current.then(() =>
-      system.powersync.writeTransaction(async (tx) => {
-        // Re-read inside the transaction so we never act on a stale
-        // React snapshot. Two rapid taps must see each other's
-        // committed effect (INSERT then immediate DELETE, etc.)
-        // rather than both seeing the pre-tap state.
-        const existing = await tx.getOptional<{ id: string }>(
-          `SELECT id FROM ${ROUND_LIKES_TABLE}
-             WHERE round_id = ? AND liker_user_id = ?
-             LIMIT 1`,
-          [roundId, signedInUserId]
-        );
-        if (existing) {
-          // Un-like: hard-delete the local row. The connector
-          // replicates the DELETE; the server's RLS delete-own
-          // policy enforces that the row belongs to the caller.
-          await tx.execute(
-            `DELETE FROM ${ROUND_LIKES_TABLE} WHERE id = ?`,
-            [existing.id]
-          );
-        } else {
-          // Like: insert a fresh row. `owner_user_id` is left null
-          // — the server-side trigger fills it from the parent
-          // scorecards row. Local SQLite stores null too; that's
-          // fine because the sync streams filter through the
-          // scorecards join, not by `owner_user_id` directly on the
-          // local side.
-          const id = newRoundLikeId();
-          const now = new Date().toISOString();
-          await tx.execute(
-            `INSERT INTO ${ROUND_LIKES_TABLE}
-               (id, round_id, liker_user_id, owner_user_id, created_at)
-             VALUES (?, ?, ?, NULL, ?)`,
-            [id, roundId, signedInUserId, now]
-          );
-        }
-      })
+    const current = queryClient.getQueryData<LikesData>(
+      roundLikesKey(roundId, signedInUserId)
     );
-    inFlight.current = next.catch(() => {});
-  }, [roundId, signedInUserId, system]);
+    mutate(!(current?.likedByMe ?? false));
+  }, [roundId, signedInUserId, queryClient, mutate]);
 
-  return { likedByMe, count, toggle };
+  return {
+    likedByMe: data?.likedByMe ?? false,
+    count: data?.count ?? 0,
+    toggle,
+  };
 }
