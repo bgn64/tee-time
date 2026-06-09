@@ -3,60 +3,15 @@
  * `friend_requests`) and the search / send / accept / decline /
  * cancel / unfriend RPC wrappers.
  *
- * Reads come from PowerSync's local SQLite via the streams declared
- * in `powersync/sync-config.yaml` (own_profile / friend_profiles /
- * requester_profiles / friendships / friend_requests). The home
- * banner is therefore realtime: when account A sends a request to B,
- * PowerSync propagates the new row to B's open Home tab without B
- * doing anything.
+ * Reads use React Query against Supabase REST: friendships come from
+ * `friendships`, and pending requests come from the security-invoker
+ * `friend_requests_with_profiles` view. RLS scopes both result sets to
+ * the signed-in user. Writes still flow through the existing SECURITY
+ * DEFINER RPCs because the integrity contract spans multiple rows.
  *
- * Writes still flow through SECURITY DEFINER RPCs because the
- * integrity contract for accept / unfriend spans multiple rows.
- *
- * Pending-mutation overlay (observation-based, NOT
- * RPC-success-based):
- *
- *   RPCs return BEFORE the next PowerSync sync tick lands the
- *   server-side row mutation in local SQLite. A naïve
- *   "clear-overlay-on-RPC-success" pattern would flash old state for
- *   ~hundreds of ms — a declined request banner would briefly
- *   reappear, an accepted FR would temporarily revert to pending,
- *   etc. We instead:
- *
- *     · On RPC call:    insert into the overlay (tombstone or extra row).
- *     · On RPC failure: remove from overlay + rethrow so caller can
- *                       toast.
- *     · On RPC success: leave overlay in place.
- *     · Render-time `active*` derivations exclude entries whose
- *       terminal condition is currently met (no flicker during the
- *       sync gap).
- *     · Storage-prune effects observe the same terminal condition
- *       and permanently drop the entry from the overlay state.
- *       Critical for non-monotonic conditions like "friendship row
- *       present" — without storage pruning, an unfriend that flips
- *       the condition back would re-activate stale overlay entries.
- *
- *   Cleanup triggers:
- *
- *     · pendingDeclines[reqId] / pendingCancels[reqId]
- *         → FR row no longer in local SQLite (status flipped to
- *           declined, so the sync rule's pending-only filter drops it).
- *           Monotonic — pruning is hygiene-only.
- *     · pendingAccepts[reqId → fromUserId]
- *         → FR row is gone AND the friendship row for that user has
- *           landed locally. Friendship side is non-monotonic.
- *     · pendingUnfriends[userId]
- *         → friendship row for that user is gone locally.
- *           Non-monotonic (re-friending re-inserts the row).
- *     · pendingSends[userId → optimisticRow]
- *         → a real outgoing FR for that user appears OR the
- *           friendship row appears (auto-accept path). Both sides
- *           non-monotonic.
- *
- *   RPCs cannot push to the PowerSync upload queue (they bypass it),
- *   so there is no `triggerSync()` or "await next sync" primitive —
- *   the observation pattern above is the canonical way to know "the
- *   write has reflected back into local state."
+ * Mutations optimistically update the React Query caches for a responsive
+ * UI, then invalidate both friend graph queries on settle so the server
+ * remains authoritative for these two-party relational writes.
  *
  * Pill priority order (when multiple states apply, e.g. ex-friend
  * with a stale pending FR — `FriendStatus`):
@@ -64,15 +19,11 @@
  *     self > friend > incoming-pending > outgoing-pending > stranger
  */
 
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import React from 'react';
-import { useQuery } from '@powersync/react';
 
-import {
-  FRIENDSHIPS_TABLE,
-  FRIEND_REQUESTS_TABLE,
-  PROFILES_TABLE
-} from '@/library/powersync/AppSchema';
-import { useSystem } from '@/library/powersync/system';
+import { supabase } from '@/library/supabase/client';
 import { useRequiredAccount } from './AccountContext';
 import {
   fetchProfile as fetchProfileFromCache,
@@ -92,22 +43,24 @@ type CloudProfileRow = {
   avatar_color: string;
 };
 
-type LocalFriendshipRow = {
+type FriendshipRow = {
   id: string;
   user_id: string;
   friend_user_id: string;
   created_at: string;
 };
 
-type LocalFriendRequestJoinedRow = {
+type FriendRequestWithProfilesRow = {
   id: string;
   from_user_id: string;
   to_user_id: string;
   status: string;
   created_at: string;
+  from_profile_user_id?: string | null;
   from_handle: string | null;
   from_display_name: string | null;
   from_avatar_color: string | null;
+  to_profile_user_id?: string | null;
   to_handle: string | null;
   to_display_name: string | null;
   to_avatar_color: string | null;
@@ -117,7 +70,7 @@ type FriendsContextValue = {
   friends: string[];
   outgoingRequests: FriendRequest[];
   incomingRequests: FriendRequest[];
-  /** True once both PowerSync watches have produced their first result. */
+  /** True once the friendships and request REST queries have settled. */
   hydrated: boolean;
   friendStatus: (userId: string) => FriendStatus;
   outgoingRequestTo: (userId: string) => FriendRequest | undefined;
@@ -130,7 +83,24 @@ type FriendsContextValue = {
   unfriend: (targetUserId: string) => Promise<void>;
 };
 
+type FriendGraphSnapshot = {
+  previousFriendships: FriendshipRow[] | undefined;
+  previousRequests: FriendRequestWithProfilesRow[] | undefined;
+};
+
 const FriendsContext = React.createContext<FriendsContextValue | null>(null);
+
+function friendshipsQueryKey(userId: string) {
+  return ['friends', 'friendships', userId] as const;
+}
+
+function friendRequestsQueryKey(userId: string) {
+  return ['friends', 'friend_requests_with_profiles', userId] as const;
+}
+
+function profileQueryKey(userId: string | null | undefined) {
+  return ['friends', 'profile', userId ?? null] as const;
+}
 
 /**
  * Escape `%` and `_` so a user-typed search like `a_b` doesn't match
@@ -151,416 +121,192 @@ function profileFromRow(row: CloudProfileRow): ProfileSummary {
   };
 }
 
+function profileFromAccount(account: ReturnType<typeof useRequiredAccount>): ProfileSummary {
+  return {
+    userId: account.userId,
+    handle: account.handle,
+    displayName: account.displayName,
+    avatarColor: account.avatarColor
+  };
+}
+
+async function fetchFriendships(userId: string): Promise<FriendshipRow[]> {
+  const { data, error } = await supabase
+    .from('friendships')
+    .select('id, user_id, friend_user_id, created_at')
+    .eq('user_id', userId);
+  if (error) throw error;
+  return (data ?? []) as FriendshipRow[];
+}
+
+async function fetchFriendRequestRows(): Promise<FriendRequestWithProfilesRow[]> {
+  const { data, error } = await supabase
+    .from('friend_requests_with_profiles')
+    .select('*');
+  if (error) throw error;
+  return (data ?? []) as FriendRequestWithProfilesRow[];
+}
+
+function buildFromViewRow(r: FriendRequestWithProfilesRow): FriendRequest {
+  return {
+    id: r.id,
+    fromUserId: r.from_user_id,
+    fromHandle: r.from_handle ?? '',
+    fromDisplayName: r.from_display_name ?? '',
+    fromAvatarColor: r.from_avatar_color ?? '#888888',
+    toUserId: r.to_user_id,
+    toHandle: r.to_handle ?? '',
+    toDisplayName: r.to_display_name ?? undefined,
+    toAvatarColor: r.to_avatar_color ?? undefined,
+    status: (r.status as FriendRequest['status']) ?? 'pending',
+    createdAt: r.created_at
+  };
+}
+
+function profileFromRequestRow(
+  row: FriendRequestWithProfilesRow,
+  userId: string
+): ProfileSummary | null {
+  if (row.from_user_id === userId && row.from_handle) {
+    return {
+      userId: row.from_user_id,
+      handle: row.from_handle,
+      displayName: row.from_display_name ?? '',
+      avatarColor: row.from_avatar_color ?? '#888888'
+    };
+  }
+  if (row.to_user_id === userId && row.to_handle) {
+    return {
+      userId: row.to_user_id,
+      handle: row.to_handle,
+      displayName: row.to_display_name ?? '',
+      avatarColor: row.to_avatar_color ?? '#888888'
+    };
+  }
+  return null;
+}
+
+function profilesFromRequestRows(rows: FriendRequestWithProfilesRow[]): ProfileSummary[] {
+  const out = new Map<string, ProfileSummary>();
+  for (const row of rows) {
+    const from = profileFromRequestRow(row, row.from_user_id);
+    if (from) out.set(from.userId, from);
+    const to = profileFromRequestRow(row, row.to_user_id);
+    if (to) out.set(to.userId, to);
+  }
+  return [...out.values()];
+}
+
+function optimisticFriendship(me: string, friendUserId: string): FriendshipRow {
+  return {
+    id: `optimistic-friendship-${friendUserId}-${Date.now()}`,
+    user_id: me,
+    friend_user_id: friendUserId,
+    created_at: new Date().toISOString()
+  };
+}
+
+function optimisticRequest(
+  me: string,
+  account: ReturnType<typeof useRequiredAccount>,
+  target: ProfileSummary
+): FriendRequestWithProfilesRow {
+  return {
+    id: `optimistic-request-${target.userId}-${Date.now()}`,
+    from_user_id: me,
+    to_user_id: target.userId,
+    status: 'pending',
+    created_at: new Date().toISOString(),
+    from_profile_user_id: me,
+    from_handle: account.handle,
+    from_display_name: account.displayName,
+    from_avatar_color: account.avatarColor,
+    to_profile_user_id: target.userId,
+    to_handle: target.handle,
+    to_display_name: target.displayName,
+    to_avatar_color: target.avatarColor
+  };
+}
+
+async function snapshotFriendGraph(
+  queryClient: QueryClient,
+  userId: string
+): Promise<FriendGraphSnapshot> {
+  const friendshipsKey = friendshipsQueryKey(userId);
+  const requestsKey = friendRequestsQueryKey(userId);
+  await Promise.all([
+    queryClient.cancelQueries({ queryKey: friendshipsKey }),
+    queryClient.cancelQueries({ queryKey: requestsKey })
+  ]);
+  return {
+    previousFriendships: queryClient.getQueryData<FriendshipRow[]>(friendshipsKey),
+    previousRequests:
+      queryClient.getQueryData<FriendRequestWithProfilesRow[]>(requestsKey)
+  };
+}
+
+function restoreFriendGraph(
+  queryClient: QueryClient,
+  userId: string,
+  snapshot: FriendGraphSnapshot | undefined
+): void {
+  if (!snapshot) return;
+  queryClient.setQueryData(friendshipsQueryKey(userId), snapshot.previousFriendships);
+  queryClient.setQueryData(friendRequestsQueryKey(userId), snapshot.previousRequests);
+}
+
+function invalidateFriendGraph(queryClient: QueryClient, userId: string): void {
+  void queryClient.invalidateQueries({ queryKey: friendshipsQueryKey(userId) });
+  void queryClient.invalidateQueries({ queryKey: friendRequestsQueryKey(userId) });
+}
+
 export function FriendsProvider({ children }: { children: React.ReactNode }) {
-  const system = useSystem();
   // FriendsProvider mounts only when AuthGate has cleared its stage-2
   // check (account.status === 'ready'), so the account is guaranteed
   // non-null. Logout unmounts the gate's children which destroys this
   // provider's state for free.
   const account = useRequiredAccount();
   const accountUserId = account.userId;
-  const supabase = system.supabaseConnector.client;
+  const queryClient = useQueryClient();
 
-  // -------------------------------------------------------------------
-  // PowerSync watches
-  // -------------------------------------------------------------------
+  const {
+    data: friendshipRows = [],
+    status: friendshipsStatus
+  } = useQuery<FriendshipRow[]>({
+    queryKey: friendshipsQueryKey(accountUserId),
+    queryFn: () => fetchFriendships(accountUserId)
+  });
 
-  const { data: friendshipRows, isLoading: friendshipsLoading } =
-    useQuery<LocalFriendshipRow>(
-      `SELECT id, user_id, friend_user_id, created_at
-       FROM ${FRIENDSHIPS_TABLE}
-       WHERE user_id = ?`,
-      [accountUserId]
-    );
+  const {
+    data: requestJoinedRows = [],
+    status: requestsStatus
+  } = useQuery<FriendRequestWithProfilesRow[]>({
+    queryKey: friendRequestsQueryKey(accountUserId),
+    queryFn: fetchFriendRequestRows
+  });
 
-  // Join the request rows with from/to profiles (already synced via
-  // own_profile + friend_profiles + requester_profiles). LEFT JOIN so
-  // a brand-new FR whose counter-profile hasn't fully synced yet still
-  // renders; it'll re-render once the profile lands.
-  const { data: requestJoinedRows, isLoading: requestsLoading } =
-    useQuery<LocalFriendRequestJoinedRow>(
-      `SELECT
-         fr.id,
-         fr.from_user_id,
-         fr.to_user_id,
-         fr.status,
-         fr.created_at,
-         pf.handle           AS from_handle,
-         pf.display_name     AS from_display_name,
-         pf.avatar_color     AS from_avatar_color,
-         pt.handle           AS to_handle,
-         pt.display_name     AS to_display_name,
-         pt.avatar_color     AS to_avatar_color
-       FROM ${FRIEND_REQUESTS_TABLE} fr
-       LEFT JOIN ${PROFILES_TABLE} pf ON pf.id = fr.from_user_id
-       LEFT JOIN ${PROFILES_TABLE} pt ON pt.id = fr.to_user_id
-       WHERE fr.status = 'pending'`
-    );
+  const hydrated = friendshipsStatus !== 'pending' && requestsStatus !== 'pending';
 
-  const hydrated = !friendshipsLoading && !requestsLoading;
-
-  // -------------------------------------------------------------------
-  // Pending-mutation overlay state
-  // -------------------------------------------------------------------
-
-  // requestId → fromUserId for accepted incoming FRs. We need the
-  // fromUserId at cleanup time so we can verify the friendship row
-  // has actually landed locally before dropping the overlay entry.
-  const [pendingAccepts, setPendingAccepts] = React.useState<
-    ReadonlyMap<string, string>
-  >(new Map());
-  const [pendingDeclines, setPendingDeclines] = React.useState<
-    ReadonlySet<string>
-  >(new Set());
-  const [pendingCancels, setPendingCancels] = React.useState<
-    ReadonlySet<string>
-  >(new Set());
-  // userId tombstones for unfriends.
-  const [pendingUnfriends, setPendingUnfriends] = React.useState<
-    ReadonlySet<string>
-  >(new Set());
-  // userId → optimistic outgoing FR row, shown until the real FR
-  // appears (or the friendship row, on the auto-accept path).
-  const [pendingSends, setPendingSends] = React.useState<
-    ReadonlyMap<string, FriendRequest>
-  >(new Map());
-
-  // -------------------------------------------------------------------
-  // Quick lookups derived from the latest PowerSync results
-  // -------------------------------------------------------------------
-
-  const friendshipsByFriendUserId = React.useMemo(() => {
-    const map = new Map<string, LocalFriendshipRow>();
-    for (const r of friendshipRows) map.set(r.friend_user_id, r);
-    return map;
-  }, [friendshipRows]);
-
-  const requestRowsById = React.useMemo(() => {
-    const map = new Map<string, LocalFriendRequestJoinedRow>();
-    for (const r of requestJoinedRows) map.set(r.id, r);
-    return map;
+  React.useEffect(() => {
+    const profiles = profilesFromRequestRows(requestJoinedRows);
+    if (profiles.length > 0) warmProfileCache(profiles);
   }, [requestJoinedRows]);
 
-  const outgoingRequestsByToUserId = React.useMemo(() => {
-    const map = new Map<string, LocalFriendRequestJoinedRow>();
-    for (const r of requestJoinedRows) {
-      if (r.from_user_id === accountUserId) map.set(r.to_user_id, r);
-    }
-    return map;
-  }, [requestJoinedRows, accountUserId]);
-
-  // -------------------------------------------------------------------
-  // Overlay cleanup
-  //
-  // Two-layer strategy:
-  //
-  //   1. Render-time `active*` derivations exclude entries whose
-  //      terminal condition is currently met. This avoids visible
-  //      flicker during the brief window between a PowerSync sync
-  //      tick and the storage-prune microtask that follows.
-  //
-  //   2. Storage-prune effects observe the same terminal condition
-  //      and permanently drop the entry from the underlying overlay
-  //      state. This is critical for overlays whose terminal
-  //      conditions are NON-MONOTONIC — friendship rows can be
-  //      deleted (unfriend) AND re-inserted (re-friend), so the
-  //      render-time `active*` check on its own would re-include a
-  //      stale entry after the condition flips back. Once pruned,
-  //      a flap can't re-activate.
-  //
-  // Conditions per overlay:
-  //
-  //   pendingDeclines / pendingCancels[reqId]
-  //     terminal = FR row no longer in local SQLite. Monotonic
-  //     (`accepted` / `declined` FRs never re-enter the
-  //     pending-only sync stream), so re-activation can't happen.
-  //     Storage prune is still scheduled for memory hygiene.
-  //
-  //   pendingAccepts[reqId → fromUserId]
-  //     terminal = FR row gone AND friendship row present. The
-  //     friendship side is non-monotonic (unfriend deletes it), so
-  //     storage pruning is mandatory — without it, a later unfriend
-  //     would re-activate the entry and tombstone any new outgoing
-  //     FR to the same user.
-  //
-  //   pendingUnfriends[userId]
-  //     terminal = friendship row gone. Non-monotonic (re-friend
-  //     re-inserts the row), so storage pruning is mandatory.
-  //
-  //   pendingSends[userId → optimisticRow]
-  //     terminal = real outgoing FR appears OR friendship row
-  //     appears. Both sides are non-monotonic (FRs can be cancelled,
-  //     friendships can be deleted), so storage pruning is
-  //     mandatory.
-  //
-  // setState is wrapped in a microtask via Promise.resolve().then(...)
-  // to comply with React 19's `react-hooks/set-state-in-effect` rule.
-  // -------------------------------------------------------------------
-
-  const activeDeclines = React.useMemo(() => {
-    const out = new Set<string>();
-    for (const id of pendingDeclines) {
-      if (requestRowsById.has(id)) out.add(id);
-    }
-    return out;
-  }, [pendingDeclines, requestRowsById]);
-
-  const activeCancels = React.useMemo(() => {
-    const out = new Set<string>();
-    for (const id of pendingCancels) {
-      if (requestRowsById.has(id)) out.add(id);
-    }
-    return out;
-  }, [pendingCancels, requestRowsById]);
-
-  const activeAccepts = React.useMemo(() => {
-    const out = new Map<string, string>();
-    for (const [id, fromUserId] of pendingAccepts) {
-      const reqStillPending = requestRowsById.has(id);
-      const friendshipPresent = friendshipsByFriendUserId.has(fromUserId);
-      // Carry the entry as long as either terminal condition is
-      // missing — drop only when both are satisfied.
-      if (reqStillPending || !friendshipPresent) {
-        out.set(id, fromUserId);
-      }
-    }
-    return out;
-  }, [pendingAccepts, requestRowsById, friendshipsByFriendUserId]);
-
-  const activeUnfriends = React.useMemo(() => {
-    const out = new Set<string>();
-    for (const uid of pendingUnfriends) {
-      if (friendshipsByFriendUserId.has(uid)) out.add(uid);
-    }
-    return out;
-  }, [pendingUnfriends, friendshipsByFriendUserId]);
-
-  const activeSends = React.useMemo(() => {
-    const out = new Map<string, FriendRequest>();
-    for (const [uid, row] of pendingSends) {
-      const realOutgoing = outgoingRequestsByToUserId.has(uid);
-      const isFriend = friendshipsByFriendUserId.has(uid);
-      if (!realOutgoing && !isFriend) out.set(uid, row);
-    }
-    return out;
-  }, [pendingSends, outgoingRequestsByToUserId, friendshipsByFriendUserId]);
-
-  // pendingSends storage prune: drop entries whose terminal condition
-  // has fired (real outgoing FR or friendship landed). Snapshots the
-  // terminating UIDs at effect time so a PowerSync state change
-  // between effect-schedule and microtask-run can't widen the prune.
-  React.useEffect(() => {
-    if (pendingSends.size === 0) return;
-    const toPrune: string[] = [];
-    for (const [uid] of pendingSends) {
-      if (
-        outgoingRequestsByToUserId.has(uid) ||
-        friendshipsByFriendUserId.has(uid)
-      ) {
-        toPrune.push(uid);
-      }
-    }
-    if (toPrune.length === 0) return;
-    void Promise.resolve().then(() => {
-      setPendingSends((prev) => {
-        let next: Map<string, FriendRequest> | null = null;
-        for (const uid of toPrune) {
-          if (prev.has(uid)) {
-            if (!next) next = new Map(prev);
-            next.delete(uid);
-          }
-        }
-        return next ?? prev;
-      });
-    });
-  }, [pendingSends, outgoingRequestsByToUserId, friendshipsByFriendUserId]);
-
-  // pendingAccepts storage prune: drop entries whose FR is gone AND
-  // friendship row has landed. Same snapshot semantics as above.
-  React.useEffect(() => {
-    if (pendingAccepts.size === 0) return;
-    const toPrune: string[] = [];
-    for (const [id, fromUserId] of pendingAccepts) {
-      const reqGone = !requestRowsById.has(id);
-      const friendshipPresent = friendshipsByFriendUserId.has(fromUserId);
-      if (reqGone && friendshipPresent) toPrune.push(id);
-    }
-    if (toPrune.length === 0) return;
-    void Promise.resolve().then(() => {
-      setPendingAccepts((prev) => {
-        let next: Map<string, string> | null = null;
-        for (const id of toPrune) {
-          if (prev.has(id)) {
-            if (!next) next = new Map(prev);
-            next.delete(id);
-          }
-        }
-        return next ?? prev;
-      });
-    });
-  }, [pendingAccepts, requestRowsById, friendshipsByFriendUserId]);
-
-  // pendingUnfriends storage prune: drop entries whose friendship
-  // row is no longer present.
-  React.useEffect(() => {
-    if (pendingUnfriends.size === 0) return;
-    const toPrune: string[] = [];
-    for (const uid of pendingUnfriends) {
-      if (!friendshipsByFriendUserId.has(uid)) toPrune.push(uid);
-    }
-    if (toPrune.length === 0) return;
-    void Promise.resolve().then(() => {
-      setPendingUnfriends((prev) => {
-        let next: Set<string> | null = null;
-        for (const uid of toPrune) {
-          if (prev.has(uid)) {
-            if (!next) next = new Set(prev);
-            next.delete(uid);
-          }
-        }
-        return next ?? prev;
-      });
-    });
-  }, [pendingUnfriends, friendshipsByFriendUserId]);
-
-  // pendingDeclines / pendingCancels storage prune: monotonic
-  // terminal (FR row gone), so re-activation isn't a risk — pruned
-  // here purely for memory hygiene.
-  React.useEffect(() => {
-    if (pendingDeclines.size === 0 && pendingCancels.size === 0) return;
-    const declinesToPrune: string[] = [];
-    for (const id of pendingDeclines) {
-      if (!requestRowsById.has(id)) declinesToPrune.push(id);
-    }
-    const cancelsToPrune: string[] = [];
-    for (const id of pendingCancels) {
-      if (!requestRowsById.has(id)) cancelsToPrune.push(id);
-    }
-    if (declinesToPrune.length === 0 && cancelsToPrune.length === 0) return;
-    void Promise.resolve().then(() => {
-      if (declinesToPrune.length > 0) {
-        setPendingDeclines((prev) => {
-          let next: Set<string> | null = null;
-          for (const id of declinesToPrune) {
-            if (prev.has(id)) {
-              if (!next) next = new Set(prev);
-              next.delete(id);
-            }
-          }
-          return next ?? prev;
-        });
-      }
-      if (cancelsToPrune.length > 0) {
-        setPendingCancels((prev) => {
-          let next: Set<string> | null = null;
-          for (const id of cancelsToPrune) {
-            if (prev.has(id)) {
-              if (!next) next = new Set(prev);
-              next.delete(id);
-            }
-          }
-          return next ?? prev;
-        });
-      }
-    });
-  }, [pendingDeclines, pendingCancels, requestRowsById]);
-
-  // -------------------------------------------------------------------
-  // Derived state — PowerSync rows with the overlay applied
-  // -------------------------------------------------------------------
-
   const friends = React.useMemo(() => {
-    return friendshipRows
-      .map((r) => r.friend_user_id)
-      .filter((id) => !activeUnfriends.has(id));
-  }, [friendshipRows, activeUnfriends]);
-
-  const buildFromJoined = React.useCallback(
-    (r: LocalFriendRequestJoinedRow): FriendRequest => ({
-      id: r.id,
-      fromUserId: r.from_user_id,
-      fromHandle: r.from_handle ?? '',
-      fromDisplayName: r.from_display_name ?? '',
-      fromAvatarColor: r.from_avatar_color ?? '#888888',
-      toUserId: r.to_user_id,
-      toHandle: r.to_handle ?? '',
-      toDisplayName: r.to_display_name ?? undefined,
-      toAvatarColor: r.to_avatar_color ?? undefined,
-      status: (r.status as FriendRequest['status']) ?? 'pending',
-      createdAt: r.created_at
-    }),
-    []
-  );
-
-  // Counterparty userIds of currently-active accepts. The
-  // accept_friend_request RPC also auto-accepts any reciprocal
-  // outgoing FR from me to that user in the same transaction, so the
-  // outgoing-pending pill needs to clear at the same moment as the
-  // incoming-pending banner. Derived as a Set for O(1) filter checks.
-  const acceptedCounterpartyUserIds = React.useMemo(() => {
-    return new Set(activeAccepts.values());
-  }, [activeAccepts]);
+    return friendshipRows.map((r) => r.friend_user_id);
+  }, [friendshipRows]);
 
   const incomingRequests = React.useMemo<FriendRequest[]>(() => {
     return requestJoinedRows
       .filter((r) => r.to_user_id === accountUserId)
-      .filter((r) => !activeAccepts.has(r.id) && !activeDeclines.has(r.id))
-      // Hide incoming FRs from a user we just unfriended (rare race —
-      // a stale FR could still be sitting pending server-side at the
-      // moment we unfriend).
-      .filter((r) => !activeUnfriends.has(r.from_user_id))
-      // Hide incoming FRs from a user we just sent an outgoing FR to:
-      // server-side, send_friend_request auto-accepts a reciprocal
-      // pending FR, so the banner row for that user must vanish at the
-      // same moment as the optimistic outgoing-pending appears.
-      .filter((r) => !activeSends.has(r.from_user_id))
-      .map(buildFromJoined);
-  }, [
-    requestJoinedRows,
-    accountUserId,
-    activeAccepts,
-    activeDeclines,
-    activeUnfriends,
-    activeSends,
-    buildFromJoined
-  ]);
+      .map(buildFromViewRow);
+  }, [requestJoinedRows, accountUserId]);
 
   const outgoingRequests = React.useMemo<FriendRequest[]>(() => {
-    const realOutgoing = requestJoinedRows
+    return requestJoinedRows
       .filter((r) => r.from_user_id === accountUserId)
-      .filter((r) => !activeCancels.has(r.id))
-      // Hide outgoing FRs to a user we just unfriended: the unfriend
-      // RPC marks any pending FR between the pair as declined.
-      .filter((r) => !activeUnfriends.has(r.to_user_id))
-      // Hide outgoing FRs to a user whose incoming FR we just accepted:
-      // accept_friend_request also flips our reciprocal outgoing FR to
-      // accepted server-side, so the outgoing-pending pill must clear
-      // alongside the incoming banner.
-      .filter((r) => !acceptedCounterpartyUserIds.has(r.to_user_id))
-      .map(buildFromJoined);
-    // Merge in optimistic sends not yet reflected in PowerSync (the
-    // activeSends derivation already excludes those whose terminal
-    // condition has fired).
-    const realToIds = new Set(realOutgoing.map((r) => r.toUserId));
-    const overlayOnly: FriendRequest[] = [];
-    for (const [uid, row] of activeSends) {
-      if (realToIds.has(uid)) continue;
-      overlayOnly.push(row);
-    }
-    return [...realOutgoing, ...overlayOnly];
-  }, [
-    requestJoinedRows,
-    accountUserId,
-    activeCancels,
-    activeUnfriends,
-    acceptedCounterpartyUserIds,
-    activeSends,
-    buildFromJoined
-  ]);
-
-  // -------------------------------------------------------------------
-  // Lookups for FriendActionPill / banner
-  // -------------------------------------------------------------------
+      .map(buildFromViewRow);
+  }, [requestJoinedRows, accountUserId]);
 
   const friendsSet = React.useMemo(() => new Set(friends), [friends]);
   const incomingByFromId = React.useMemo(() => {
@@ -595,10 +341,210 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
     [outgoingByToId]
   );
 
-  // -------------------------------------------------------------------
-  // RPC wrappers — same server semantics; overlay state on call,
-  // surface failure inline by rethrowing.
-  // -------------------------------------------------------------------
+  const sendFriendRequestMutation = useMutation<
+    void,
+    Error,
+    ProfileSummary,
+    FriendGraphSnapshot
+  >({
+    mutationFn: async (target) => {
+      const { error } = await supabase.rpc('send_friend_request', {
+        target_user_id: target.userId
+      });
+      if (error) throw error;
+    },
+    onMutate: async (target) => {
+      warmProfileCache([target]);
+      const snapshot = await snapshotFriendGraph(queryClient, accountUserId);
+      const requestsKey = friendRequestsQueryKey(accountUserId);
+      const friendshipsKey = friendshipsQueryKey(accountUserId);
+      const reciprocalIncoming = snapshot.previousRequests?.some(
+        (r) => r.from_user_id === target.userId && r.to_user_id === accountUserId
+      );
+
+      queryClient.setQueryData<FriendRequestWithProfilesRow[]>(requestsKey, (old) => {
+        const rows = old ?? [];
+        if (reciprocalIncoming) {
+          return rows.filter(
+            (r) =>
+              !(
+                (r.from_user_id === target.userId && r.to_user_id === accountUserId) ||
+                (r.from_user_id === accountUserId && r.to_user_id === target.userId)
+              )
+          );
+        }
+        if (
+          rows.some(
+            (r) => r.from_user_id === accountUserId && r.to_user_id === target.userId
+          )
+        ) {
+          return rows;
+        }
+        return [...rows, optimisticRequest(accountUserId, account, target)];
+      });
+
+      if (reciprocalIncoming) {
+        queryClient.setQueryData<FriendshipRow[]>(friendshipsKey, (old) => {
+          const rows = old ?? [];
+          if (rows.some((r) => r.friend_user_id === target.userId)) return rows;
+          return [...rows, optimisticFriendship(accountUserId, target.userId)];
+        });
+      }
+
+      return snapshot;
+    },
+    onError: (err, _target, snapshot) => {
+      restoreFriendGraph(queryClient, accountUserId, snapshot);
+      console.warn('[friends] send_friend_request:', err);
+    },
+    onSettled: () => {
+      invalidateFriendGraph(queryClient, accountUserId);
+    }
+  });
+
+  const acceptIncomingRequestMutation = useMutation<
+    void,
+    Error,
+    string,
+    FriendGraphSnapshot
+  >({
+    mutationFn: async (requestId) => {
+      const { error } = await supabase.rpc('accept_friend_request', {
+        request_id: requestId
+      });
+      if (error) throw error;
+    },
+    onMutate: async (requestId) => {
+      const snapshot = await snapshotFriendGraph(queryClient, accountUserId);
+      const row = snapshot.previousRequests?.find((r) => r.id === requestId);
+      if (!row) return snapshot;
+      const fromUserId = row.from_user_id;
+      const requestsKey = friendRequestsQueryKey(accountUserId);
+      const friendshipsKey = friendshipsQueryKey(accountUserId);
+      const fromProfile = profileFromRequestRow(row, fromUserId);
+      if (fromProfile) warmProfileCache([fromProfile]);
+
+      queryClient.setQueryData<FriendRequestWithProfilesRow[]>(requestsKey, (old) =>
+        (old ?? []).filter(
+          (r) =>
+            r.id !== requestId &&
+            !(r.from_user_id === accountUserId && r.to_user_id === fromUserId)
+        )
+      );
+      queryClient.setQueryData<FriendshipRow[]>(friendshipsKey, (old) => {
+        const rows = old ?? [];
+        if (rows.some((r) => r.friend_user_id === fromUserId)) return rows;
+        return [...rows, optimisticFriendship(accountUserId, fromUserId)];
+      });
+
+      return snapshot;
+    },
+    onError: (err, _requestId, snapshot) => {
+      restoreFriendGraph(queryClient, accountUserId, snapshot);
+      console.warn('[friends] accept_friend_request:', err);
+    },
+    onSettled: () => {
+      invalidateFriendGraph(queryClient, accountUserId);
+    }
+  });
+
+  const declineIncomingRequestMutation = useMutation<
+    void,
+    Error,
+    string,
+    FriendGraphSnapshot
+  >({
+    mutationFn: async (requestId) => {
+      const { error } = await supabase.rpc('decline_friend_request', {
+        request_id: requestId
+      });
+      if (error) throw error;
+    },
+    onMutate: async (requestId) => {
+      const snapshot = await snapshotFriendGraph(queryClient, accountUserId);
+      queryClient.setQueryData<FriendRequestWithProfilesRow[]>(
+        friendRequestsQueryKey(accountUserId),
+        (old) => (old ?? []).filter((r) => r.id !== requestId)
+      );
+      return snapshot;
+    },
+    onError: (err, _requestId, snapshot) => {
+      restoreFriendGraph(queryClient, accountUserId, snapshot);
+      console.warn('[friends] decline_friend_request:', err);
+    },
+    onSettled: () => {
+      invalidateFriendGraph(queryClient, accountUserId);
+    }
+  });
+
+  const cancelOutgoingRequestMutation = useMutation<
+    void,
+    Error,
+    string,
+    FriendGraphSnapshot
+  >({
+    mutationFn: async (requestId) => {
+      const { error } = await supabase.rpc('cancel_friend_request', {
+        request_id: requestId
+      });
+      if (error) throw error;
+    },
+    onMutate: async (requestId) => {
+      const snapshot = await snapshotFriendGraph(queryClient, accountUserId);
+      queryClient.setQueryData<FriendRequestWithProfilesRow[]>(
+        friendRequestsQueryKey(accountUserId),
+        (old) => (old ?? []).filter((r) => r.id !== requestId)
+      );
+      return snapshot;
+    },
+    onError: (err, _requestId, snapshot) => {
+      restoreFriendGraph(queryClient, accountUserId, snapshot);
+      console.warn('[friends] cancel_friend_request:', err);
+    },
+    onSettled: () => {
+      invalidateFriendGraph(queryClient, accountUserId);
+    }
+  });
+
+  const unfriendMutation = useMutation<
+    void,
+    Error,
+    string,
+    FriendGraphSnapshot
+  >({
+    mutationFn: async (targetUserId) => {
+      const { error } = await supabase.rpc('unfriend', {
+        target_user_id: targetUserId
+      });
+      if (error) throw error;
+    },
+    onMutate: async (targetUserId) => {
+      const snapshot = await snapshotFriendGraph(queryClient, accountUserId);
+      queryClient.setQueryData<FriendshipRow[]>(
+        friendshipsQueryKey(accountUserId),
+        (old) => (old ?? []).filter((r) => r.friend_user_id !== targetUserId)
+      );
+      queryClient.setQueryData<FriendRequestWithProfilesRow[]>(
+        friendRequestsQueryKey(accountUserId),
+        (old) =>
+          (old ?? []).filter(
+            (r) =>
+              !(
+                (r.from_user_id === accountUserId && r.to_user_id === targetUserId) ||
+                (r.from_user_id === targetUserId && r.to_user_id === accountUserId)
+              )
+          )
+      );
+      return snapshot;
+    },
+    onError: (err, _targetUserId, snapshot) => {
+      restoreFriendGraph(queryClient, accountUserId, snapshot);
+      console.warn('[friends] unfriend:', err);
+    },
+    onSettled: () => {
+      invalidateFriendGraph(queryClient, accountUserId);
+    }
+  });
 
   const searchProfiles = React.useCallback(
     async (q: string): Promise<ProfileSummary[]> => {
@@ -619,173 +565,42 @@ export function FriendsProvider({ children }: { children: React.ReactNode }) {
       warmProfileCache(profiles);
       return profiles;
     },
-    [accountUserId, supabase]
+    [accountUserId]
   );
 
   const sendFriendRequest = React.useCallback(
     async (target: ProfileSummary) => {
-      warmProfileCache([target]);
-      const tempId = `pending-send-${target.userId}-${Date.now()}`;
-      const optimistic: FriendRequest = {
-        id: tempId,
-        fromUserId: accountUserId,
-        fromHandle: account.handle,
-        fromDisplayName: account.displayName,
-        fromAvatarColor: account.avatarColor,
-        toUserId: target.userId,
-        toHandle: target.handle,
-        toDisplayName: target.displayName,
-        toAvatarColor: target.avatarColor,
-        status: 'pending',
-        createdAt: new Date().toISOString()
-      };
-      setPendingSends((prev) => {
-        const next = new Map(prev);
-        next.set(target.userId, optimistic);
-        return next;
-      });
-
-      try {
-        const { error } = await supabase.rpc('send_friend_request', {
-          target_user_id: target.userId
-        });
-        if (error) throw error;
-      } catch (err) {
-        setPendingSends((prev) => {
-          if (!prev.has(target.userId)) return prev;
-          const next = new Map(prev);
-          next.delete(target.userId);
-          return next;
-        });
-        console.warn('[friends] send_friend_request:', err);
-        throw err;
-      }
-      // Success → leave overlay in place; the observer clears it once
-      // a real outgoing FR (or auto-accept friendship) lands.
+      await sendFriendRequestMutation.mutateAsync(target);
     },
-    [
-      accountUserId,
-      account.handle,
-      account.displayName,
-      account.avatarColor,
-      supabase
-    ]
+    [sendFriendRequestMutation]
   );
 
   const acceptIncomingRequest = React.useCallback(
     async (requestId: string) => {
-      const row = requestRowsById.get(requestId);
-      if (!row) {
-        // The request row vanished between render and call (e.g. the
-        // sender cancelled, or the row was already accepted via
-        // another device). Nothing to do.
-        return;
-      }
-      const fromUserId = row.from_user_id;
-      setPendingAccepts((prev) => {
-        if (prev.has(requestId)) return prev;
-        const next = new Map(prev);
-        next.set(requestId, fromUserId);
-        return next;
-      });
-      try {
-        const { error } = await supabase.rpc('accept_friend_request', {
-          request_id: requestId
-        });
-        if (error) throw error;
-      } catch (err) {
-        setPendingAccepts((prev) => {
-          if (!prev.has(requestId)) return prev;
-          const next = new Map(prev);
-          next.delete(requestId);
-          return next;
-        });
-        console.warn('[friends] accept_friend_request:', err);
-        throw err;
-      }
+      await acceptIncomingRequestMutation.mutateAsync(requestId);
     },
-    [requestRowsById, supabase]
+    [acceptIncomingRequestMutation]
   );
 
   const declineIncomingRequest = React.useCallback(
     async (requestId: string) => {
-      setPendingDeclines((prev) => {
-        if (prev.has(requestId)) return prev;
-        const next = new Set(prev);
-        next.add(requestId);
-        return next;
-      });
-      try {
-        const { error } = await supabase.rpc('decline_friend_request', {
-          request_id: requestId
-        });
-        if (error) throw error;
-      } catch (err) {
-        setPendingDeclines((prev) => {
-          if (!prev.has(requestId)) return prev;
-          const next = new Set(prev);
-          next.delete(requestId);
-          return next;
-        });
-        console.warn('[friends] decline_friend_request:', err);
-        throw err;
-      }
+      await declineIncomingRequestMutation.mutateAsync(requestId);
     },
-    [supabase]
+    [declineIncomingRequestMutation]
   );
 
   const cancelOutgoingRequest = React.useCallback(
     async (requestId: string) => {
-      setPendingCancels((prev) => {
-        if (prev.has(requestId)) return prev;
-        const next = new Set(prev);
-        next.add(requestId);
-        return next;
-      });
-      try {
-        const { error } = await supabase.rpc('cancel_friend_request', {
-          request_id: requestId
-        });
-        if (error) throw error;
-      } catch (err) {
-        setPendingCancels((prev) => {
-          if (!prev.has(requestId)) return prev;
-          const next = new Set(prev);
-          next.delete(requestId);
-          return next;
-        });
-        console.warn('[friends] cancel_friend_request:', err);
-        throw err;
-      }
+      await cancelOutgoingRequestMutation.mutateAsync(requestId);
     },
-    [supabase]
+    [cancelOutgoingRequestMutation]
   );
 
   const unfriend = React.useCallback(
     async (targetUserId: string) => {
-      setPendingUnfriends((prev) => {
-        if (prev.has(targetUserId)) return prev;
-        const next = new Set(prev);
-        next.add(targetUserId);
-        return next;
-      });
-      try {
-        const { error } = await supabase.rpc('unfriend', {
-          target_user_id: targetUserId
-        });
-        if (error) throw error;
-      } catch (err) {
-        setPendingUnfriends((prev) => {
-          if (!prev.has(targetUserId)) return prev;
-          const next = new Set(prev);
-          next.delete(targetUserId);
-          return next;
-        });
-        console.warn('[friends] unfriend:', err);
-        throw err;
-      }
+      await unfriendMutation.mutateAsync(targetUserId);
     },
-    [supabase]
+    [unfriendMutation]
   );
 
   const value = React.useMemo<FriendsContextValue>(
@@ -833,74 +648,51 @@ export function useFriends(): FriendsContextValue {
 }
 
 /**
- * useProfile — three-tier lookup:
+ * useProfile — REST/React Query lookup:
  *
- *   1. PowerSync local SQLite watch. Hits for own profile, friends,
- *      and pending-FR counterparties (the rows synced by
- *      own_profile / friend_profiles / requester_profiles streams).
- *   2. In-memory search cache. Hits for rows the user tapped from a
- *      search result that aren't in any sync stream yet.
- *   3. Direct Supabase fetch. Fallback for profiles we've never
- *      encountered before (e.g. a deep-linked URL).
- *
- * Tier 1 is reactive — if the profile row arrives via sync between
- * mounts, the hook re-renders without any explicit refetch.
+ *   1. The signed-in user's account state.
+ *   2. Profiles already joined into the friend request view cache.
+ *   3. In-memory search cache warmed by `searchProfiles`.
+ *   4. Direct Supabase REST fetch through `profileCache`.
  */
 export function useProfile(userId: string | null | undefined): {
   profile: ProfileSummary | null;
   loading: boolean;
 } {
-  const system = useSystem();
-
-  // Tier 1: PowerSync watch. Use a tautologically-false fallback
-  // query while userId is null so the hook still calls useQuery (and
-  // therefore obeys the rules of hooks) without thrashing the engine.
-  const { data: localRows } = useQuery<{
-    id: string;
-    handle: string;
-    display_name: string;
-    avatar_color: string;
-  }>(
-    userId
-      ? `SELECT id, handle, display_name, avatar_color FROM ${PROFILES_TABLE} WHERE id = ?`
-      : `SELECT id, handle, display_name, avatar_color FROM ${PROFILES_TABLE} WHERE 1 = 0`,
-    userId ? [userId] : []
+  const account = useRequiredAccount();
+  const accountProfile = React.useMemo(
+    () => (userId === account.userId ? profileFromAccount(account) : null),
+    [userId, account]
   );
-  const localRow = localRows[0];
-  const localProfile = React.useMemo<ProfileSummary | null>(() => {
-    if (!localRow) return null;
-    return {
-      userId: localRow.id,
-      handle: localRow.handle,
-      displayName: localRow.display_name,
-      avatarColor: localRow.avatar_color
-    };
-  }, [localRow]);
 
-  // Tier 3 state — only consulted when tier 1 + 2 miss.
-  const [fetched, setFetched] = React.useState<{
-    userId: string;
-    profile: ProfileSummary | null;
-  } | null>(null);
+  const { data: requestJoinedRows = [] } = useQuery<FriendRequestWithProfilesRow[]>({
+    queryKey: friendRequestsQueryKey(account.userId),
+    queryFn: fetchFriendRequestRows
+  });
+
+  const requestProfile = React.useMemo(() => {
+    if (!userId) return null;
+    for (const row of requestJoinedRows) {
+      const profile = profileFromRequestRow(row, userId);
+      if (profile) return profile;
+    }
+    return null;
+  }, [userId, requestJoinedRows]);
 
   React.useEffect(() => {
-    if (!userId) return;
-    if (localProfile) return;
-    if (getCachedProfile(userId)) return;
-    let cancelled = false;
-    fetchProfileFromCache(system.supabaseConnector.client, userId).then((p) => {
-      if (cancelled) return;
-      setFetched({ userId, profile: p });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, system, localProfile]);
+    if (requestProfile) warmProfileCache([requestProfile]);
+  }, [requestProfile]);
 
-  const cached = userId ? getCachedProfile(userId) : null;
-  const settled = fetched?.userId === userId;
-  const profile =
-    localProfile ?? cached ?? (settled ? (fetched?.profile ?? null) : null);
-  const loading = !!userId && !localProfile && !cached && !settled;
+  const cached = userId ? (getCachedProfile(userId) ?? null) : null;
+  const fallbackEnabled = !!userId && !accountProfile && !requestProfile && !cached;
+  const { data: fetched = null, isPending: fetchPending } =
+    useQuery<ProfileSummary | null>({
+      queryKey: profileQueryKey(userId),
+      enabled: fallbackEnabled,
+      queryFn: () => fetchProfileFromCache(userId as string)
+    });
+
+  const profile = accountProfile ?? requestProfile ?? cached ?? fetched;
+  const loading = !!userId && !profile && fallbackEnabled && fetchPending;
   return { profile, loading };
 }
