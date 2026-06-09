@@ -12,16 +12,23 @@ import { createClient } from '@supabase/supabase-js';
 import { ExpoKVStorage, WebKVStorage } from '@/library/storage/KVStorage';
 import { AppConfig } from './AppConfig';
 
+const supabaseUrl = AppConfig.supabaseUrl;
+const supabaseAnonKey = AppConfig.supabaseAnonKey;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error(
+    'Supabase env vars are missing. Copy `.env.local.template` to `.env.local` and set ' +
+      'EXPO_PUBLIC_SUPABASE_URL + EXPO_PUBLIC_SUPABASE_ANON_KEY, then restart `expo start` ' +
+      '(use `--clear` so Metro picks up the new env).'
+  );
+}
+
 const storage = Platform.OS === 'web' ? new WebKVStorage() : new ExpoKVStorage();
 
-export const supabase = createClient(
-  AppConfig.supabaseUrl ?? '',
-  AppConfig.supabaseAnonKey ?? '',
-  {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      storage,
-    },
-  }
-);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    storage,
+  },
+});
