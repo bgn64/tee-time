@@ -9,44 +9,25 @@
  *   · stage 1 = session present (AuthGate's existing job)
  *   · stage 2 = profile present (this provider's job)
  *
- * State machine:
+ * Read path: the shared Supabase auth client provides the current
+ * session user id, then React Query fetches that user's `profiles`
+ * row over Supabase REST. The cache is keyed by `['account-profile',
+ * userId]` and refreshed on demand by invalidating that query.
  *
- *      ┌─ no session ──────────► gated by AuthGate stage 1 (we don't run)
- *      │
- *      └─ session present
- *           │
- *           ├─ booting       ◄── PowerSync hasn't completed its first
- *           │                    sync yet AND no local profile row.
- *           ├─ needsProfile  ◄── First sync done, no profile row server-side.
- *           ├─ ready         ◄── Local PowerSync row present (own_profile
- *           │                    stream). Also covers offline launches:
- *           │                    once the row has ever synced, it lives
- *           │                    in local SQLite until disconnectAndClear.
- *           └─ error         ◄── First sync still hasn't completed after
- *                                BOOT_ERROR_TIMEOUT_MS — surface a retry
- *                                screen instead of spinning forever.
- *
- * Local SQLite is the persistent cache. The `own_profile` sync stream
- * replicates the profile row down once and keeps it fresh; the
- * previous KV-storage cache layer has been removed since PowerSync
- * is now the source of truth.
- *
- * `completeProfile` calls the RPC and stashes the returned row in a
- * local override state so `status` flips to 'ready' the instant the
- * RPC returns (the override is cleared automatically when PowerSync's
- * next sync tick lands the canonical row). Without this overlay the
- * user would briefly see the handle picker re-render after submitting,
- * because the local SQLite hadn't yet replicated the new row.
+ * Write path: `completeProfile` calls the `complete_profile` RPC and
+ * installs the returned server row directly into the same React Query
+ * cache, so `status` flips to 'ready' immediately after the RPC
+ * succeeds while preserving the REST response as the source of truth.
  */
 
+import { useQuery } from '@tanstack/react-query';
 import React from 'react';
-import { useQuery, useStatus } from '@powersync/react';
 
-import { useSystem } from '@/library/powersync/system';
-import { PROFILES_TABLE, type ProfileRecord } from '@/library/powersync/AppSchema';
+import { queryClient } from '@/library/data/queryClient';
+import { supabase } from '@/library/supabase/client';
+import type { ProfileSummary } from '@/types/social';
 import { pickAvatarColor } from './avatarColors';
 import { normalizeHandle } from './handles';
-import type { ProfileSummary } from '@/types/social';
 
 type AccountStatus = 'booting' | 'needsProfile' | 'ready' | 'error';
 
@@ -58,18 +39,15 @@ type AccountContextValue = {
   /** Convenience accessor for AuthGate. True when status === 'needsProfile'. */
   needsProfile: boolean;
   /**
-   * Reset any "timed-out boot" latch and ask PowerSync to retry the
-   * connection. Wired into the AuthGate error screen's "Try again"
-   * button.
+   * Refetch the signed-in user's profile row. Wired into the AuthGate
+   * error screen's "Try again" button.
    */
   refresh: () => Promise<void>;
   /**
    * Creates the profile via the `complete_profile` RPC. Idempotent
    * server-side; returns the row whether newly inserted or
-   * pre-existing. The returned row is also installed as a local
-   * override so the status flips to 'ready' immediately (the override
-   * clears automatically when PowerSync's own_profile stream lands
-   * the canonical row).
+   * pre-existing. The returned row is also installed in the React
+   * Query cache so the status flips to 'ready' immediately.
    */
   completeProfile: (handle: string, displayName: string) => Promise<Account>;
   /** Best-effort palette pick for the signed-in user (uses their id). */
@@ -78,14 +56,9 @@ type AccountContextValue = {
 
 const AccountContext = React.createContext<AccountContextValue | null>(null);
 
-// How long we wait for PowerSync's first sync to complete before
-// flipping the status to 'error'. PowerSync keeps retrying in the
-// background, so the user can tap "Try again" to bounce back into
-// 'booting' state. 10s is well above a healthy first sync (~1–2s on
-// LTE) without making truly-offline users stare at a spinner forever.
-const BOOT_ERROR_TIMEOUT_MS = 10_000;
+const accountProfileKey = (userId: string | null) => ['account-profile', userId] as const;
 
-// Server-side RPC shape (snake_case columns).
+// Server-side REST/RPC shape (snake_case columns).
 type CloudProfileRow = {
   user_id: string;
   handle: string;
@@ -102,119 +75,69 @@ function cloudRowToAccount(row: CloudProfileRow): Account {
   };
 }
 
-function recordToAccount(
-  row: ProfileRecord & { id: string },
-  userId: string
-): Account {
-  return {
-    userId,
-    handle: row.handle ?? '',
-    displayName: row.display_name ?? '',
-    avatarColor: row.avatar_color ?? '#888888'
-  };
-}
-
 export function AccountProvider({ children }: { children: React.ReactNode }) {
-  const system = useSystem();
-  const syncStatus = useStatus();
   const [userId, setUserId] = React.useState<string | null>(null);
-  // Latched true once we've been booting longer than BOOT_ERROR_TIMEOUT_MS
-  // without either a local row or hasSynced flipping true.
-  const [bootTimedOut, setBootTimedOut] = React.useState(false);
-  // Holds the RPC-return row between `completeProfile` returning and
-  // PowerSync's own_profile stream landing the canonical row. Keyed by
-  // userId so a stale override from a previous sign-in can't leak.
-  const [postCompleteOverride, setPostCompleteOverride] =
-    React.useState<Account | null>(null);
 
   // Resolve the current Supabase user id and react to login/logout.
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
-      const id = (await system.supabaseConnector.userId().catch(() => undefined)) ?? null;
-      if (!cancelled) setUserId(id);
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+      if (!cancelled) setUserId(session?.user.id ?? null);
     })();
 
     const {
       data: { subscription }
-    } = system.supabaseConnector.client.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       const nextId = nextSession?.user.id ?? null;
       setUserId(nextId);
-      // Drop the boot-timeout latch + any stale override when the user
-      // changes. The PowerSync query below auto-rebinds to the new id.
-      setBootTimedOut(false);
-      setPostCompleteOverride(null);
     });
 
     return () => {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [system]);
+  }, []);
 
-  // PowerSync watch for the user's own profile row. The own_profile
-  // sync stream aliases `user_id AS id`, so the local PK is the user
-  // id. We use a tautologically-false fallback while userId is null
-  // so the query has stable shape and doesn't trip an empty-param
-  // path that some PowerSync versions handle differently.
-  const { data: profileRows } = useQuery<ProfileRecord & { id: string }>(
-    userId
-      ? `SELECT * FROM ${PROFILES_TABLE} WHERE id = ?`
-      : `SELECT * FROM ${PROFILES_TABLE} WHERE 1 = 0`,
-    userId ? [userId] : []
-  );
-  const row = profileRows[0];
-
-  // Boot timeout: only run when we genuinely don't have any data
-  // (no local row AND first sync hasn't completed). The setState
-  // lives inside the setTimeout callback (not the effect body), so
-  // this is allowed under the React 19 set-state-in-effect rule.
-  React.useEffect(() => {
-    if (!userId) return;
-    if (row) return;
-    if (syncStatus.hasSynced) return;
-    if (bootTimedOut) return;
-    const t = setTimeout(() => setBootTimedOut(true), BOOT_ERROR_TIMEOUT_MS);
-    return () => clearTimeout(t);
-  }, [userId, row, syncStatus.hasSynced, bootTimedOut]);
+  const profileQuery = useQuery<CloudProfileRow | null>({
+    queryKey: accountProfileKey(userId),
+    enabled: !!userId,
+    queryFn: async () => {
+      if (!userId) {
+        throw new Error('Not signed in');
+      }
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('user_id, handle, display_name, avatar_color')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as CloudProfileRow | null;
+    }
+  });
 
   const account = React.useMemo<Account | null>(() => {
-    if (!userId) return null;
-    if (row) return recordToAccount(row, userId);
-    // The override is read only while PowerSync hasn't yet replicated
-    // the canonical row. Once `row` is present the override is
-    // effectively dead state — it sits in memory until the next auth
-    // change clears it (negligible memory cost; intentionally no
-    // setState-in-effect to clear it, per the React 19 rule).
-    if (postCompleteOverride && postCompleteOverride.userId === userId) {
-      return postCompleteOverride;
-    }
-    return null;
-  }, [userId, row, postCompleteOverride]);
+    const row = profileQuery.data;
+    return row ? cloudRowToAccount(row) : null;
+  }, [profileQuery.data]);
 
   const status: AccountStatus = (() => {
     if (!userId) return 'booting';
     if (account) return 'ready';
-    if (syncStatus.hasSynced) return 'needsProfile';
-    if (bootTimedOut) return 'error';
+    if (profileQuery.isError) return 'error';
+    if (profileQuery.isSuccess && profileQuery.data === null) return 'needsProfile';
     return 'booting';
   })();
 
   const refresh = React.useCallback(async () => {
-    // Bounce the error latch and kick PowerSync to retry the
-    // connection. PowerSync.connect is idempotent — re-calling it on
-    // an already-connected client is a no-op.
-    setBootTimedOut(false);
-    try {
-      await system.powersync.connect(system.supabaseConnector);
-    } catch (err) {
-      console.warn('[account] refresh connect failed:', err);
-    }
-  }, [system]);
+    await queryClient.invalidateQueries({ queryKey: accountProfileKey(userId) });
+  }, [userId]);
 
   // Mirror of `userId` accessible inside async callbacks without
   // re-creating them on each session change. Lets `completeProfile`
-  // verify the user hasn't changed before installing the override.
+  // verify the user hasn't changed before installing the returned row.
   const userIdRef = React.useRef<string | null>(userId);
   React.useEffect(() => {
     userIdRef.current = userId;
@@ -229,7 +152,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       const normalizedHandle = normalizeHandle(handle);
       const trimmedName = displayName.trim();
       const color = pickAvatarColor(userId);
-      const { data, error } = await system.supabaseConnector.client.rpc('complete_profile', {
+      const { data, error } = await supabase.rpc('complete_profile', {
         p_handle: normalizedHandle,
         p_display_name: trimmedName,
         p_avatar_color: color
@@ -242,15 +165,15 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Empty response from complete_profile RPC');
       }
       const next = cloudRowToAccount(cloudRow);
-      // Only install the override if the user hasn't changed during
+      // Only install the returned row if the user hasn't changed during
       // the RPC. Without this guard a late RPC resolution from a
-      // signed-out user could leak an override into the next session.
+      // signed-out user could leak data into the next session.
       if (userIdRef.current === submittingUserId) {
-        setPostCompleteOverride(next);
+        queryClient.setQueryData(accountProfileKey(submittingUserId), cloudRow);
       }
       return next;
     },
-    [userId, system]
+    [userId]
   );
 
   const suggestedAvatarColor = React.useMemo(

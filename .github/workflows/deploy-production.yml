@@ -1,39 +1,24 @@
 name: Deploy to production
 
-# Multi-job production deploy with per-target paths filtering:
+# Production deploy with path filtering: deploy Supabase migrations only when
+# supabase/migrations/** changed. workflow_dispatch forces a run.
 #
-#   Detect changes ──┬──► Deploy DB (only if supabase/migrations/** changed)
-#                    └──► Deploy PowerSync sync rules (only if powersync/sync-config.yaml changed)
-#
-# Why split: every push to main used to re-run the full pipeline,
-# including a PowerSync sync-rules redeploy that triggers a brief
-# replication restart even when the rules didn't change. Splitting
-# lets us no-op the irrelevant half.
-#
-# Vercel handles the web-app build independently from this workflow
-# on the same push.
-#
-# `workflow_dispatch` runs BOTH jobs regardless of which files changed,
-# for manual re-runs.
+# Vercel handles the web-app build independently from this workflow on the
+# same push.
 #
 # Required GitHub configuration on bgn64/tee-time:
 #
 #   Repository-level secrets:
 #     - SUPABASE_ACCESS_TOKEN          Personal access token for the Supabase CLI
 #
-#   Production environment (Settings → Environments → production):
+#   Production environment (Settings -> Environments -> production):
 #     Secrets:
 #       - DB_PASSWORD                  Production Supabase Postgres password
-#       - POWERSYNC_PS_ADMIN_TOKEN     PowerSync personal access token (PAT)
 #     Variables:
 #       - PROJECT_ID                   Production Supabase project ref (e.g. bamdgmmhwcancdpppbzr)
-#       - POWERSYNC_PROD_INSTANCE_ID   Production PowerSync instance ID
-#       - POWERSYNC_PROD_PROJECT_ID    Production PowerSync project (slot) ID
-#       - POWERSYNC_PROD_ORG_ID        PowerSync org ID (required for the generated cli.yaml)
 #
-#   The `production` environment can also be configured with Required
-#   reviewers — both deploy jobs will then pause for manual approval
-#   before any step runs.
+#   The production environment can also be configured with Required
+#   reviewers; the deploy job will then pause for manual approval.
 
 on:
   push:
@@ -46,15 +31,14 @@ concurrency:
 
 jobs:
   # ------------------------------------------------------------
-  # changes — fast path-filter probe; outputs feed the deploy jobs' `if:`
+  # changes - fast path-filter probe; output feeds the deploy job if:
   # ------------------------------------------------------------
   changes:
     name: Detect changed paths
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
-      db:        ${{ steps.filter.outputs.db }}
-      powersync: ${{ steps.filter.outputs.powersync }}
+      db: ${{ steps.filter.outputs.db }}
     steps:
       - uses: actions/checkout@v4
       - uses: dorny/paths-filter@v3
@@ -63,11 +47,9 @@ jobs:
           filters: |
             db:
               - 'supabase/migrations/**'
-            powersync:
-              - 'powersync/sync-config.yaml'
 
   # ------------------------------------------------------------
-  # deploy-db — Supabase migrations + pre-deploy backup
+  # deploy-db - Supabase migrations + pre-deploy backup
   # ------------------------------------------------------------
   deploy-db:
     name: Deploy Supabase migrations
@@ -111,52 +93,3 @@ jobs:
 
       - name: Push migrations
         run: supabase db push --linked
-
-  # ------------------------------------------------------------
-  # deploy-powersync — sync rules deploy to prod slot
-  # ------------------------------------------------------------
-  # See the v1 workflow history for why we generate a
-  # `.powersync-prod/` dir at deploy time instead of using the
-  # committed `powersync/cli.yaml` (which points at staging) +
-  # INSTANCE_ID/PROJECT_ID env vars: the CLI prefers linked config
-  # over env vars, so the prior shape silently deployed to staging.
-  deploy-powersync:
-    name: Deploy PowerSync sync rules
-    needs: changes
-    if: needs.changes.outputs.powersync == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    environment: production
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install PowerSync CLI
-        run: npm install -g powersync@latest
-
-      - name: Stage prod-targeted PowerSync config
-        run: |
-          rm -rf .powersync-prod
-          mkdir -p .powersync-prod
-          cp powersync/sync-config.yaml .powersync-prod/sync-config.yaml
-          cat > .powersync-prod/cli.yaml <<EOF
-          type: cloud
-          instance_id: ${{ vars.POWERSYNC_PROD_INSTANCE_ID }}
-          project_id: ${{ vars.POWERSYNC_PROD_PROJECT_ID }}
-          org_id: ${{ vars.POWERSYNC_PROD_ORG_ID }}
-          EOF
-          echo "--- generated cli.yaml ---"
-          cat .powersync-prod/cli.yaml
-          if ! grep -q '^org_id: .' .powersync-prod/cli.yaml; then
-            echo "::error::POWERSYNC_PROD_ORG_ID environment variable is missing. Add it under Settings → Environments → production → Variables."
-            exit 1
-          fi
-
-      # We deliberately skip `powersync validate` here — it requires a
-      # service.yaml in the directory and we don't ship service.yaml
-      # from CI (prod slot owns it via the dashboard). `deploy
-      # sync-config` validates the sync rules internally before pushing.
-      - name: Deploy sync rules to prod slot
-        env:
-          PS_ADMIN_TOKEN: ${{ secrets.POWERSYNC_PS_ADMIN_TOKEN }}
-        run: powersync deploy sync-config --directory .powersync-prod

@@ -2,24 +2,24 @@
  * CRUD helpers for `custom_players` — the user-scoped roster of
  * off-app people the user plays rounds with.
  *
- * Writes go through PowerSync's CRUD upload queue
- * (`powersync.writeTransaction` → `SupabaseConnector.uploadData` →
- * Supabase). No SECURITY DEFINER RPCs are needed because the
- * integrity contract is single-row and RLS already scopes access
- * to the owner.
+ * Writes go through Supabase REST. No SECURITY DEFINER RPCs are
+ * needed because the integrity contract is single-row and RLS already
+ * scopes access to the owner.
  *
- * `softDeleteCustomPlayer` flips `deleted_at` (and bumps
- * `updated_at` so the sync replicator dirties the row on other
- * devices). The row STAYS synced — the picker filters
- * `WHERE deleted_at IS NULL` locally, but the scorecard resolver
- * intentionally does not, so historic rounds keep rendering the
- * deleted player.
+ * `softDeleteCustomPlayer` flips `deleted_at` and bumps `updated_at`.
+ * The row stays in Supabase — the picker filters active rows, but the
+ * scorecard resolver intentionally does not filter `deleted_at`, so
+ * historic rounds keep rendering the deleted player.
  */
 
+import { useQuery } from '@tanstack/react-query';
+
 import { pickAvatarColor } from '@/library/social/avatarColors';
-import { CUSTOM_PLAYERS_TABLE } from '@/library/powersync/AppSchema';
-import type { System } from '@/library/powersync/system';
+import { queryClient } from '@/library/data/queryClient';
+import { supabase } from '@/library/supabase/client';
 import { newCustomPlayerId } from './ids';
+
+const CUSTOM_PLAYERS_TABLE = 'custom_players';
 
 export type CreateCustomPlayerResult = {
   /** New row's id — caller uses this to build a `custom:{id}` participantKey. */
@@ -29,7 +29,6 @@ export type CreateCustomPlayerResult = {
 };
 
 export async function createCustomPlayer(
-  system: System,
   ownerUserId: string,
   rawNickname: string
 ): Promise<CreateCustomPlayerResult> {
@@ -40,15 +39,17 @@ export async function createCustomPlayer(
   const id = newCustomPlayerId();
   const avatarColor = pickAvatarColor(id);
   const now = new Date().toISOString();
-  await system.powersync.writeTransaction(async (tx) => {
-    await tx.execute(
-      `INSERT INTO ${CUSTOM_PLAYERS_TABLE}
-         (id, owner_user_id, nickname, avatar_color,
-          created_at, updated_at, deleted_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL)`,
-      [id, ownerUserId, nickname, avatarColor, now, now]
-    );
+  const { error } = await supabase.from(CUSTOM_PLAYERS_TABLE).insert({
+    id,
+    owner_user_id: ownerUserId,
+    nickname,
+    avatar_color: avatarColor,
+    created_at: now,
+    updated_at: now,
+    deleted_at: null
   });
+  if (error) throw error;
+  await queryClient.invalidateQueries({ queryKey: ['custom_players'] });
   return { id, nickname, avatarColor };
 }
 
@@ -58,16 +59,15 @@ export async function createCustomPlayer(
  * historic-scorecard rendering.
  */
 export async function softDeleteCustomPlayer(
-  system: System,
   customPlayerId: string
 ): Promise<void> {
   const now = new Date().toISOString();
-  await system.powersync.execute(
-    `UPDATE ${CUSTOM_PLAYERS_TABLE}
-       SET deleted_at = ?, updated_at = ?
-       WHERE id = ?`,
-    [now, now, customPlayerId]
-  );
+  const { error } = await supabase
+    .from(CUSTOM_PLAYERS_TABLE)
+    .update({ deleted_at: now, updated_at: now })
+    .eq('id', customPlayerId);
+  if (error) throw error;
+  await queryClient.invalidateQueries({ queryKey: ['custom_players'] });
 }
 
 /**
@@ -75,7 +75,6 @@ export async function softDeleteCustomPlayer(
  * no UI hookup yet.
  */
 export async function renameCustomPlayer(
-  system: System,
   customPlayerId: string,
   rawNickname: string
 ): Promise<void> {
@@ -84,10 +83,46 @@ export async function renameCustomPlayer(
     throw new Error('Nickname is required');
   }
   const now = new Date().toISOString();
-  await system.powersync.execute(
-    `UPDATE ${CUSTOM_PLAYERS_TABLE}
-       SET nickname = ?, updated_at = ?
-       WHERE id = ?`,
-    [nickname, now, customPlayerId]
-  );
+  const { error } = await supabase
+    .from(CUSTOM_PLAYERS_TABLE)
+    .update({ nickname, updated_at: now })
+    .eq('id', customPlayerId);
+  if (error) throw error;
+  await queryClient.invalidateQueries({ queryKey: ['custom_players'] });
+}
+
+export type CustomPlayerListRow = {
+  id: string;
+  nickname: string | null;
+  avatar_color: string | null;
+  deleted_at: string | null;
+};
+
+export function customPlayersListKey(userId: string | null) {
+  return ['custom_players', 'list', userId] as const;
+}
+
+/**
+ * Active (non-soft-deleted) custom players owned by the user, for the
+ * round player picker. Keyed under the `custom_players` prefix so the
+ * CRUD helpers' `invalidateQueries(['custom_players'])` refresh it.
+ */
+export function useCustomPlayers(userId: string | null): {
+  customPlayers: CustomPlayerListRow[];
+  isLoading: boolean;
+} {
+  const { data, isLoading } = useQuery<CustomPlayerListRow[]>({
+    queryKey: customPlayersListKey(userId),
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from(CUSTOM_PLAYERS_TABLE)
+        .select('id, nickname, avatar_color, deleted_at')
+        .eq('owner_user_id', userId as string)
+        .is('deleted_at', null);
+      if (error) throw error;
+      return (data ?? []) as CustomPlayerListRow[];
+    },
+  });
+  return { customPlayers: data ?? [], isLoading };
 }

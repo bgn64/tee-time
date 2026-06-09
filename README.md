@@ -1,21 +1,23 @@
 # Tee Time
 
-A private Expo + React Native + PowerSync golf scoring app for a small friend group. Web (Vercel) is the primary surface; native Android is paused.
+A private Expo + React Native golf scoring app for a small friend group. Web (Vercel) is the primary surface; native Android is paused.
 
-This README is the operations handbook. For per-area code structure see the folder-level docs (`src/app/`, `src/library/`, `src/components/`, `supabase/`, `powersync/`, `scripts/`).
+> **Migration status:** the client has been migrated **off PowerSync** to Supabase REST + [TanStack Query](https://tanstack.com/query) caching, with a persistent write outbox (`src/library/data/writeOutbox.ts`) for offline-resilient score entry. The PowerSync infrastructure (cloud service, replication slot) is no longer used by the app and is pending teardown — the planned follow-up is to drop it and move back to a smaller Supabase plan. The PowerSync-specific operations sections below are legacy and apply only until that teardown is done.
+
+This README is the operations handbook. For per-area code structure see the folder-level docs (`src/app/`, `src/library/`, `src/components/`, `supabase/`, `scripts/`).
 
 ## Stack
 
 | Layer | Choice |
 |---|---|
 | App framework | Expo 56 + Expo Router 56 (file-based routing under `src/app/`) |
-| Sync engine | PowerSync (`@powersync/react-native` + `@powersync/web`); local SQLite via `wa-sqlite` on web, `react-native-quick-sqlite` on native |
-| Backend | Supabase (Postgres + auth + REST + logical replication for PowerSync) |
+| Data layer | Supabase REST via `@supabase/supabase-js`, cached with TanStack Query (`@tanstack/react-query`); offline-resilient score writes via a persistent AsyncStorage outbox (`src/library/data/writeOutbox.ts`) |
+| Backend | Supabase (Postgres + auth + REST; RLS scopes every read to own + friend rows) |
 | Web deploy | Vercel (auto-build on push to `main`) |
-| DB + sync-rules deploy | GitHub Actions (`.github/workflows/deploy-production.yml`) — see [Deploy model](#deploy-model) |
+| DB deploy | GitHub Actions (`.github/workflows/deploy-production.yml`) — see [Deploy model](#deploy-model) |
 | Course catalog | OpenGolfAPI bulk CSV (ingested via `scripts/ingest-opengolf.ts`) + lazy enrichment via `src/library/golf/courseEnrichment.ts` |
 
-PowerSync is the source of truth for everything users read in-app: `scorecards`, `scorecard_scores`, `profiles`, `friendships`, `friend_requests`, `custom_players`, `comments`. The `courses` catalog is intentionally NOT synced (too large) — the app queries it via Supabase REST and snapshots the picked course onto each new scorecard at `startRound` time.
+Supabase Postgres is the source of truth for everything users read in-app: `scorecards`, `scorecard_scores`, `profiles`, `friendships`, `friend_requests`, `custom_players`, `comments`, `round_likes`. The app reads them over REST (TanStack Query), with RLS scoping each query to the caller's own + friends' rows; reads refresh on demand / pull-to-refresh rather than live-syncing. The `courses` catalog is queried via Supabase REST and snapshots the picked course onto each new scorecard at `startRound` time.
 
 ## Current release model
 
@@ -41,7 +43,6 @@ Local `.env.local` (gitignored) needs at minimum:
 ```text
 EXPO_PUBLIC_SUPABASE_URL=<staging URL OR http://127.0.0.1:54321 for local>
 EXPO_PUBLIC_SUPABASE_ANON_KEY=<matching anon/publishable key>
-EXPO_PUBLIC_POWERSYNC_URL=<staging PowerSync instance URL>
 ```
 
 `EXPO_PUBLIC_*` values are bundled into the client and must be safe to ship. Server-side scripts (`scripts/`) take `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` from a per-environment file passed via `--env`:

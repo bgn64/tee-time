@@ -1,31 +1,36 @@
 /**
- * Per-(team, hole) shot attribution — local data layer.
+ * Per-(team, hole) shot attribution — Supabase REST data layer (React Query).
  *
- * Sister hook to `useRoundHoleDetails` for the
- * `scorecard_shot_attributions` table. Read returns rows keyed by
- * `${teamId}::${holeNumber}`; write upserts the `contributor_ids`
- * array for a given (team, hole) tuple. This is the "complex"
- * (non-scalar) stat that doesn't fit the generic binary/integer
- * shape and keeps its own dedicated table.
+ * Read path: useRoundShotAttributions(roundId) fetches the round's
+ * scorecard_shot_attributions rows from Supabase via React Query and
+ * normalises each jsonb contributor_ids array into ordered participantKeys.
+ * RLS scopes rows to rounds the user can see. Data refreshes on demand /
+ * focus rather than live-syncing.
  *
- * List length is allowed to drift from the team's stroke count;
- * renderers truncate / pad at read time so the picker UX stays
- * honest even after scores are edited.
+ * Write path: setContributors() optimistically updates the cached tuple,
+ * then runs an idempotent REST upsert on the natural key unique
+ * (scorecard_id, team_id, hole_number). onError rolls back to the previous
+ * cache snapshot and onSettled reconciles against server truth.
+ * contributor_ids is jsonb over PostgREST, so it is read and written as a
+ * native JS array (no JSON string boundary). owner_user_id is left null and
+ * filled by the server-side trigger from the parent scorecards row.
+ *
+ * List length is allowed to drift from the team's stroke count; renderers
+ * truncate / pad at read time so the picker UX stays honest even after
+ * scores are edited.
  *
  * Tee shot convention (per Q6 decision): the FIRST element in the
  * `contributor_ids` array for a hole is the tee shot.
  */
 
-import { useQuery } from '@powersync/react';
-import { useCallback, useMemo, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
 
 import { newAchievementTagId } from '@/library/golf/ids';
-import {
-  SCORECARD_SHOT_ATTRIBUTIONS_TABLE,
-  type ScorecardShotAttributionRecord,
-} from '@/library/powersync/AppSchema';
-import { useSystem } from '@/library/powersync/system';
+import { supabase } from '@/library/supabase/client';
 import { useAccount } from '@/library/social/AccountContext';
+
+const SCORECARD_SHOT_ATTRIBUTIONS_TABLE = 'scorecard_shot_attributions';
 
 export type ShotAttributionRow = {
   teamId: string;
@@ -56,41 +61,94 @@ export type UseRoundShotAttributionsResult = {
   ) => Promise<void>;
 };
 
+type ShotAttributionCloudRow = {
+  id: string;
+  scorecard_id: string;
+  owner_user_id: string | null;
+  team_id: string | null;
+  hole_number: number | null;
+  contributor_ids: unknown;
+  updated_at: string | null;
+};
+
+type ShotAttributionMutation = {
+  id: string;
+  teamId: string;
+  holeNumber: number;
+  contributorIds: readonly string[];
+};
+
+export function roundShotAttributionsKey(roundId: string | null, userId: string | null) {
+  return ['scorecard_shot_attributions', roundId, userId] as const;
+}
+
 function parseContributorIds(raw: unknown): string[] {
-  if (typeof raw === 'string') {
-    if (raw.trim().length === 0) return [];
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.map((v) => (typeof v === 'string' ? v : ''));
-      }
-    } catch {
-      return [];
-    }
-  } else if (Array.isArray(raw)) {
+  if (Array.isArray(raw)) {
     return raw.map((v) => (typeof v === 'string' ? v : ''));
   }
   return [];
 }
 
+function rowsWithUpsert(
+  rows: readonly ShotAttributionCloudRow[] | undefined,
+  mutation: ShotAttributionMutation,
+  roundId: string
+): ShotAttributionCloudRow[] {
+  const now = new Date().toISOString();
+  const base = rows ?? [];
+  const nextRow: ShotAttributionCloudRow = {
+    id: mutation.id,
+    scorecard_id: roundId,
+    owner_user_id: null,
+    team_id: mutation.teamId,
+    hole_number: mutation.holeNumber,
+    contributor_ids: [...mutation.contributorIds],
+    updated_at: now,
+  };
+  let replaced = false;
+  const next = base.map((row) => {
+    if (row.team_id === mutation.teamId && row.hole_number === mutation.holeNumber) {
+      replaced = true;
+      return { ...row, contributor_ids: [...mutation.contributorIds], updated_at: now };
+    }
+    return row;
+  });
+  if (!replaced) next.push(nextRow);
+  return next;
+}
+
+function findExistingRow(
+  rows: readonly ShotAttributionCloudRow[] | undefined,
+  teamId: string,
+  holeNumber: number
+): ShotAttributionCloudRow | undefined {
+  return rows?.find((row) => row.team_id === teamId && row.hole_number === holeNumber);
+}
+
 export function useRoundShotAttributions(
   roundId: string | null
 ): UseRoundShotAttributionsResult {
-  const system = useSystem();
   const { account } = useAccount();
   const signedInUserId = account?.userId ?? null;
-  const inFlight = useRef<Set<string>>(new Set());
+  const queryClient = useQueryClient();
+  const key = roundShotAttributionsKey(roundId, signedInUserId);
 
-  const { data } = useQuery<ScorecardShotAttributionRecord & { id: string }>(
-    roundId
-      ? `SELECT * FROM ${SCORECARD_SHOT_ATTRIBUTIONS_TABLE} WHERE scorecard_id = ?`
-      : `SELECT * FROM ${SCORECARD_SHOT_ATTRIBUTIONS_TABLE} WHERE 1 = 0`,
-    roundId ? [roundId] : []
-  );
+  const { data } = useQuery<ShotAttributionCloudRow[]>({
+    queryKey: key,
+    enabled: !!roundId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from(SCORECARD_SHOT_ATTRIBUTIONS_TABLE)
+        .select('*')
+        .eq('scorecard_id', roundId as string);
+      if (error) throw error;
+      return (data ?? []) as ShotAttributionCloudRow[];
+    },
+  });
 
   const rows = useMemo<ShotAttributionRow[]>(() => {
     const out: ShotAttributionRow[] = [];
-    for (const row of data) {
+    for (const row of data ?? []) {
       if (!row.team_id || row.hole_number == null) continue;
       out.push({
         teamId: row.team_id,
@@ -101,14 +159,47 @@ export function useRoundShotAttributions(
     return out;
   }, [data]);
 
-  const idByTuple = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const row of data) {
-      if (!row.team_id || row.hole_number == null) continue;
-      m.set(`${row.team_id}::${row.hole_number}`, row.id);
-    }
-    return m;
-  }, [data]);
+  const { mutateAsync } = useMutation<
+    void,
+    Error,
+    ShotAttributionMutation,
+    { previous?: ShotAttributionCloudRow[] }
+  >({
+    mutationFn: async (mutation) => {
+      if (!roundId || !signedInUserId) return;
+      const { error } = await supabase.from(SCORECARD_SHOT_ATTRIBUTIONS_TABLE).upsert(
+        {
+          id: mutation.id,
+          scorecard_id: roundId,
+          owner_user_id: null,
+          team_id: mutation.teamId,
+          hole_number: mutation.holeNumber,
+          contributor_ids: [...mutation.contributorIds],
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'scorecard_id,team_id,hole_number' }
+      );
+      if (error) throw error;
+    },
+    onMutate: async (mutation) => {
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<ShotAttributionCloudRow[]>(key);
+      if (roundId) {
+        queryClient.setQueryData<ShotAttributionCloudRow[]>(key, (old) =>
+          rowsWithUpsert(old, mutation, roundId)
+        );
+      }
+      return { previous };
+    },
+    onError: (_err, _mutation, ctx) => {
+      if (ctx?.previous) {
+        queryClient.setQueryData(key, ctx.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: key });
+    },
+  });
 
   const getContributors = useCallback(
     (teamId: string, holeNumber: number): readonly string[] => {
@@ -125,35 +216,16 @@ export function useRoundShotAttributions(
   const setContributors = useCallback<UseRoundShotAttributionsResult['setContributors']>(
     async (teamId, holeNumber, contributorIds) => {
       if (!roundId || !signedInUserId) return;
-      const guard = `${teamId}::${holeNumber}`;
-      if (inFlight.current.has(guard)) return;
-      inFlight.current.add(guard);
-      try {
-        const tupleKey = guard;
-        const existing = idByTuple.get(tupleKey);
-        const now = new Date().toISOString();
-        const json = JSON.stringify(contributorIds);
-        if (existing) {
-          await system.powersync.execute(
-            `UPDATE ${SCORECARD_SHOT_ATTRIBUTIONS_TABLE}
-               SET contributor_ids = ?, updated_at = ?
-               WHERE id = ?`,
-            [json, now, existing]
-          );
-        } else {
-          const id = newAchievementTagId();
-          await system.powersync.execute(
-            `INSERT INTO ${SCORECARD_SHOT_ATTRIBUTIONS_TABLE}
-               (id, scorecard_id, owner_user_id, team_id, hole_number, contributor_ids, updated_at)
-             VALUES (?, ?, NULL, ?, ?, ?, ?)`,
-            [id, roundId, teamId, holeNumber, json, now]
-          );
-        }
-      } finally {
-        inFlight.current.delete(guard);
-      }
+      const latest = queryClient.getQueryData<ShotAttributionCloudRow[]>(key);
+      const existing = findExistingRow(latest, teamId, holeNumber);
+      await mutateAsync({
+        id: existing?.id ?? newAchievementTagId(),
+        teamId,
+        holeNumber,
+        contributorIds: [...contributorIds],
+      });
     },
-    [roundId, signedInUserId, idByTuple, system]
+    [roundId, signedInUserId, queryClient, key, mutateAsync]
   );
 
   return { rows, getContributors, setContributors };

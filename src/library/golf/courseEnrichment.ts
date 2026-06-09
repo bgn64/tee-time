@@ -21,11 +21,11 @@
  *     it directly;
  *   - returns an enriched `Course` (the app-level shape) instead of
  *     mutating a context's local state;
- *   - takes `system` (PowerSync + Supabase client) as an arg so it's
- *     trivially mockable in tests.
+ *   - uses the shared Supabase client (src/library/supabase/client) for
+ *     the write-back RPC.
  */
 
-import type { System } from '@/library/powersync/system';
+import { supabase } from '@/library/supabase/client';
 import type { Course, Hole, Tee } from '@/types/golf';
 
 const OPENGOLF_ID_PREFIX = 'opengolf:';
@@ -200,7 +200,6 @@ function buildHoles(raw: unknown[], tees: Tee[]): Hole[] {
  * round-trip in their UI.
  */
 export async function enrichCatalogCourse(
-  system: System,
   course: Course
 ): Promise<EnrichmentResult> {
   if (!needsEnrichment(course)) {
@@ -278,7 +277,7 @@ export async function enrichCatalogCourse(
   // play their round. Next user picking the same course will retry
   // the write-back via their own enrichment cycle.
   try {
-    const { error } = await system.supabaseConnector.client.rpc(
+    const { error } = await supabase.rpc(
       'enrich_catalog_course',
       {
         p_id: course.id,

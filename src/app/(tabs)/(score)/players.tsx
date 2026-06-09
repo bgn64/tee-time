@@ -49,6 +49,7 @@ import { Ionicons } from '@expo/vector-icons';
 import {
   createCustomPlayer,
   softDeleteCustomPlayer,
+  useCustomPlayers,
 } from '@/library/golf/customPlayers';
 import {
   customParticipantKey,
@@ -57,20 +58,12 @@ import {
 import { useRound } from '@/library/golf/RoundContext';
 import { useCourse } from '@/library/golf/useCourses';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
-import {
-  CUSTOM_PLAYERS_TABLE,
-  type CustomPlayerRecord,
-} from '@/library/powersync/AppSchema';
-import { useSystem } from '@/library/powersync/system';
 import { useRequiredAccount } from '@/library/social/AccountContext';
 import { useFriends } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import { confirmAsync, showAlert } from '@/library/utils/alert';
-import { useQuery } from '@powersync/react';
 
 const MAX_PLAYERS = 4;
-
-type CustomPlayerRow = CustomPlayerRecord & { id: string };
 
 type FriendEntry = { kind: 'friend'; participantKey: string; userId: string };
 type CustomEntry = {
@@ -86,7 +79,6 @@ export default function PlayersScreen() {
   const { currentRound, roundHydrated } = useRound();
   const account = useRequiredAccount();
   const { friends } = useFriends();
-  const system = useSystem();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const selfKey = useMemo(
@@ -95,13 +87,8 @@ export default function PlayersScreen() {
   );
 
   // Custom players for this user (active only — soft-deleted rows
-  // stay synced for the scorecard resolver but are hidden here).
-  const { data: customRows } = useQuery<CustomPlayerRow>(
-    `SELECT id, nickname, avatar_color, deleted_at
-       FROM ${CUSTOM_PLAYERS_TABLE}
-       WHERE owner_user_id = ? AND deleted_at IS NULL`,
-    [account.userId]
-  );
+  // stay in Supabase for the scorecard resolver but are hidden here).
+  const { customPlayers: customRows } = useCustomPlayers(account.userId);
 
   const [selectedKeys, setSelectedKeys] = useState<string[]>(() => [selfKey]);
   const [query, setQuery] = useState('');
@@ -208,7 +195,7 @@ export default function PlayersScreen() {
     const nickname = rawNickname.trim();
     if (nickname.length === 0) return;
     try {
-      const created = await createCustomPlayer(system, account.userId, nickname);
+      const created = await createCustomPlayer(account.userId, nickname);
       const key = customParticipantKey(created.id);
       setSelectedKeys((prev) =>
         prev.includes(key) || prev.length >= MAX_PLAYERS ? prev : [...prev, key]
@@ -253,7 +240,7 @@ export default function PlayersScreen() {
     );
     if (!ok) return;
     try {
-      await softDeleteCustomPlayer(system, customPlayerId);
+      await softDeleteCustomPlayer(customPlayerId);
       // Drop them from the current selection too.
       setSelectedKeys((prev) =>
         prev.filter((k) => k !== customParticipantKey(customPlayerId))

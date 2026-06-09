@@ -34,7 +34,7 @@ import {
   View
 } from 'react-native';
 
-import { useSystem } from '@/library/powersync/system';
+import { signOut } from '@/library/supabase/auth';
 import { useRequiredAccount } from '@/library/social/AccountContext';
 import { useFriends, useProfile } from '@/library/social/FriendsContext';
 import { useScorecardStats } from '@/library/golf/useScorecardStats';
@@ -55,7 +55,6 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
   const { profile, loading } = useProfile(userId);
   const { friends } = useFriends();
   const { roundsPlayed, roundsTogether } = useScorecardStats();
-  const system = useSystem();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const isOwn = userId === account.userId;
@@ -134,7 +133,7 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
               pressed && styles.signOutBtnPressed
             ]}
             onPress={() => {
-              void system.signOut();
+              void signOut();
             }}>
             <Text style={styles.signOutBtnText}>Sign out</Text>
           </Pressable>

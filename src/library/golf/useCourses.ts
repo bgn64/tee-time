@@ -20,7 +20,7 @@
 
 import { useEffect, useState } from 'react';
 
-import { useSystem } from '@/library/powersync/system';
+import { supabase } from '@/library/supabase/client';
 import type { Course, Hole, Tee } from '@/types/golf';
 
 import { enrichCatalogCourse, needsEnrichment } from './courseEnrichment';
@@ -163,7 +163,6 @@ export function useCoursesSearch(query: string): {
   loading: boolean;
   error: string | null;
 } {
-  const system = useSystem();
   const trimmed = query.trim();
   const [debouncedQuery, setDebouncedQuery] = useState(trimmed);
   const [results, setResults] = useState<{
@@ -185,7 +184,7 @@ export function useCoursesSearch(query: string): {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data, error: restError } = await system.supabaseConnector.client
+      const { data, error: restError } = await supabase
         .from('courses')
         .select(SEARCH_FIELDS)
         .ilike('name', `%${debouncedQuery}%`)
@@ -204,7 +203,7 @@ export function useCoursesSearch(query: string): {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQuery, system]);
+  }, [debouncedQuery]);
 
   if (debouncedQuery.length === 0) {
     return { courses: [], loading: false, error: null };
@@ -245,7 +244,6 @@ export function useCourse(id: string | null | undefined): {
   enriching: boolean;
   error: string | null;
 } {
-  const system = useSystem();
   const [result, setResult] = useState<{
     idAtFetch: string | null;
     course: Course | undefined;
@@ -261,7 +259,7 @@ export function useCourse(id: string | null | undefined): {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data, error: restError } = await system.supabaseConnector.client
+      const { data, error: restError } = await supabase
         .from('courses')
         .select(SEARCH_FIELDS)
         .eq('id', id)
@@ -286,7 +284,7 @@ export function useCourse(id: string | null | undefined): {
       if (needsEnrichment(loaded)) {
         setResult({ idAtFetch: id, course: loaded, error: null });
         setEnriching(true);
-        const enriched = await enrichCatalogCourse(system, loaded);
+        const enriched = await enrichCatalogCourse(loaded);
         if (cancelled) return;
         setEnriching(false);
         if (enriched.ok) {
@@ -301,7 +299,7 @@ export function useCourse(id: string | null | undefined): {
     return () => {
       cancelled = true;
     };
-  }, [id, system]);
+  }, [id]);
 
   if (!id) {
     return { course: undefined, loading: false, enriching: false, error: null };
