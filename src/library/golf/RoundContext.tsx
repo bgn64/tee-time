@@ -1,24 +1,27 @@
 /**
- * Round context — the Score tab's state hub.
+ * Round context — the Score tab's state hub (Supabase REST + React Query).
  *
- * Wraps PowerSync `useQuery` over the user's currently-open scorecard
- * + its per-cell score rows and re-projects them as an in-memory
- * `Round` object that screens/components consume. Mutations write
- * back through PowerSync's local SQLite; the connector replicates to
- * Supabase, and the sync rule replays the change down to any other
- * device signed in to the same account.
+ * Reads the user's currently-open scorecard + its per-cell score rows via
+ * React Query and re-projects them as an in-memory `Round` for screens.
  *
- * Hydration flags (`roundHydrated`, `currentHoleHydrated`) are
- * exposed explicitly so setup screens don't bounce a user with an
- * in-flight round back to course-picking during the initial query
- * gap.
+ * Writes:
+ *   - Score entry (`setScoreForRound`/`setCustomHoleScore`) is the
+ *     offline-critical path: it optimistically updates the React Query cache
+ *     and enqueues an idempotent upsert in the persistent write OUTBOX, so a
+ *     stroke entered in a dead zone is never lost and flushes on reconnect.
+ *   - Round setup/teardown (start, hole range, participant tees, complete,
+ *     abandon, delete) optimistically update the cache and write directly to
+ *     Supabase. These flows already require connectivity (course search,
+ *     etc.), so they are online operations.
  *
- * JSON columns (`course_snapshot`, `participants`, `player_ids`) are
- * TEXT locally; we JSON.parse them defensively on the read path and
- * JSON.stringify on the write path. The upload connector
- * (`SupabaseConnector.uploadData`) re-parses them before posting to
- * Supabase so Postgres's `jsonb` columns receive objects, not quoted
- * strings.
+ * jsonb columns (course_snapshot, participants, player_ids, teams,
+ * enabled_stat_keys, tracked_scorer_ids) are returned by PostgREST as native
+ * objects/arrays and written as objects — no TEXT/JSON-string boundary.
+ *
+ * Hydration flags (`roundHydrated`, `currentHoleHydrated`) are exposed so
+ * setup screens don't bounce a user with an in-flight round back to
+ * course-picking during the initial query gap. Per-device current hole is
+ * persisted in AsyncStorage (see currentHoleStore), unchanged.
  */
 
 import React, {
@@ -31,17 +34,10 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { useQuery } from '@powersync/react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import {
-  SCORECARDS_TABLE,
-  SCORECARD_SCORES_TABLE,
-  CUSTOM_PLAYERS_TABLE,
-  type CustomPlayerRecord,
-  ScorecardRecord,
-  ScorecardScoreRecord,
-} from '@/library/powersync/AppSchema';
-import { useSystem } from '@/library/powersync/system';
+import { enqueueWrite } from '@/library/data/writeOutbox';
+import { supabase } from '@/library/supabase/client';
 import { defaultTeeIdForCourse } from './courseHelpers';
 import {
   clearCurrentHoleForScorecard,
@@ -61,6 +57,37 @@ import type {
   Team,
 } from '@/types/golf';
 
+const SCORECARDS_TABLE = 'scorecards';
+const SCORECARD_SCORES_TABLE = 'scorecard_scores';
+const CUSTOM_PLAYERS_TABLE = 'custom_players';
+
+type ScorecardRow = {
+  id: string;
+  owner_user_id: string | null;
+  course_id: string | null;
+  course_snapshot: Course | null;
+  scoring_rule: string | null;
+  player_ids: string[] | null;
+  participants: RoundParticipant[] | null;
+  teams: Team[] | null;
+  hole_range: string | null;
+  enabled_stat_keys: string[] | null;
+  tracked_scorer_ids: string[] | null;
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string | null;
+};
+
+type ScoreRow = {
+  id: string;
+  scorecard_id: string | null;
+  scorer_id: string | null;
+  hole_number: number | null;
+  strokes: number | null;
+  owner_user_id: string | null;
+  updated_at: string | null;
+};
+
 type RoundContextValue = {
   currentRound: Round | null;
   roundHydrated: boolean;
@@ -70,31 +97,13 @@ type RoundContextValue = {
     course: Course;
     playerIds: string[];
     holeRange?: HoleRange;
-    /** Optional map of participantKey → teeId. Missing entries fall back to the course's first tee. */
     teeIds?: Record<string, string | undefined>;
-    /** Defaults to 'stroke'. When 'scramble', `teams` must be supplied. */
     scoringRule?: ScoringRule;
-    /** Required when `scoringRule === 'scramble'`. Used to set `teamId` on participants. */
     teams?: Team[];
-    /**
-     * Stat keys enabled for this round. Defaults to empty array
-     * (no stats tracked). Set at round creation, immutable.
-     */
     enabledStatKeys?: readonly string[];
-    /**
-     * Scorer ids that have stats tracked for them. Defaults to
-     * empty array (no tracking).
-     */
     trackedScorerIds?: readonly string[];
   }) => Promise<string>;
   setCustomHoleScore: (scorerId: string, holeNumber: number, strokes: number) => Promise<void>;
-  /**
-   * Same as `setCustomHoleScore` but targets an arbitrary round id.
-   * Used by the edit-completed-round flow (state ③) which operates
-   * on a non-current scorecard. Calls share the same underlying
-   * writer + parent `updated_at` bump as `setCustomHoleScore` —
-   * see the inline comments there for the durability rationale.
-   */
   setScoreForRound: (
     roundId: string,
     scorerId: string,
@@ -104,118 +113,95 @@ type RoundContextValue = {
   setCurrentHole: (holeNumber: number) => Promise<void>;
   setHoleRange: (range: HoleRange) => Promise<void>;
   setParticipantTee: (participantKey: string, teeId: string | undefined) => Promise<void>;
-  /**
-   * Batched variant of `setParticipantTee` — applies every update in
-   * a single UPDATE so all changes land in the same JSON snapshot.
-   * Required by scramble's "rebind every team member's tee" flow:
-   * looping `setParticipantTee` would silently drop earlier updates
-   * because each call re-serialises `currentRound.participants` from
-   * a render-time snapshot, not from the latest DB state.
-   */
   setParticipantTees: (updates: { participantKey: string; teeId: string | undefined }[]) => Promise<void>;
-  /**
-   * Same as `setParticipantTees` but targets an arbitrary round id.
-   * Reads the round's `participants` JSON straight from local SQLite
-   * inside a write transaction (rather than from React state) so
-   * concurrent rapid updates don't lose each other. Used by the
-   * edit-completed-round flow.
-   */
   setParticipantTeesForRound: (
     roundId: string,
     updates: { participantKey: string; teeId: string | undefined }[]
   ) => Promise<void>;
   completeCurrentRound: () => Promise<void>;
   abandonCurrentRound: () => Promise<void>;
-  /** Deletes a completed (or in-flight) scorecard owned by the signed-in
-   *  user. Owner-scoped at the SQL level — passes silently when the row
-   *  isn't owned by the caller. Awaited by the detail screen before
-   *  navigation so the list re-renders without the deleted card. */
   deleteRound: (id: string) => Promise<void>;
 };
 
 const RoundContext = createContext<RoundContextValue | null>(null);
 
-// The signed-in user's currently-open scorecard (at most one — completing
-// or abandoning closes it). Filtered by `owner_user_id` so a friend's
-// in-flight round (now synced via the `friend_scorecards` stream for the
-// feed) NEVER lands here as our "current round." Without the filter, a
-// friend tapping a score on their own device would suddenly make their
-// scorecard appear as our open round on the Score tab — broken UX and
-// every write would fail at RLS anyway. While `userId` is null (pre-auth
-// or mid-rehydration) we substitute a tautologically-false query so the
-// hook stays well-formed.
-const SELECT_OPEN_SCORECARD_SQL = `
-  SELECT * FROM ${SCORECARDS_TABLE}
-  WHERE completed_at IS NULL
-    AND owner_user_id = ?
-  ORDER BY started_at DESC
-  LIMIT 1
-`;
+function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
 
-const SELECT_NO_SCORECARD_SQL = `
-  SELECT * FROM ${SCORECARDS_TABLE} WHERE 1 = 0
-`;
+function openScorecardKey(userId: string | null) {
+  return ['scorecards', 'open', userId] as const;
+}
 
-function safeParse<T>(raw: string | null | undefined, fallback: T, label: string): T {
-  if (raw == null || raw === '') return fallback;
-  try {
-    return JSON.parse(raw) as T;
-  } catch (e) {
-    console.warn(`[RoundContext] Failed to parse ${label}; using fallback.`, e, raw);
-    return fallback;
-  }
+function scoresKey(scorecardId: string | null) {
+  return ['scorecard_scores', scorecardId] as const;
 }
 
 export function RoundProvider({ children }: { children: ReactNode }) {
-  const system = useSystem();
+  const queryClient = useQueryClient();
   const [userId, setUserId] = useState<string | null>(null);
   const [currentHole, setCurrentHoleState] = useState<number>(1);
   const [hydratedHoleKey, setHydratedHoleKey] = useState<string | null>(null);
 
-  // Resolve current user id once on mount + whenever the auth state
-  // changes. PowerSync's local SQLite is already filtered server-side
-  // by `owner_user_id = request.user_id()`, so our queries don't need
-  // a userId filter — we keep the id around for write-side bookkeeping
-  // (denormalized owner_user_id columns + AsyncStorage namespacing).
+  // Resolve current user id on mount + on auth change via the shared client.
   useEffect(() => {
     let cancelled = false;
-    const refresh = async () => {
-      const id = await system.supabaseConnector.userId().catch(() => undefined);
-      if (!cancelled) setUserId(id ?? null);
-    };
-    refresh();
-    const { data } = system.supabaseConnector.client.auth.onAuthStateChange(
-      (_event, session) => {
-        if (cancelled) return;
-        setUserId(session?.user?.id ?? null);
-      }
-    );
+    (async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!cancelled) setUserId(session?.user?.id ?? null);
+    })();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      setUserId(session?.user?.id ?? null);
+    });
     return () => {
       cancelled = true;
-      data.subscription.unsubscribe();
+      subscription.unsubscribe();
     };
-  }, [system]);
+  }, []);
 
-  const { data: scorecardRows, isLoading: scorecardLoading } = useQuery<ScorecardRecord>(
-    userId ? SELECT_OPEN_SCORECARD_SQL : SELECT_NO_SCORECARD_SQL,
-    userId ? [userId] : []
-  );
-  const scorecardRow = scorecardRows[0] ?? null;
+  // Open (in-progress) scorecard owned by the signed-in user. Friends'
+  // in-progress rounds are excluded by the owner filter + RLS.
+  const { data: scorecardData, isLoading: scorecardLoading } = useQuery<ScorecardRow | null>({
+    queryKey: openScorecardKey(userId),
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from(SCORECARDS_TABLE)
+        .select('*')
+        .is('completed_at', null)
+        .eq('owner_user_id', userId as string)
+        .order('started_at', { ascending: false })
+        .limit(1);
+      if (error) throw error;
+      return ((data ?? [])[0] as ScorecardRow | undefined) ?? null;
+    },
+  });
+  const scorecardRow = scorecardData ?? null;
   const scorecardId = scorecardRow?.id ?? null;
 
-  const { data: scoreRows, isLoading: scoresLoading } = useQuery<ScorecardScoreRecord>(
-    scorecardId
-      ? `SELECT * FROM ${SCORECARD_SCORES_TABLE} WHERE scorecard_id = ?`
-      : `SELECT * FROM ${SCORECARD_SCORES_TABLE} WHERE 1 = 0`,
-    scorecardId ? [scorecardId] : []
-  );
+  const { data: scoreData, isLoading: scoresLoading } = useQuery<ScoreRow[]>({
+    queryKey: scoresKey(scorecardId),
+    enabled: !!scorecardId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from(SCORECARD_SCORES_TABLE)
+        .select('*')
+        .eq('scorecard_id', scorecardId as string);
+      if (error) throw error;
+      return (data ?? []) as ScoreRow[];
+    },
+  });
+  const scoreRows = useMemo<ScoreRow[]>(() => scoreData ?? [], [scoreData]);
 
   const roundHydrated = !scorecardLoading && (!scorecardId || !scoresLoading);
 
-  // Per-device current hole, hydrated from AsyncStorage whenever the
-  // active scorecard id changes. Hydration completion is tracked via a
-  // `hydratedHoleKey` (userId:scorecardId) string so the boolean is
-  // derived during render instead of being set inside the effect.
+  // Per-device current hole, hydrated from AsyncStorage when the active
+  // scorecard id changes. Unchanged from the PowerSync implementation.
   const holeKey = `${userId ?? ''}:${scorecardId ?? ''}`;
   const currentHoleHydrated = hydratedHoleKey === holeKey;
   useEffect(() => {
@@ -241,37 +227,8 @@ export function RoundProvider({ children }: { children: ReactNode }) {
 
   const currentRound: Round | null = useMemo(() => {
     if (!scorecardRow) return null;
-    const course = safeParse<Course | null>(
-      scorecardRow.course_snapshot,
-      null,
-      'scorecards.course_snapshot'
-    );
+    const course = scorecardRow.course_snapshot;
     if (!course) return null;
-    const participants = safeParse<RoundParticipant[]>(
-      scorecardRow.participants,
-      [],
-      'scorecards.participants'
-    );
-    const playerIds = safeParse<string[]>(
-      scorecardRow.player_ids,
-      [],
-      'scorecards.player_ids'
-    );
-    const teams = safeParse<Team[]>(
-      scorecardRow.teams,
-      [],
-      'scorecards.teams'
-    );
-    const enabledStatKeys = safeParse<string[]>(
-      scorecardRow.enabled_stat_keys,
-      [],
-      'scorecards.enabled_stat_keys'
-    );
-    const trackedScorerIds = safeParse<string[]>(
-      scorecardRow.tracked_scorer_ids,
-      [],
-      'scorecards.tracked_scorer_ids'
-    );
     const scores: RoundScore[] = scoreRows.map((r) => ({
       scorerId: r.scorer_id ?? '',
       holeNumber: Number(r.hole_number ?? 0),
@@ -282,26 +239,31 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       ownerUserId: scorecardRow.owner_user_id ?? undefined,
       course,
       scoringRule: (scorecardRow.scoring_rule as ScoringRule) ?? 'stroke',
-      playerIds,
-      participants,
-      teams,
+      playerIds: asArray<string>(scorecardRow.player_ids),
+      participants: asArray<RoundParticipant>(scorecardRow.participants),
+      teams: asArray<Team>(scorecardRow.teams),
       holeRange: (scorecardRow.hole_range as HoleRange) ?? 'all',
       currentHoleNumber: currentHole,
       scores,
       startedAt: scorecardRow.started_at ?? new Date().toISOString(),
       lastScoreAt: scorecardRow.updated_at ?? undefined,
       completedAt: scorecardRow.completed_at ?? undefined,
-      enabledStatKeys,
-      trackedScorerIds,
+      enabledStatKeys: asArray<string>(scorecardRow.enabled_stat_keys),
+      trackedScorerIds: asArray<string>(scorecardRow.tracked_scorer_ids),
     };
   }, [scorecardRow, scoreRows, currentHole]);
 
-  // Snapshot the latest scorecardId in a ref so callbacks don't capture
-  // a stale value when the user races writes against a hydration tick.
   const scorecardIdRef = useRef<string | null>(null);
   useEffect(() => {
     scorecardIdRef.current = scorecardId;
   });
+
+  const invalidateRoundLists = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['completed_scorecards'] });
+    queryClient.invalidateQueries({ queryKey: ['completed_scores'] });
+    queryClient.invalidateQueries({ queryKey: ['scorecard_stats'] });
+    queryClient.invalidateQueries({ queryKey: ['feed_rounds'] });
+  }, [queryClient]);
 
   const startRound = useCallback<RoundContextValue['startRound']>(
     async ({
@@ -330,10 +292,6 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       }
       const defaultTee = defaultTeeIdForCourse(course);
 
-      // Map participantKey → teamId for scramble rounds so each
-      // participant carries the team they're scoring under. Lets
-      // downstream callers (scoring screen, feed card) translate a
-      // user → team scorerId without re-scanning teams[].playerIds.
       const teamIdByParticipant = new Map<string, string>();
       if (scoringRule === 'scramble' && teams) {
         for (const team of teams) {
@@ -343,25 +301,24 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // Snapshot custom-player nicknames + colors into the round
-      // participants so a friend viewing the round in their feed
-      // (where the owner's custom_players rows do NOT sync) still
-      // sees the owner's nicknames. One small query, only against
-      // the custom: participants in this specific round.
+      // Snapshot custom-player nicknames + colors so a friend viewing the
+      // round in their feed (where the owner's custom_players don't sync)
+      // still sees the owner's nicknames.
       const customIds = playerIds
         .map((pid) => parseParticipantKey(pid))
         .filter((p) => p.kind === 'custom')
         .map((p) => (p as { kind: 'custom'; customPlayerId: string }).customPlayerId);
       const customSnapshots = new Map<string, { name: string; color: string }>();
       if (customIds.length > 0) {
-        const placeholders = customIds.map(() => '?').join(', ');
-        const rows = await system.powersync.getAll<
-          Pick<CustomPlayerRecord, 'nickname' | 'avatar_color'> & { id: string }
-        >(
-          `SELECT id, nickname, avatar_color FROM ${CUSTOM_PLAYERS_TABLE} WHERE id IN (${placeholders})`,
-          customIds
-        );
-        for (const row of rows) {
+        const { data } = await supabase
+          .from(CUSTOM_PLAYERS_TABLE)
+          .select('id, nickname, avatar_color')
+          .in('id', customIds);
+        for (const row of (data ?? []) as {
+          id: string;
+          nickname: string | null;
+          avatar_color: string | null;
+        }[]) {
           customSnapshots.set(row.id, {
             name: row.nickname ?? '',
             color: row.avatar_color ?? '',
@@ -371,20 +328,8 @@ export function RoundProvider({ children }: { children: ReactNode }) {
 
       const participants: RoundParticipant[] = playerIds.map((pid) => {
         const parsed = parseParticipantKey(pid);
-        // No fallback to defaultTee: if the caller explicitly didn't
-        // supply a tee for this participant, that means "no tee
-        // selected", not "use the first tee on the course". The
-        // scramble path already pre-fills its own per-team tees via
-        // `buildInitialScrambleState`; stroke rounds leave teeIds
-        // entries as `undefined` so the avatar swatch on the
-        // scorecard stays empty until the user opts in.
         const explicit = teeIds ? teeIds[pid] : undefined;
-        const teeId =
-          explicit ??
-          // Scramble teams must end up with a tee (scoring math
-          // depends on it). For scramble we still fall back to the
-          // course default when no per-participant value is set.
-          (scoringRule === 'scramble' ? defaultTee : undefined);
+        const teeId = explicit ?? (scoringRule === 'scramble' ? defaultTee : undefined);
         const teamId = teamIdByParticipant.get(pid);
         const base: RoundParticipant = { participantKey: pid, teeId };
         if (teamId) base.teamId = teamId;
@@ -400,90 +345,103 @@ export function RoundProvider({ children }: { children: ReactNode }) {
 
       const id = newRoundId();
       const now = new Date().toISOString();
-      await system.powersync.writeTransaction(async (tx) => {
-        await tx.execute(
-          `INSERT INTO ${SCORECARDS_TABLE}
-             (id, owner_user_id, course_id, course_snapshot, scoring_rule,
-              player_ids, participants, teams, hole_range,
-              enabled_stat_keys, tracked_scorer_ids,
-              started_at, completed_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)`,
-          [
-            id,
-            userId,
-            course.id,
-            JSON.stringify(course),
-            scoringRule,
-            JSON.stringify(playerIds),
-            JSON.stringify(participants),
-            JSON.stringify(teamsToPersist),
-            holeRange,
-            JSON.stringify([...enabledStatKeys]),
-            JSON.stringify([...trackedScorerIds]),
-            now,
-            now,
-          ]
-        );
-      });
+      const row: ScorecardRow = {
+        id,
+        owner_user_id: userId,
+        course_id: course.id,
+        course_snapshot: course,
+        scoring_rule: scoringRule,
+        player_ids: playerIds,
+        participants,
+        teams: teamsToPersist,
+        hole_range: holeRange,
+        enabled_stat_keys: [...enabledStatKeys],
+        tracked_scorer_ids: [...trackedScorerIds],
+        started_at: now,
+        completed_at: null,
+        updated_at: now,
+      };
+
+      const { error } = await supabase.from(SCORECARDS_TABLE).insert(row);
+      if (error) throw error;
+
+      queryClient.setQueryData<ScorecardRow | null>(openScorecardKey(userId), row);
+      queryClient.setQueryData<ScoreRow[]>(scoresKey(id), []);
       await writeCurrentHole(userId, id, 1);
       setCurrentHoleState(1);
       return id;
     },
-    [system, userId]
+    [queryClient, userId]
   );
 
   const setScoreForRound = useCallback<RoundContextValue['setScoreForRound']>(
     async (roundId, scorerId, holeNumber, strokes) => {
-      if (!roundId) return;
-      if (!userId) return;
+      if (!roundId || !userId) return;
       if (!Number.isFinite(strokes) || strokes < 1) return;
       const now = new Date().toISOString();
-      await system.powersync.writeTransaction(async (tx) => {
-        const existing = await tx.getOptional<{ id: string }>(
-          `SELECT id FROM ${SCORECARD_SCORES_TABLE}
-           WHERE scorecard_id = ? AND scorer_id = ? AND hole_number = ?`,
-          [roundId, scorerId, holeNumber]
+
+      // Resolve a stable row id from the cache so an upsert never churns the
+      // PK of an existing cell (and so rapid taps on the same cell coalesce
+      // in the outbox, which dedups by entry id).
+      const cachedScores = queryClient.getQueryData<ScoreRow[]>(scoresKey(roundId)) ?? [];
+      const existing = cachedScores.find(
+        (s) => s.scorer_id === scorerId && s.hole_number === holeNumber
+      );
+      const scoreId = existing?.id ?? newScoreId();
+
+      queryClient.setQueryData<ScoreRow[]>(scoresKey(roundId), (old) => {
+        const arr = old ? [...old] : [];
+        const idx = arr.findIndex(
+          (s) => s.scorer_id === scorerId && s.hole_number === holeNumber
         );
-        if (existing) {
-          await tx.execute(
-            `UPDATE ${SCORECARD_SCORES_TABLE}
-             SET strokes = ?, updated_at = ?
-             WHERE id = ?`,
-            [strokes, now, existing.id]
-          );
-        } else {
-          await tx.execute(
-            `INSERT INTO ${SCORECARD_SCORES_TABLE}
-               (id, scorecard_id, scorer_id, hole_number, strokes, owner_user_id, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [newScoreId(), roundId, scorerId, holeNumber, strokes, userId, now]
-          );
-        }
-        // Bump the parent scorecard's updated_at so it serves as
-        // the canonical "last activity" timestamp. Friends' devices
-        // sort live feed cards by this value (most-recently-active
-        // bubbles to the top) without needing a derived
-        // MAX(scorecard_scores.updated_at) aggregate.
-        //
-        // For edits to completed rounds the bump is observationally
-        // a no-op — feed + rounds list both sort completed rounds by
-        // completedAt, not updated_at — but keeping the same write
-        // path means edits can't silently miss any of the side
-        // effects live scoring has.
-        //
-        // Yes, this re-replicates the full scorecards row (including
-        // the multi-KB course_snapshot) on every tap. For ≤ a handful
-        // of concurrently-active live rounds the cost is acceptable;
-        // re-introduce a denormalized last_score_at column if
-        // profiling ever shows the snapshot re-sync hurting on
-        // mobile data.
-        await tx.execute(
-          `UPDATE ${SCORECARDS_TABLE} SET updated_at = ? WHERE id = ?`,
-          [now, roundId]
-        );
+        const next: ScoreRow = {
+          id: scoreId,
+          scorecard_id: roundId,
+          scorer_id: scorerId,
+          hole_number: holeNumber,
+          strokes,
+          owner_user_id: userId,
+          updated_at: now,
+        };
+        if (idx >= 0) arr[idx] = next;
+        else arr.push(next);
+        return arr;
       });
+      // Optimistically bump the open scorecard's activity timestamp.
+      queryClient.setQueryData<ScorecardRow | null>(openScorecardKey(userId), (old) =>
+        old && old.id === roundId ? { ...old, updated_at: now } : old
+      );
+
+      await enqueueWrite({
+        id: scoreId,
+        table: SCORECARD_SCORES_TABLE,
+        op: 'upsert',
+        payload: {
+          id: scoreId,
+          scorecard_id: roundId,
+          scorer_id: scorerId,
+          hole_number: holeNumber,
+          strokes,
+          owner_user_id: userId,
+          updated_at: now,
+        },
+        onConflict: 'scorecard_id,scorer_id,hole_number',
+        queryKeys: [[...scoresKey(roundId)]],
+      });
+
+      // Best-effort online bump of the parent activity timestamp (drives the
+      // live-feed sort). Lost offline is harmless — friends only see live
+      // updates when online anyway, and the next online write re-bumps it.
+      void supabase
+        .from(SCORECARDS_TABLE)
+        .update({ updated_at: now })
+        .eq('id', roundId)
+        .then(
+          () => undefined,
+          () => undefined
+        );
     },
-    [system, userId]
+    [queryClient, userId]
   );
 
   const setCustomHoleScore = useCallback<RoundContextValue['setCustomHoleScore']>(
@@ -512,12 +470,16 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       const id = scorecardIdRef.current;
       if (!id) return;
       const now = new Date().toISOString();
-      await system.powersync.execute(
-        `UPDATE ${SCORECARDS_TABLE} SET hole_range = ?, updated_at = ? WHERE id = ?`,
-        [range, now, id]
+      queryClient.setQueryData<ScorecardRow | null>(openScorecardKey(userId), (old) =>
+        old && old.id === id ? { ...old, hole_range: range, updated_at: now } : old
       );
-      // Re-clamp the current hole into the new range so the nav bar
-      // doesn't strand the user on a now-out-of-range hole.
+      const { error } = await supabase
+        .from(SCORECARDS_TABLE)
+        .update({ hole_range: range, updated_at: now })
+        .eq('id', id);
+      if (error) {
+        queryClient.invalidateQueries({ queryKey: openScorecardKey(userId) });
+      }
       if (currentRound) {
         const holes = holesInRange(currentRound.course.holes, range).map((h) => h.number);
         if (holes.length > 0 && !holes.includes(currentHole)) {
@@ -525,23 +487,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [system, currentRound, currentHole, setCurrentHole]
-  );
-
-  const setParticipantTee = useCallback<RoundContextValue['setParticipantTee']>(
-    async (participantKey, teeId) => {
-      const id = scorecardIdRef.current;
-      if (!id || !currentRound) return;
-      const nextParticipants = currentRound.participants.map((p) =>
-        p.participantKey === participantKey ? { ...p, teeId } : p
-      );
-      const now = new Date().toISOString();
-      await system.powersync.execute(
-        `UPDATE ${SCORECARDS_TABLE} SET participants = ?, updated_at = ? WHERE id = ?`,
-        [JSON.stringify(nextParticipants), now, id]
-      );
-    },
-    [system, currentRound]
+    [queryClient, userId, currentRound, currentHole, setCurrentHole]
   );
 
   const setParticipantTeesForRound = useCallback<
@@ -551,33 +497,56 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       if (!roundId || updates.length === 0) return;
       const updateByKey = new Map(updates.map((u) => [u.participantKey, u.teeId]));
       const now = new Date().toISOString();
-      // Read-modify-write inside a single transaction so concurrent
-      // rapid tee updates (e.g. two team members getting reassigned
-      // in quick succession) don't lose each other to a stale
-      // participants snapshot.
-      await system.powersync.writeTransaction(async (tx) => {
-        const row = await tx.getOptional<{ participants: string | null }>(
-          `SELECT participants FROM ${SCORECARDS_TABLE} WHERE id = ?`,
-          [roundId]
+
+      const open = queryClient.getQueryData<ScorecardRow | null>(openScorecardKey(userId));
+      let participants: RoundParticipant[];
+      if (open && open.id === roundId) {
+        participants = asArray<RoundParticipant>(open.participants);
+      } else {
+        const { data } = await supabase
+          .from(SCORECARDS_TABLE)
+          .select('participants')
+          .eq('id', roundId)
+          .maybeSingle();
+        participants = asArray<RoundParticipant>(
+          (data as { participants: RoundParticipant[] | null } | null)?.participants
         );
-        if (!row) return;
-        const participants = safeParse<RoundParticipant[]>(
-          row.participants,
-          [],
-          'scorecards.participants'
+      }
+      const nextParticipants = participants.map((p) =>
+        updateByKey.has(p.participantKey)
+          ? { ...p, teeId: updateByKey.get(p.participantKey) }
+          : p
+      );
+
+      if (open && open.id === roundId) {
+        queryClient.setQueryData<ScorecardRow | null>(openScorecardKey(userId), (old) =>
+          old && old.id === roundId
+            ? { ...old, participants: nextParticipants, updated_at: now }
+            : old
         );
-        const nextParticipants = participants.map((p) =>
-          updateByKey.has(p.participantKey)
-            ? { ...p, teeId: updateByKey.get(p.participantKey) }
-            : p
-        );
-        await tx.execute(
-          `UPDATE ${SCORECARDS_TABLE} SET participants = ?, updated_at = ? WHERE id = ?`,
-          [JSON.stringify(nextParticipants), now, roundId]
-        );
-      });
+      }
+      const { error } = await supabase
+        .from(SCORECARDS_TABLE)
+        .update({ participants: nextParticipants, updated_at: now })
+        .eq('id', roundId);
+      if (error) {
+        if (open && open.id === roundId) {
+          queryClient.invalidateQueries({ queryKey: openScorecardKey(userId) });
+        }
+        throw error;
+      }
+      invalidateRoundLists();
     },
-    [system]
+    [queryClient, userId, invalidateRoundLists]
+  );
+
+  const setParticipantTee = useCallback<RoundContextValue['setParticipantTee']>(
+    async (participantKey, teeId) => {
+      const id = scorecardIdRef.current;
+      if (!id) return;
+      await setParticipantTeesForRound(id, [{ participantKey, teeId }]);
+    },
+    [setParticipantTeesForRound]
   );
 
   const setParticipantTees = useCallback<RoundContextValue['setParticipantTees']>(
@@ -594,61 +563,74 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       const id = scorecardIdRef.current;
       if (!id) return;
       const now = new Date().toISOString();
-      await system.powersync.execute(
-        `UPDATE ${SCORECARDS_TABLE} SET completed_at = ?, updated_at = ? WHERE id = ?`,
-        [now, now, id]
+      const prevOpen = queryClient.getQueryData<ScorecardRow | null>(
+        openScorecardKey(userId)
       );
+      queryClient.setQueryData<ScorecardRow | null>(openScorecardKey(userId), null);
+      const { error } = await supabase
+        .from(SCORECARDS_TABLE)
+        .update({ completed_at: now, updated_at: now })
+        .eq('id', id);
+      if (error) {
+        queryClient.setQueryData<ScorecardRow | null>(openScorecardKey(userId), prevOpen);
+        throw error;
+      }
       if (userId) {
         await clearCurrentHoleForScorecard(userId, id);
       }
+      invalidateRoundLists();
     },
-    [system, userId]
+    [queryClient, userId, invalidateRoundLists]
   );
 
   const abandonCurrentRound = useCallback<RoundContextValue['abandonCurrentRound']>(
     async () => {
       const id = scorecardIdRef.current;
       if (!id) return;
-      await system.powersync.writeTransaction(async (tx) => {
-        await tx.execute(
-          `DELETE FROM ${SCORECARD_SCORES_TABLE} WHERE scorecard_id = ?`,
-          [id]
-        );
-        await tx.execute(`DELETE FROM ${SCORECARDS_TABLE} WHERE id = ?`, [id]);
-      });
+      const prevOpen = queryClient.getQueryData<ScorecardRow | null>(
+        openScorecardKey(userId)
+      );
+      queryClient.setQueryData<ScorecardRow | null>(openScorecardKey(userId), null);
+      queryClient.removeQueries({ queryKey: scoresKey(id) });
+      try {
+        const scoresDel = await supabase
+          .from(SCORECARD_SCORES_TABLE)
+          .delete()
+          .eq('scorecard_id', id);
+        if (scoresDel.error) throw scoresDel.error;
+        const cardDel = await supabase.from(SCORECARDS_TABLE).delete().eq('id', id);
+        if (cardDel.error) throw cardDel.error;
+      } catch (e) {
+        queryClient.setQueryData<ScorecardRow | null>(openScorecardKey(userId), prevOpen);
+        queryClient.invalidateQueries({ queryKey: scoresKey(id) });
+        throw e;
+      }
       if (userId) {
         await clearCurrentHoleForScorecard(userId, id);
       }
     },
-    [system, userId]
+    [queryClient, userId]
   );
 
   const deleteRound = useCallback<RoundContextValue['deleteRound']>(
     async (id) => {
-      if (!id) return;
-      if (!userId) return;
-      // Owner-scoped at the SQL level — RLS would also catch a
-      // cross-owner delete, but enforcing it locally avoids
-      // dropping cached friend rows from the feed while the upload
-      // queue retries against a rejected server. Both DELETEs
-      // include `owner_user_id = ?` for defense in depth.
-      await system.powersync.writeTransaction(async (tx) => {
-        await tx.execute(
-          `DELETE FROM ${SCORECARD_SCORES_TABLE}
-           WHERE scorecard_id = ? AND owner_user_id = ?`,
-          [id, userId]
-        );
-        await tx.execute(
-          `DELETE FROM ${SCORECARDS_TABLE}
-           WHERE id = ? AND owner_user_id = ?`,
-          [id, userId]
-        );
-      });
-      // Best-effort clean-up of the per-device cursor; cheap if
-      // no entry exists for this scorecard.
+      if (!id || !userId) return;
+      const scoresDel = await supabase
+        .from(SCORECARD_SCORES_TABLE)
+        .delete()
+        .eq('scorecard_id', id)
+        .eq('owner_user_id', userId);
+      if (scoresDel.error) throw scoresDel.error;
+      const cardDel = await supabase
+        .from(SCORECARDS_TABLE)
+        .delete()
+        .eq('id', id)
+        .eq('owner_user_id', userId);
+      if (cardDel.error) throw cardDel.error;
       await clearCurrentHoleForScorecard(userId, id);
+      invalidateRoundLists();
     },
-    [system, userId]
+    [userId, invalidateRoundLists]
   );
 
   const value = useMemo<RoundContextValue>(
@@ -694,7 +676,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
 export function useRound(): RoundContextValue {
   const ctx = useContext(RoundContext);
   if (!ctx) {
-    throw new Error('useRound must be used inside <RoundProvider>');
+    throw new Error('useRound must be used within a <RoundProvider>.');
   }
   return ctx;
 }

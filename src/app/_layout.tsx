@@ -7,6 +7,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 
 import { SystemContext, system } from '@/library/powersync/system';
 import { queryClient } from '@/library/data/queryClient';
+import { startOutboxAutoFlush } from '@/library/data/writeOutbox';
 import { RoundProvider } from '@/library/golf/RoundContext';
 import { ThemeProvider, useTheme } from '@/library/theme/ThemeContext';
 
@@ -40,6 +41,13 @@ function RootLayoutInner() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  // Drain the persistent write outbox on mount, reconnect, and foreground
+  // so queued score writes flush as soon as connectivity returns.
+  React.useEffect(() => {
+    const stop = startOutboxAutoFlush();
+    return stop;
   }, []);
 
   // StatusBar style is inverted vs theme: dark theme → light icons.
