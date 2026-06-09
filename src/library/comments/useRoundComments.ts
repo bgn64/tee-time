@@ -20,7 +20,6 @@ import { useQuery, type QueryKey } from '@tanstack/react-query';
 
 import { queryClient } from '@/library/data/queryClient';
 import { newCommentId } from '@/library/golf/ids';
-import type { System } from '@/library/powersync/system';
 import { supabase } from '@/library/supabase/client';
 import { useAccount } from '@/library/social/AccountContext';
 
@@ -222,7 +221,6 @@ async function snapshotCommentQueries() {
  * doesn't create an empty row.
  */
 export async function postComment(
-  _system: System,
   args: { roundId: string; authorUserId: string; body: string }
 ): Promise<void> {
   const body = args.body.trim();
@@ -297,7 +295,6 @@ export async function postComment(
  * author-only update rule.
  */
 export async function editComment(
-  _system: System,
   args: { commentId: string; body: string }
 ): Promise<void> {
   const body = args.body.trim();
@@ -342,7 +339,6 @@ export async function editComment(
  * hide the tombstone immediately while the server keeps the row.
  */
 export async function softDeleteComment(
-  _system: System,
   commentId: string
 ): Promise<void> {
   const now = new Date().toISOString();

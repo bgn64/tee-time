@@ -43,7 +43,7 @@ import {
 } from 'react-native';
 
 import { useAccount } from '@/library/social/AccountContext';
-import { useSystem } from '@/library/powersync/system';
+import { sendMagicCode, verifyMagicCode } from '@/library/supabase/auth';
 import { useTheme } from '@/library/theme/ThemeContext';
 import { showAlert } from '@/library/utils/alert';
 import { HandleStep } from '@/components/social/HandleStep';
@@ -63,7 +63,6 @@ type Props = {
 
 export function SignInScreen({ initialStep = 'email' }: Props) {
   const { colors } = useTheme();
-  const system = useSystem();
   const { needsProfile } = useAccount();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
@@ -83,7 +82,7 @@ export function SignInScreen({ initialStep = 'email' }: Props) {
     }
     setSubmitting(true);
     try {
-      await system.supabaseConnector.sendMagicCode(normalized);
+      await sendMagicCode(normalized);
       setPendingEmail(normalized);
       setCode('');
       setStep('code');
@@ -108,7 +107,7 @@ export function SignInScreen({ initialStep = 'email' }: Props) {
     }
     setSubmitting(true);
     try {
-      await system.supabaseConnector.verifyMagicCode(pendingEmail, code);
+      await verifyMagicCode(pendingEmail, code);
       // AuthGate's onAuthStateChange listener will flip the gate.
     } catch (err: any) {
       showAlert('Invalid code', err?.message ?? 'That code didn\'t work. Try again or resend.');
@@ -124,7 +123,7 @@ export function SignInScreen({ initialStep = 'email' }: Props) {
     }
     setSubmitting(true);
     try {
-      await system.supabaseConnector.sendMagicCode(pendingEmail);
+      await sendMagicCode(pendingEmail);
       setCode('');
     } catch (err: any) {
       showAlert('Could not resend code', err?.message ?? 'Try again in a moment.');

@@ -33,7 +33,6 @@ import {
   useRoundComments,
 } from '@/library/comments/useRoundComments';
 import { formatRelativeTime } from '@/library/golf/scoring';
-import { useSystem } from '@/library/powersync/system';
 import { useAccount } from '@/library/social/AccountContext';
 import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -47,7 +46,6 @@ type Props = {
 export function CommentsSection({ roundId, ownerUserId }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const system = useSystem();
   const { account } = useAccount();
   const signedInUserId = account?.userId ?? null;
 
@@ -65,7 +63,7 @@ export function CommentsSection({ roundId, ownerUserId }: Props) {
     setPosting(true);
     setPostError(null);
     try {
-      await postComment(system, {
+      await postComment({
         roundId,
         authorUserId: signedInUserId,
         body: trimmed,
@@ -151,7 +149,6 @@ type RowProps = {
 function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-  const system = useSystem();
   const { profile } = useProfile(comment.authorUserId);
 
   const [editing, setEditing] = useState(false);
@@ -174,7 +171,7 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
     setBusy(true);
     setError(null);
     try {
-      await editComment(system, { commentId: comment.id, body: trimmed });
+      await editComment({ commentId: comment.id, body: trimmed });
       setEditing(false);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save edit.');
@@ -187,7 +184,7 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
     setBusy(true);
     setError(null);
     try {
-      await softDeleteComment(system, comment.id);
+      await softDeleteComment(comment.id);
       // No state to flip — the next sync tick removes us from the
       // useRoundComments query result and we unmount.
     } catch (e) {

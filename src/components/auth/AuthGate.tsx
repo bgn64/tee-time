@@ -35,7 +35,8 @@ import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 
-import { useSystem } from '@/library/powersync/system';
+import { signOut } from '@/library/supabase/auth';
+import { supabase } from '@/library/supabase/client';
 import { useTheme } from '@/library/theme/ThemeContext';
 import { useAccount } from '@/library/social/AccountContext';
 import { SignInScreen } from './SignInScreen';
@@ -45,7 +46,6 @@ interface AuthGateProps {
 }
 
 export function AuthGate({ children }: AuthGateProps) {
-  const system = useSystem();
   const { colors } = useTheme();
   const [session, setSession] = React.useState<Session | null>(null);
   const [checking, setChecking] = React.useState(true);
@@ -55,7 +55,7 @@ export function AuthGate({ children }: AuthGateProps) {
     (async () => {
       const {
         data: { session: initialSession }
-      } = await system.supabaseConnector.client.auth.getSession();
+      } = await supabase.auth.getSession();
       if (!cancelled) {
         setSession(initialSession);
         setChecking(false);
@@ -64,7 +64,7 @@ export function AuthGate({ children }: AuthGateProps) {
 
     const {
       data: { subscription }
-    } = system.supabaseConnector.client.auth.onAuthStateChange((_event, nextSession) => {
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
       setChecking(false);
     });
@@ -73,7 +73,7 @@ export function AuthGate({ children }: AuthGateProps) {
       cancelled = true;
       subscription.unsubscribe();
     };
-  }, [system]);
+  }, []);
 
   if (checking) {
     return (
@@ -101,7 +101,6 @@ export function AuthGate({ children }: AuthGateProps) {
  */
 function ProfileStage({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme();
-  const system = useSystem();
   const { status, refresh } = useAccount();
 
   if (status === 'booting') {
@@ -135,7 +134,7 @@ function ProfileStage({ children }: { children: React.ReactNode }) {
         <Pressable
           style={styles.signOutButton}
           onPress={() => {
-            void system.signOut();
+            void signOut();
           }}>
           <Text style={[styles.signOutButtonText, { color: colors.textMuted }]}>
             Sign out

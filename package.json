@@ -3,15 +3,8 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
-    "@azure/core-asynciterator-polyfill": "^1.0.2",
     "@expo/ui": "~56.0.13",
     "@expo/vector-icons": "^15.0.2",
-    "@journeyapps/react-native-quick-sqlite": "^2.5.2",
-    "@journeyapps/wa-sqlite": "^1.7.0",
-    "@powersync/common": "^1.53.1",
-    "@powersync/react": "^1.10.0",
-    "@powersync/react-native": "^1.35.2",
-    "@powersync/web": "^1.38.1",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.106.2",
     "@tanstack/react-query": "^5.101.0",
@@ -62,8 +55,7 @@
     "lint": "expo lint",
     "ingest:opengolf": "tsx scripts/ingest-opengolf.ts",
     "reenrich:opengolf": "tsx scripts/reenrich-opengolf.ts",
-    "resnapshot:rounds": "tsx scripts/resnapshot-rounds.ts",
-    "postinstall": "powersync-web copy-assets"
+    "resnapshot:rounds": "tsx scripts/resnapshot-rounds.ts"
   },
   "private": true
 }

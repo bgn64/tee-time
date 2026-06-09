@@ -1,13 +1,27 @@
 /**
- * Shared Supabase client.
+ * Shared Supabase client — the single source of truth for data + auth.
  *
- * During the PowerSync → REST migration this re-exports the exact client
- * instance PowerSync's connector already uses, so auth/session state stays
- * consistent across the app (a second GoTrue client on the same storage key
- * would fight over the session). New React Query data hooks import `supabase`
- * from here. Phase 4 (PowerSync removal) flips this module to own the client
- * directly and drops the `system` import.
+ * Owns the GoTrue session storage (expo-secure-store on native, AsyncStorage
+ * on web) so there is exactly one client/session for the whole app. The
+ * storage adapter matches the one the (removed) PowerSync connector used, so
+ * existing sessions persist across the migration.
  */
-import { system } from '@/library/powersync/system';
+import { Platform } from 'react-native';
+import { createClient } from '@supabase/supabase-js';
 
-export const supabase = system.supabaseConnector.client;
+import { ExpoKVStorage, WebKVStorage } from '@/library/storage/KVStorage';
+import { AppConfig } from './AppConfig';
+
+const storage = Platform.OS === 'web' ? new WebKVStorage() : new ExpoKVStorage();
+
+export const supabase = createClient(
+  AppConfig.supabaseUrl ?? '',
+  AppConfig.supabaseAnonKey ?? '',
+  {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      storage,
+    },
+  }
+);
