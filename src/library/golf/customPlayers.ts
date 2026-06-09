@@ -12,6 +12,8 @@
  * historic rounds keep rendering the deleted player.
  */
 
+import { useQuery } from '@tanstack/react-query';
+
 import { pickAvatarColor } from '@/library/social/avatarColors';
 import { queryClient } from '@/library/data/queryClient';
 import { supabase } from '@/library/supabase/client';
@@ -27,7 +29,6 @@ export type CreateCustomPlayerResult = {
 };
 
 export async function createCustomPlayer(
-  _system: unknown,
   ownerUserId: string,
   rawNickname: string
 ): Promise<CreateCustomPlayerResult> {
@@ -58,7 +59,6 @@ export async function createCustomPlayer(
  * historic-scorecard rendering.
  */
 export async function softDeleteCustomPlayer(
-  _system: unknown,
   customPlayerId: string
 ): Promise<void> {
   const now = new Date().toISOString();
@@ -75,7 +75,6 @@ export async function softDeleteCustomPlayer(
  * no UI hookup yet.
  */
 export async function renameCustomPlayer(
-  _system: unknown,
   customPlayerId: string,
   rawNickname: string
 ): Promise<void> {
@@ -90,4 +89,40 @@ export async function renameCustomPlayer(
     .eq('id', customPlayerId);
   if (error) throw error;
   await queryClient.invalidateQueries({ queryKey: ['custom_players'] });
+}
+
+export type CustomPlayerListRow = {
+  id: string;
+  nickname: string | null;
+  avatar_color: string | null;
+  deleted_at: string | null;
+};
+
+export function customPlayersListKey(userId: string | null) {
+  return ['custom_players', 'list', userId] as const;
+}
+
+/**
+ * Active (non-soft-deleted) custom players owned by the user, for the
+ * round player picker. Keyed under the `custom_players` prefix so the
+ * CRUD helpers' `invalidateQueries(['custom_players'])` refresh it.
+ */
+export function useCustomPlayers(userId: string | null): {
+  customPlayers: CustomPlayerListRow[];
+  isLoading: boolean;
+} {
+  const { data, isLoading } = useQuery<CustomPlayerListRow[]>({
+    queryKey: customPlayersListKey(userId),
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from(CUSTOM_PLAYERS_TABLE)
+        .select('id, nickname, avatar_color, deleted_at')
+        .eq('owner_user_id', userId as string)
+        .is('deleted_at', null);
+      if (error) throw error;
+      return (data ?? []) as CustomPlayerListRow[];
+    },
+  });
+  return { customPlayers: data ?? [], isLoading };
 }

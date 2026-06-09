@@ -26,40 +26,9 @@ import {
   Text,
   View
 } from 'react-native';
-import { useQuery } from '@powersync/react';
-
 import { RoundDetailView } from '@/components/round/RoundDetailView';
-import {
-  SCORECARDS_TABLE,
-  SCORECARD_SCORES_TABLE
-} from '@/library/powersync/AppSchema';
-import {
-  projectScorecardRow,
-  type ScorecardRowShape
-} from '@/library/golf/projectScorecard';
+import { useRoundDetail } from '@/library/golf/useRoundDetail';
 import { useTheme } from '@/library/theme/ThemeContext';
-import type { RoundScore } from '@/types/golf';
-
-type ScoreRow = {
-  scorecard_id: string | null;
-  scorer_id: string | null;
-  hole_number: number | null;
-  strokes: number | null;
-};
-
-const SELECT_ONE_SCORECARD_SQL = `
-  SELECT * FROM ${SCORECARDS_TABLE}
-  WHERE id = ?
-  LIMIT 1
-`;
-
-const SELECT_SCORES_FOR_SCORECARD_SQL = `
-  SELECT scorecard_id, scorer_id, hole_number, strokes
-  FROM ${SCORECARD_SCORES_TABLE}
-  WHERE scorecard_id = ?
-`;
-
-const NO_ROWS_SQL = `SELECT * FROM ${SCORECARDS_TABLE} WHERE 1 = 0`;
 
 export default function HomeRoundDetailScreen() {
   const { colors } = useTheme();
@@ -83,32 +52,7 @@ export default function HomeRoundDetailScreen() {
     });
   }, [id, router]);
 
-  const { data: scorecardRows, isLoading: scorecardLoading } =
-    useQuery<ScorecardRowShape>(
-      id ? SELECT_ONE_SCORECARD_SQL : NO_ROWS_SQL,
-      id ? [id] : []
-    );
-
-  const { data: scoreRows, isLoading: scoresLoading } = useQuery<ScoreRow>(
-    id ? SELECT_SCORES_FOR_SCORECARD_SQL : NO_ROWS_SQL,
-    id ? [id] : []
-  );
-
-  const scores = React.useMemo<RoundScore[]>(() => {
-    return scoreRows
-      .filter((r) => !!r.scorecard_id)
-      .map((r) => ({
-        scorerId: r.scorer_id ?? '',
-        holeNumber: Number(r.hole_number ?? 0),
-        strokes: Number(r.strokes ?? 0)
-      }));
-  }, [scoreRows]);
-
-  const round = React.useMemo(() => {
-    const row = scorecardRows[0];
-    if (!row) return null;
-    return projectScorecardRow(row, scores);
-  }, [scorecardRows, scores]);
+  const { round, isLoading } = useRoundDetail(id ?? null);
 
   // Diagnostic — logs round-completion transitions so we can rule
   // out (or in) a correlation between the round flipping to
@@ -129,8 +73,6 @@ export default function HomeRoundDetailScreen() {
     }
     prevCompletedRef.current = next;
   }, [round?.completedAt, id, router]);
-
-  const isLoading = scorecardLoading || scoresLoading;
 
   if (!id) {
     return (

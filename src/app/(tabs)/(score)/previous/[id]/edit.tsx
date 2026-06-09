@@ -31,82 +31,22 @@ import {
   Text,
   View
 } from 'react-native';
-import { useQuery } from '@powersync/react';
-
 import { RoundDetailView } from '@/components/round/RoundDetailView';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
-import {
-  SCORECARDS_TABLE,
-  SCORECARD_SCORES_TABLE
-} from '@/library/powersync/AppSchema';
-import {
-  projectScorecardRow,
-  type ScorecardRowShape
-} from '@/library/golf/projectScorecard';
+import { useRoundDetail } from '@/library/golf/useRoundDetail';
 import { useRound } from '@/library/golf/RoundContext';
-import { useRequiredAccount } from '@/library/social/AccountContext';
 import { useTheme } from '@/library/theme/ThemeContext';
-import type { RoundScore } from '@/types/golf';
-
-type ScoreRow = {
-  scorecard_id: string | null;
-  scorer_id: string | null;
-  hole_number: number | null;
-  strokes: number | null;
-};
-
-const SELECT_ONE_SCORECARD_SQL = `
-  SELECT * FROM ${SCORECARDS_TABLE}
-  WHERE id = ? AND owner_user_id = ?
-  LIMIT 1
-`;
-
-const SELECT_SCORES_FOR_SCORECARD_SQL = `
-  SELECT scorecard_id, scorer_id, hole_number, strokes
-  FROM ${SCORECARD_SCORES_TABLE}
-  WHERE scorecard_id = ? AND owner_user_id = ?
-`;
-
-const NO_ROWS_SQL = `SELECT * FROM ${SCORECARDS_TABLE} WHERE 1 = 0`;
 
 export default function EditRoundScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const account = useRequiredAccount();
   const { setScoreForRound, setParticipantTeesForRound } = useRound();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const params = useLocalSearchParams<{ id: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
-  const { data: scorecardRows, isLoading: scorecardLoading } =
-    useQuery<ScorecardRowShape>(
-      id ? SELECT_ONE_SCORECARD_SQL : NO_ROWS_SQL,
-      id ? [id, account.userId] : []
-    );
-
-  const { data: scoreRows, isLoading: scoresLoading } = useQuery<ScoreRow>(
-    id ? SELECT_SCORES_FOR_SCORECARD_SQL : NO_ROWS_SQL,
-    id ? [id, account.userId] : []
-  );
-
-  const scores = React.useMemo<RoundScore[]>(() => {
-    return scoreRows
-      .filter((r) => !!r.scorecard_id)
-      .map((r) => ({
-        scorerId: r.scorer_id ?? '',
-        holeNumber: Number(r.hole_number ?? 0),
-        strokes: Number(r.strokes ?? 0)
-      }));
-  }, [scoreRows]);
-
-  const round = React.useMemo(() => {
-    const row = scorecardRows[0];
-    if (!row) return null;
-    return projectScorecardRow(row, scores);
-  }, [scorecardRows, scores]);
-
-  const isLoading = scorecardLoading || scoresLoading;
+  const { round, isLoading } = useRoundDetail(id ?? null);
 
   // Current-hole state lives here (not RoundContext, which is
   // scoped to the user's live round). Starts at hole 1 each time

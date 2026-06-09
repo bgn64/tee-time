@@ -263,6 +263,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
     queryClient.invalidateQueries({ queryKey: ['completed_scores'] });
     queryClient.invalidateQueries({ queryKey: ['scorecard_stats'] });
     queryClient.invalidateQueries({ queryKey: ['feed_rounds'] });
+    queryClient.invalidateQueries({ queryKey: ['round_detail'] });
   }, [queryClient]);
 
   const startRound = useCallback<RoundContextValue['startRound']>(
