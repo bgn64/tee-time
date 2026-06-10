@@ -33,6 +33,8 @@ import {
 
 import { RoundListCard } from '@/components/round/RoundListCard';
 import { IncomingRequestsBanner } from '@/components/social/IncomingRequestsBanner';
+import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
+import { useRefresh } from '@/library/data/useRefresh';
 import { useFeedRounds } from '@/library/golf/useFeedRounds';
 import { useFriends } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -41,6 +43,7 @@ export default function HomeFeedScreen() {
   const { colors } = useTheme();
   const router = useRouter();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const refresh = useRefresh();
 
   const { friends, hydrated: friendsHydrated } = useFriends();
   const { liveRounds, completedRounds, isLoading: feedLoading } = useFeedRounds();
@@ -74,7 +77,8 @@ export default function HomeFeedScreen() {
   // still sees their own card and skips this CTA.
   if (friends.length === 0 && feedRounds.length === 0) {
     return (
-      <ScrollView
+      <PullToRefreshScrollView
+        onRefresh={refresh}
         style={styles.scroll}
         contentContainerStyle={styles.contentEmpty}>
         <IncomingRequestsBanner style={styles.banner} />
@@ -92,13 +96,14 @@ export default function HomeFeedScreen() {
             <Text style={styles.primaryCtaText}>+  Find friends</Text>
           </Pressable>
         </View>
-      </ScrollView>
+      </PullToRefreshScrollView>
     );
   }
 
   if (feedRounds.length === 0) {
     return (
-      <ScrollView
+      <PullToRefreshScrollView
+        onRefresh={refresh}
         style={styles.scroll}
         contentContainerStyle={styles.contentEmpty}>
         <IncomingRequestsBanner style={styles.banner} />
@@ -112,19 +117,20 @@ export default function HomeFeedScreen() {
             rounds will show up here.
           </Text>
         </View>
-      </ScrollView>
+      </PullToRefreshScrollView>
     );
   }
 
   return (
-    <ScrollView
+    <PullToRefreshScrollView
+      onRefresh={refresh}
       style={styles.scroll}
       contentContainerStyle={styles.content}>
       <IncomingRequestsBanner style={styles.banner} />
       {feedRounds.map((round) => (
         <RoundListCard key={round.id} round={round} />
       ))}
-    </ScrollView>
+    </PullToRefreshScrollView>
   );
 }
 

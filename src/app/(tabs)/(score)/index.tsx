@@ -27,7 +27,6 @@ import { useMemo } from 'react';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -35,6 +34,8 @@ import {
 
 import { LiveStatusChip } from '@/components/round/LiveStatusChip';
 import { LiveTopStrip } from '@/components/round/LiveTopStrip';
+import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
+import { useRefresh } from '@/library/data/useRefresh';
 import { useRound } from '@/library/golf/RoundContext';
 import {
   formatRelativeTime,
@@ -63,6 +64,7 @@ export default function RoundsHubScreen() {
     useCompletedRounds();
 
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const refresh = useRefresh();
 
   if (!roundHydrated) {
     return (
@@ -138,7 +140,7 @@ export default function RoundsHubScreen() {
 
   return (
     <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <PullToRefreshScrollView onRefresh={refresh} contentContainerStyle={styles.content}>
         <View style={styles.titleBlock}>
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.title}>{title}</Text>
@@ -149,7 +151,7 @@ export default function RoundsHubScreen() {
         {hasCurrent ? continueCard : newCard}
         {hasCurrent ? newCard : continueCard}
         {previousCard}
-      </ScrollView>
+      </PullToRefreshScrollView>
     </View>
   );
 }
