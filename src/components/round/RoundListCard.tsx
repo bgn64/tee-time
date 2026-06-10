@@ -7,11 +7,14 @@
  *      meta line + course name + sub-line. The owner avatar, format
  *      pills, and big score block that used to live here have moved
  *      into the per-scorer rows on the Summary tab.
- *   2. `<TabbedRoundShell>` — `SUMMARY · SCORECARD · HOLES` segmented
- *      selector. Always lands on Summary on mount; no persistence
- *      across navigation. The HOLES tab is hidden when the round has
- *      no per-hole stat data — pre-feature rounds and brand-new rounds
- *      that haven't been tagged don't surface an empty tab.
+ *   2. `<SwipeableCardContent>` — a horizontally-swipeable band with
+ *      two panes: Summary and Scorecard. Constant height (locked to the
+ *      taller pane), minimal dots indicator, and desktop-only hover edge
+ *      arrows. The old segmented `SUMMARY · SCORECARD · HOLES` selector
+ *      is gone; per-hole detail moved out of a tab into a sheet (below).
+ *      The Scorecard renders front-9 over back-9 (`layout="stacked"`),
+ *      its hole numbers are pills, and a caption underneath opens the
+ *      per-hole `<HoleDetailSheet>`.
  *   3. `<RoundActionBar>` — Like + Comments. Comments-tap opens the
  *      `<CommentsSheet>` modal hosted by this card.
  *
@@ -23,15 +26,15 @@
  */
 
 import { useMemo, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { CommentsSheet } from './CommentsSheet';
 import { EditorialHeader } from './EditorialHeader';
-import { HolesTabContent } from './HolesTabContent';
+import { HoleDetailSheet } from './HoleDetailSheet';
 import { RoundActionBar } from './RoundActionBar';
 import { SummaryTabContent } from './SummaryTabContent';
-import { TabbedRoundShell } from './TabbedRoundShell';
+import { SwipeableCardContent, type SwipePane } from './SwipeableCardContent';
 import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import {
@@ -41,7 +44,6 @@ import {
 } from '@/library/golf/scoring';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
-import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useAccount } from '@/library/social/AccountContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -61,8 +63,14 @@ export function RoundListCard({ round }: Props) {
   const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
     round.id
   );
-  const engagement = useRoundStatEngagement(round.id);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [holeSheetOpen, setHoleSheetOpen] = useState(false);
+  const [initialHole, setInitialHole] = useState(1);
+
+  function openHoleSheet(holeNumber: number) {
+    setInitialHole(holeNumber);
+    setHoleSheetOpen(true);
+  }
 
   const { topLineLeft, topLineRight } = useMemo(
     () => deriveTopLine(round),
@@ -77,6 +85,40 @@ export function RoundListCard({ round }: Props) {
     !!account?.userId && account.userId === (round.ownerUserId ?? '');
   const canEdit = isOwner && !isInProgress;
 
+  const scorecardCaption = (
+    <Text style={styles.captionText}>
+      Tap a hole for detail — or start at{' '}
+      <Text
+        style={styles.captionLink}
+        onPress={() => openHoleSheet(1)}
+        accessibilityRole="button"
+        accessibilityLabel="Open hole 1 detail">
+        Hole 1
+      </Text>
+      .
+    </Text>
+  );
+
+  const panes: SwipePane[] = [
+    {
+      key: 'summary',
+      label: 'Summary',
+      content: <SummaryTabContent round={round} />,
+    },
+    {
+      key: 'scorecard',
+      label: 'Scorecard',
+      content: (
+        <HorizontalScorecard
+          round={round}
+          layout="stacked"
+          onPressHoleDetail={openHoleSheet}
+          detailCaption={scorecardCaption}
+        />
+      ),
+    },
+  ];
+
   return (
     <View style={styles.card}>
       <EditorialHeader
@@ -86,15 +128,7 @@ export function RoundListCard({ round }: Props) {
         title={round.course.name}
         subtitle={subtitle}
       />
-      <TabbedRoundShell
-        summary={<SummaryTabContent round={round} />}
-        scorecard={
-          <View style={styles.tabBody}>
-            <HorizontalScorecard round={round} />
-          </View>
-        }
-        holes={engagement.hasAny ? <HolesTabContent round={round} /> : undefined}
-      />
+      <SwipeableCardContent panes={panes} />
       <RoundActionBar
         liked={likedByMe}
         likeCount={likeCount}
@@ -116,6 +150,12 @@ export function RoundListCard({ round }: Props) {
         ownerUserId={round.ownerUserId ?? ''}
         commentCount={commentCount}
         onClose={() => setSheetVisible(false)}
+      />
+      <HoleDetailSheet
+        round={round}
+        visible={holeSheetOpen}
+        initialHole={initialHole}
+        onClose={() => setHoleSheetOpen(false)}
       />
     </View>
   );
@@ -161,9 +201,14 @@ function makeStyles(colors: ThemeColors) {
       ...colors.shadowCard,
       marginBottom: 14,
     },
-    tabBody: {
-      paddingHorizontal: 4,
-      paddingBottom: 8,
+    captionText: {
+      fontSize: 13,
+      lineHeight: 19,
+      color: colors.textMuted,
+    },
+    captionLink: {
+      color: colors.primaryDark,
+      fontWeight: '800',
     },
   });
 }

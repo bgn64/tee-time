@@ -32,7 +32,7 @@
  * `course_snapshot` predates the per-tee schema.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { TeamAvatarCluster, type AvatarMember } from './TeamAvatarCluster';
@@ -50,6 +50,29 @@ type Props = {
   round: Round;
   currentHoleNumber?: number;
   onHolePress?: (holeNumber: number) => void;
+  onPressParticipant?: (userId: string) => void;
+  /**
+   * Layout mode. 'toggle' (default) keeps the Front/Back pill + single
+   * grid used by the editing/detail surfaces. 'stacked' renders the
+   * front nine over the back nine (no pill) for the feed card.
+   */
+  layout?: 'toggle' | 'stacked';
+  /**
+   * When set, hole-number cells render as tappable pills that call this
+   * with the hole number (feed → opens the per-hole detail sheet).
+   * Takes precedence over `onHolePress` for the header cells.
+   */
+  onPressHoleDetail?: (holeNumber: number) => void;
+  /** Optional caption rendered under the grid (feed detail affordance). */
+  detailCaption?: ReactNode;
+};
+
+type GridProps = {
+  round: Round;
+  range: HoleRange;
+  currentHoleNumber?: number;
+  onHolePress?: (holeNumber: number) => void;
+  onPressHoleDetail?: (holeNumber: number) => void;
   onPressParticipant?: (userId: string) => void;
 };
 
@@ -69,7 +92,88 @@ export function HorizontalScorecard({
   currentHoleNumber,
   onHolePress,
   onPressParticipant,
+  layout = 'toggle',
+  onPressHoleDetail,
+  detailCaption,
 }: Props) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const has18 = round.course.holes.length >= 18;
+  const [viewRange, setViewRange] = useState<HoleRange>(round.holeRange);
+
+  // Stacked mode (feed card): front nine over back nine, no pill.
+  if (layout === 'stacked') {
+    return (
+      <View>
+        {has18 ? (
+          <>
+            <ScorecardGrid
+              round={round}
+              range="front9"
+              currentHoleNumber={currentHoleNumber}
+              onHolePress={onHolePress}
+              onPressHoleDetail={onPressHoleDetail}
+              onPressParticipant={onPressParticipant}
+            />
+            <ScorecardGrid
+              round={round}
+              range="back9"
+              currentHoleNumber={currentHoleNumber}
+              onHolePress={onHolePress}
+              onPressHoleDetail={onPressHoleDetail}
+              onPressParticipant={onPressParticipant}
+            />
+          </>
+        ) : (
+          <ScorecardGrid
+            round={round}
+            range="all"
+            currentHoleNumber={currentHoleNumber}
+            onHolePress={onHolePress}
+            onPressHoleDetail={onPressHoleDetail}
+            onPressParticipant={onPressParticipant}
+          />
+        )}
+        {detailCaption ? (
+          <View style={styles.caption}>{detailCaption}</View>
+        ) : null}
+      </View>
+    );
+  }
+
+  // Toggle mode (default): Front/Back pill + single grid. Preserves the
+  // prior behaviour for the editing / detail surfaces.
+  const effectiveRange: HoleRange = has18 ? viewRange : 'all';
+  return (
+    <View>
+      {has18 ? (
+        <View style={styles.toggleControls}>
+          <FrontBackPill current={viewRange} onChange={setViewRange} />
+        </View>
+      ) : null}
+      <ScorecardGrid
+        round={round}
+        range={effectiveRange}
+        currentHoleNumber={currentHoleNumber}
+        onHolePress={onHolePress}
+        onPressHoleDetail={onPressHoleDetail}
+        onPressParticipant={onPressParticipant}
+      />
+      {detailCaption ? (
+        <View style={styles.caption}>{detailCaption}</View>
+      ) : null}
+    </View>
+  );
+}
+
+function ScorecardGrid({
+  round,
+  range,
+  currentHoleNumber,
+  onHolePress,
+  onPressHoleDetail,
+  onPressParticipant,
+}: GridProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -77,17 +181,10 @@ export function HorizontalScorecard({
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
 
-  // Local range state, seeded from the round. Phase 2 keeps the
-  // selection ephemeral — the pill is purely a viewer toggle and
-  // does NOT mutate `round.holeRange` (which is the scoring-mode
-  // contract for which holes count toward totals).
-  const [viewRange, setViewRange] = useState<HoleRange>(round.holeRange);
   const courseHoles = round.course.holes;
-  const has18 = courseHoles.length >= 18;
-  const effectiveRange: HoleRange = has18 ? viewRange : 'all';
   const visibleHoles = useMemo(
-    () => holesInRange(courseHoles, effectiveRange),
-    [courseHoles, effectiveRange]
+    () => holesInRange(courseHoles, range),
+    [courseHoles, range]
   );
 
   // Resolve tees with a synthetic single-tee fallback when the course
@@ -237,7 +334,7 @@ export function HorizontalScorecard({
   // Per-totals derivation. We compute OUT (1–9) / IN (10–18) / TOT for
   // the currently-visible holes only — totals row aligns with whatever
   // the viewer chose via the pill.
-  const totals = useMemo(() => deriveTotals(effectiveRange), [effectiveRange]);
+  const totals = useMemo(() => deriveTotals(range), [range]);
 
   // Heads-up: when nothing to render (no tees, no holes), bail early
   // so the grid math doesn't divide by zero.
@@ -247,12 +344,6 @@ export function HorizontalScorecard({
 
   return (
     <View style={styles.wrap}>
-      {has18 ? (
-        <View style={styles.controlsRow}>
-          <FrontBackPill current={viewRange} onChange={setViewRange} />
-        </View>
-      ) : null}
-
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -265,6 +356,7 @@ export function HorizontalScorecard({
             styles={styles}
             currentHoleNumber={currentHoleNumber}
             onHolePress={onHolePress}
+            onPressHoleDetail={onPressHoleDetail}
           />
 
           {groups.map((group, groupIdx) => {
@@ -468,6 +560,7 @@ type HeaderProps = {
   styles: ReturnType<typeof makeStyles>;
   currentHoleNumber?: number;
   onHolePress?: (n: number) => void;
+  onPressHoleDetail?: (n: number) => void;
 };
 
 function HoleHeaderRow({
@@ -476,6 +569,7 @@ function HoleHeaderRow({
   styles,
   currentHoleNumber,
   onHolePress,
+  onPressHoleDetail,
 }: HeaderProps) {
   return (
     <View style={[styles.rowHead]}>
@@ -493,6 +587,20 @@ function HoleHeaderRow({
             {hole.number}
           </Text>
         );
+        if (onPressHoleDetail) {
+          return (
+            <Pressable
+              key={`hd-${hole.number}`}
+              style={styles.cellHead}
+              onPress={() => onPressHoleDetail(hole.number)}
+              accessibilityRole="button"
+              accessibilityLabel={`Hole ${hole.number} detail`}>
+              <View style={styles.cellHeadPill}>
+                <Text style={styles.cellHeadPillText}>{hole.number}</Text>
+              </View>
+            </Pressable>
+          );
+        }
         if (onHolePress) {
           return (
             <Pressable
@@ -732,6 +840,30 @@ function makeStyles(colors: ThemeColors) {
     },
     cellHeadCurrent: {
       color: colors.primaryDark,
+    },
+    cellHeadPill: {
+      minWidth: 20,
+      height: 18,
+      paddingHorizontal: 5,
+      borderRadius: 999,
+      backgroundColor: colors.chipBg,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cellHeadPillText: {
+      fontSize: 10.5,
+      fontWeight: '900',
+      color: colors.textTitle,
+      letterSpacing: 0.2,
+    },
+    caption: {
+      paddingHorizontal: 14,
+      paddingTop: 4,
+      paddingBottom: 8,
+    },
+    toggleControls: {
+      paddingHorizontal: 14,
+      paddingTop: 8,
     },
     cellYds: {
       width: 26,
