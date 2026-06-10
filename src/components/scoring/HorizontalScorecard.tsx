@@ -56,7 +56,9 @@ type Props = {
    * grid used by the editing/detail surfaces. 'stacked' renders the
    * front nine over the back nine (no pill) for the feed card.
    */
-  layout?: 'toggle' | 'stacked';
+  layout?: 'toggle' | 'stacked' | 'single';
+  /** Range to render in 'single' layout (defaults to 'all'). */
+  range?: HoleRange;
   /**
    * When set, hole-number cells render as tappable pills that call this
    * with the hole number (feed → opens the per-hole detail sheet).
@@ -93,6 +95,7 @@ export function HorizontalScorecard({
   onHolePress,
   onPressParticipant,
   layout = 'toggle',
+  range,
   onPressHoleDetail,
   detailCaption,
 }: Props) {
@@ -100,6 +103,25 @@ export function HorizontalScorecard({
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const has18 = round.course.holes.length >= 18;
   const [viewRange, setViewRange] = useState<HoleRange>(round.holeRange);
+
+  // Single fixed range (feed card panes): one grid, no pill.
+  if (layout === 'single') {
+    return (
+      <View>
+        <ScorecardGrid
+          round={round}
+          range={range ?? 'all'}
+          currentHoleNumber={currentHoleNumber}
+          onHolePress={onHolePress}
+          onPressHoleDetail={onPressHoleDetail}
+          onPressParticipant={onPressParticipant}
+        />
+        {detailCaption ? (
+          <View style={styles.caption}>{detailCaption}</View>
+        ) : null}
+      </View>
+    );
+  }
 
   // Stacked mode (feed card): front nine over back nine, no pill.
   if (layout === 'stacked') {

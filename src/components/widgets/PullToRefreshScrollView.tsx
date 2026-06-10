@@ -61,6 +61,8 @@ const TRIGGER_DISTANCE = 64;
 const REST_DISTANCE = 64;
 const MAX_DISTANCE = 110;
 const DRAG_RESISTANCE = 0.5;
+// Min finger travel (px) before we lock the gesture to its dominant axis.
+const AXIS_LOCK_THRESHOLD = 8;
 
 type Props = {
   /** Refetch handler. May be async — the spinner holds until it settles. */
@@ -174,6 +176,12 @@ function WebPullToRefresh({
 
   const scrollYRef = React.useRef(0);
   const startYRef = React.useRef<number | null>(null);
+  const startXRef = React.useRef<number | null>(null);
+  // Once a gesture's dominant axis is decided we stick with it: a
+  // horizontal-dominant drag (e.g. swiping the card pager) must not also
+  // arm the vertical pull-to-refresh, so a diagonal drag at the top can't
+  // run both at once.
+  const axisDecidedRef = React.useRef(false);
   // True only when a drag began at the very top — guards against turning a
   // normal upward scroll into a pull when the list flicks back to the top.
   const eligibleRef = React.useRef(false);
@@ -220,6 +228,11 @@ function WebPullToRefresh({
     return touch ? touch.pageY : null;
   };
 
+  const touchX = (e: GestureResponderEvent): number | null => {
+    const touch = e.nativeEvent.touches?.[0];
+    return touch ? touch.pageX : null;
+  };
+
   const onTouchStart = (e: GestureResponderEvent) => {
     if (refreshingRef.current) {
       eligibleRef.current = false;
@@ -227,6 +240,8 @@ function WebPullToRefresh({
     }
     const y = touchY(e);
     startYRef.current = y;
+    startXRef.current = touchX(e);
+    axisDecidedRef.current = false;
     // Pull only when the drag begins at the top of the scroll.
     eligibleRef.current = scrollYRef.current <= 0 && y != null;
   };
@@ -244,6 +259,27 @@ function WebPullToRefresh({
     const y = touchY(e);
     if (y == null) return;
     const dy = y - start;
+
+    // Lock to the gesture's dominant axis on the first meaningful move. A
+    // horizontal-dominant drag (swiping the card pager) disarms the pull so
+    // the two gestures can't both run on a diagonal drag at the top.
+    if (!axisDecidedRef.current) {
+      const startX = startXRef.current;
+      const x = touchX(e);
+      const dx = startX != null && x != null ? x - startX : 0;
+      if (
+        Math.abs(dx) > AXIS_LOCK_THRESHOLD ||
+        Math.abs(dy) > AXIS_LOCK_THRESHOLD
+      ) {
+        axisDecidedRef.current = true;
+        if (Math.abs(dx) > Math.abs(dy)) {
+          eligibleRef.current = false;
+          pull.value = 0;
+          return;
+        }
+      }
+    }
+
     pull.value = dy <= 0 ? 0 : Math.min(dy * DRAG_RESISTANCE, MAX_DISTANCE);
   };
 

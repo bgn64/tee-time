@@ -7,14 +7,13 @@
  *      meta line + course name + sub-line. The owner avatar, format
  *      pills, and big score block that used to live here have moved
  *      into the per-scorer rows on the Summary tab.
- *   2. `<SwipeableCardContent>` — a horizontally-swipeable band with
- *      two panes: Summary and Scorecard. Constant height (locked to the
- *      taller pane), minimal dots indicator, and desktop-only hover edge
- *      arrows. The old segmented `SUMMARY · SCORECARD · HOLES` selector
- *      is gone; per-hole detail moved out of a tab into a sheet (below).
- *      The Scorecard renders front-9 over back-9 (`layout="stacked"`),
- *      its hole numbers are pills, and a caption underneath opens the
- *      per-hole `<HoleDetailSheet>`.
+ *   2. `<SwipeableCardContent>` — a horizontally-swipeable band. Panes:
+ *      Summary, then the scorecard split into Front 9 / Back 9 sections
+ *      (a single Scorecard pane for one-nine rounds). Constant height
+ *      (locked to the tallest pane), minimal dots, desktop-only hover
+ *      edge arrows. When the round has tracked stats, scorecard hole
+ *      numbers are pills and a caption opens the per-hole
+ *      `<HoleDetailSheet>`; with no stats the numbers are plain text.
  *   3. `<RoundActionBar>` — Like + Comments. Comments-tap opens the
  *      `<CommentsSheet>` modal hosted by this card.
  *
@@ -40,10 +39,12 @@ import { useCommentSummary } from '@/library/comments/useRoundComments';
 import {
   formatRelativeTime,
   getScorerProgress,
+  holesInRange,
   scorerIdForUser,
 } from '@/library/golf/scoring';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
+import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useAccount } from '@/library/social/AccountContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -63,6 +64,7 @@ export function RoundListCard({ round }: Props) {
   const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
     round.id
   );
+  const engagement = useRoundStatEngagement(round.id);
   const [sheetVisible, setSheetVisible] = useState(false);
   const [holeSheetOpen, setHoleSheetOpen] = useState(false);
   const [initialHole, setInitialHole] = useState(1);
@@ -85,19 +87,35 @@ export function RoundListCard({ round }: Props) {
     !!account?.userId && account.userId === (round.ownerUserId ?? '');
   const canEdit = isOwner && !isInProgress;
 
-  const scorecardCaption = (
-    <Text style={styles.captionText}>
-      Tap a hole for detail — or start at{' '}
-      <Text
-        style={styles.captionLink}
-        onPress={() => openHoleSheet(1)}
-        accessibilityRole="button"
-        accessibilityLabel="Open hole 1 detail">
-        Hole 1
+  // Per-hole detail is only worth surfacing when the round actually has
+  // tracked stats — otherwise the sheet has nothing extra to show. With no
+  // stats the hole numbers render as plain (non-tappable) text and no
+  // caption is shown.
+  const hasStats = engagement.hasAny;
+  const onPressHole = hasStats ? openHoleSheet : undefined;
+
+  function holeCaption(holeNumber: number) {
+    if (!hasStats) return undefined;
+    return (
+      <Text style={styles.captionText}>
+        Tap a hole for detail — or start at{' '}
+        <Text
+          style={styles.captionLink}
+          onPress={() => openHoleSheet(holeNumber)}
+          accessibilityRole="button"
+          accessibilityLabel={`Open hole ${holeNumber} detail`}>
+          Hole {holeNumber}
+        </Text>
+        .
       </Text>
-      .
-    </Text>
-  );
+    );
+  }
+
+  // Split the scorecard into Front 9 / Back 9 content sections when the
+  // round spans both nines — keeps each feed card shorter. One-nine rounds
+  // (or 9-hole courses) get a single scorecard pane.
+  const hasBackNine = round.course.holes.some((h) => h.number > 9);
+  const splitNines = round.holeRange === 'all' && hasBackNine;
 
   const panes: SwipePane[] = [
     {
@@ -105,19 +123,58 @@ export function RoundListCard({ round }: Props) {
       label: 'Summary',
       content: <SummaryTabContent round={round} />,
     },
-    {
+  ];
+
+  if (splitNines) {
+    const frontFirst =
+      holesInRange(round.course.holes, 'front9')[0]?.number ?? 1;
+    const backFirst =
+      holesInRange(round.course.holes, 'back9')[0]?.number ?? 10;
+    panes.push(
+      {
+        key: 'front',
+        label: 'Front 9',
+        content: (
+          <HorizontalScorecard
+            round={round}
+            layout="single"
+            range="front9"
+            onPressHoleDetail={onPressHole}
+            detailCaption={holeCaption(frontFirst)}
+          />
+        ),
+      },
+      {
+        key: 'back',
+        label: 'Back 9',
+        content: (
+          <HorizontalScorecard
+            round={round}
+            layout="single"
+            range="back9"
+            onPressHoleDetail={onPressHole}
+            detailCaption={holeCaption(backFirst)}
+          />
+        ),
+      }
+    );
+  } else {
+    const first =
+      holesInRange(round.course.holes, round.holeRange)[0]?.number ?? 1;
+    panes.push({
       key: 'scorecard',
       label: 'Scorecard',
       content: (
         <HorizontalScorecard
           round={round}
-          layout="stacked"
-          onPressHoleDetail={openHoleSheet}
-          detailCaption={scorecardCaption}
+          layout="single"
+          range={round.holeRange}
+          onPressHoleDetail={onPressHole}
+          detailCaption={holeCaption(first)}
         />
       ),
-    },
-  ];
+    });
+  }
 
   return (
     <View style={styles.card}>
