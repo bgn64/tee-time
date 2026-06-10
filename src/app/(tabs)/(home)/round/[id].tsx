@@ -21,12 +21,13 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View
 } from 'react-native';
 import { RoundDetailView } from '@/components/round/RoundDetailView';
+import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
+import { useRefresh } from '@/library/data/useRefresh';
 import { useRoundDetail } from '@/library/golf/useRoundDetail';
 import { useTheme } from '@/library/theme/ThemeContext';
 
@@ -37,6 +38,7 @@ export default function HomeRoundDetailScreen() {
 
   const params = useLocalSearchParams<{ id: string | string[] }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const refresh = useRefresh();
 
   // Diagnostic — logs the nav state at mount so we can spot the
   // "missing back arrow after deep link / web reload" case. Without
@@ -113,14 +115,15 @@ export default function HomeRoundDetailScreen() {
   return (
     <>
       <Stack.Screen options={{ title: round.course.name }} />
-      <ScrollView
+      <PullToRefreshScrollView
+        onRefresh={refresh}
         style={styles.container}
         contentContainerStyle={styles.content}>
         <RoundDetailView
           round={round}
           profileRoutePrefix="/(tabs)/(home)/profile"
         />
-      </ScrollView>
+      </PullToRefreshScrollView>
     </>
   );
 }

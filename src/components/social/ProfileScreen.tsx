@@ -35,6 +35,8 @@ import {
 } from 'react-native';
 
 import { signOut } from '@/library/supabase/auth';
+import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
+import { useRefresh } from '@/library/data/useRefresh';
 import { useRequiredAccount } from '@/library/social/AccountContext';
 import { useFriends, useProfile } from '@/library/social/FriendsContext';
 import { useScorecardStats } from '@/library/golf/useScorecardStats';
@@ -56,6 +58,7 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
   const { friends } = useFriends();
   const { roundsPlayed, roundsTogether } = useScorecardStats();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const refresh = useRefresh();
 
   const isOwn = userId === account.userId;
   const togetherCount = isOwn ? 0 : roundsTogether(userId);
@@ -81,7 +84,7 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
   }
 
   return (
-    <View style={styles.container}>
+    <PullToRefreshScrollView onRefresh={refresh} style={styles.container}>
       <View style={styles.body}>
         <View style={[styles.avatar, { backgroundColor: profile.avatarColor }]}>
           <Text style={styles.avatarText}>
@@ -139,7 +142,7 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
           </Pressable>
         )}
       </View>
-    </View>
+    </PullToRefreshScrollView>
   );
 }
 
