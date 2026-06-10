@@ -99,6 +99,15 @@ export function SwipeableCardContent({ panes }: Props) {
     if (i !== index) setIndex(Math.max(0, Math.min(count - 1, i)));
   }
 
+  // Web's paging ScrollView doesn't reliably emit onMomentumScrollEnd, so we
+  // also derive the active page from onScroll (rounded to the nearest page)
+  // — otherwise the dots never update on web.
+  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (!width) return;
+    const i = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (i !== index) setIndex(Math.max(0, Math.min(count - 1, i)));
+  }
+
   // On web we wrap in a Pressable purely to get hover in/out events so
   // the edge arrows can fade in. On native it's a plain View (no hover,
   // no arrows) so nothing interferes with the scroll gesture.
@@ -118,6 +127,7 @@ export function SwipeableCardContent({ panes }: Props) {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
+          onScroll={onScroll}
           onMomentumScrollEnd={onMomentumEnd}
           style={maxHeight ? { height: maxHeight } : undefined}>
           {width > 0

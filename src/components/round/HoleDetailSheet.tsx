@@ -154,6 +154,14 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
     if (i !== index) setIndex(Math.max(0, Math.min(count - 1, i)));
   }
 
+  // Web's paging ScrollView doesn't reliably emit onMomentumScrollEnd, so we
+  // also derive the active hole from onScroll so the header + dots update.
+  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
+    if (!width) return;
+    const i = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (i !== index) setIndex(Math.max(0, Math.min(count - 1, i)));
+  }
+
   const hoverProps = IS_WEB
     ? { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) }
     : {};
@@ -199,6 +207,7 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               scrollEventThrottle={16}
+              onScroll={onScroll}
               onMomentumScrollEnd={onMomentumEnd}
               style={maxHeight ? { height: maxHeight } : undefined}>
               {width > 0
