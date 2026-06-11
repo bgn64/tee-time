@@ -84,49 +84,53 @@ export function ScoringRoundView({
   const isInProgress = !round.completedAt;
 
   return (
-    <View style={styles.container}>
-      <EditorialHeader
-        liveStripVisible={isInProgress}
-        topLineLeft={topLineLeft}
-        topLineRight={topLineRight}
-        title={round.course.name}
-        subtitle={subtitle}
-      />
-
-      <SwipeableHoleEditor
-        round={round}
-        currentHoleNumber={currentHoleNumber}
-        onChangeCurrentHole={onChangeCurrentHole}
-        onChangeScore={onChangeScore}
-        onPressTeeForScorer={onPressTeeForScorer}
-      />
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
-        <Pressable
-          style={styles.scorecardBtn}
-          onPress={() => setScorecardOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Open scorecard">
-          <Ionicons name="grid-outline" size={17} color={colors.primaryDark} />
-          <Text style={styles.scorecardBtnText}>Scorecard</Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.primaryBtn}
-          onPress={onPrimary}
-          accessibilityRole="button"
-          accessibilityLabel={primaryLabel}>
-          <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
-        </Pressable>
-
-        <View style={styles.actionBarWrap}>
-          <RoundActionBar
-            liked={likedByMe}
-            likeCount={likeCount}
-            commentCount={commentCount}
-            onToggleLike={toggleLike}
-            onOpenComments={() => setCommentsOpen(true)}
+    <View style={[styles.page, { paddingBottom: insets.bottom + 10 }]}>
+      <View style={styles.cardShadow}>
+        <View style={styles.card}>
+          <EditorialHeader
+            liveStripVisible={isInProgress}
+            topLineLeft={topLineLeft}
+            topLineRight={topLineRight}
+            title={round.course.name}
+            subtitle={subtitle}
           />
+
+          <SwipeableHoleEditor
+            round={round}
+            currentHoleNumber={currentHoleNumber}
+            onChangeCurrentHole={onChangeCurrentHole}
+            onChangeScore={onChangeScore}
+            onPressTeeForScorer={onPressTeeForScorer}
+          />
+
+          <View style={styles.footer}>
+            <Pressable
+              style={styles.scorecardBtn}
+              onPress={() => setScorecardOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open scorecard">
+              <Ionicons name="grid-outline" size={17} color={colors.primaryDark} />
+              <Text style={styles.scorecardBtnText}>Scorecard</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={onPrimary}
+              accessibilityRole="button"
+              accessibilityLabel={primaryLabel}>
+              <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
+            </Pressable>
+
+            <View style={styles.actionBarWrap}>
+              <RoundActionBar
+                liked={likedByMe}
+                likeCount={likeCount}
+                commentCount={commentCount}
+                onToggleLike={toggleLike}
+                onOpenComments={() => setCommentsOpen(true)}
+              />
+            </View>
+          </View>
         </View>
       </View>
 
@@ -179,15 +183,32 @@ function deriveSubtitle(round: Round): string {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: {
+    page: {
       flex: 1,
+      backgroundColor: colors.background,
+      paddingHorizontal: 10,
+      paddingTop: 10,
+    },
+    cardShadow: {
+      flex: 1,
+      borderRadius: 18,
       backgroundColor: colors.cardBg,
+      ...colors.shadowCard,
+    },
+    card: {
+      flex: 1,
+      borderRadius: 18,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: colors.border,
+      backgroundColor: colors.cardBg,
+      overflow: 'hidden',
     },
     footer: {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.hairline,
       paddingHorizontal: 16,
       paddingTop: 10,
+      paddingBottom: 8,
       gap: 8,
     },
     scorecardBtn: {

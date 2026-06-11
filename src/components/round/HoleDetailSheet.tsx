@@ -43,6 +43,7 @@ import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
+import { deviceSupportsHover } from '@/library/utils/hoverCapability';
 import type { Round } from '@/types/golf';
 
 type Props = {
@@ -87,6 +88,7 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(startIndex);
   const [hovered, setHovered] = useState(false);
+  const [canHover] = useState(deviceSupportsHover);
   const [heights, setHeights] = useState<number[]>(() => holes.map(() => 0));
 
   const maxHeight = heights.reduce((m, h) => (h > m ? h : m), 0);
@@ -185,7 +187,7 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
     });
   }
 
-  const hoverProps = IS_WEB
+  const hoverProps = canHover
     ? {
         onPointerEnter: () => setHovered(true),
         onPointerLeave: () => setHovered(false),

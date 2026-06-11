@@ -44,6 +44,7 @@ import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
+import { deviceSupportsHover } from '@/library/utils/hoverCapability';
 import type { Round } from '@/types/golf';
 
 type Props = {
@@ -100,6 +101,7 @@ export function SwipeableHoleEditor({
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(startIndex);
   const [hovered, setHovered] = useState(false);
+  const [canHover] = useState(deviceSupportsHover);
 
   const count = holes.length;
 
@@ -188,7 +190,7 @@ export function SwipeableHoleEditor({
     }
   }
 
-  const hoverProps = IS_WEB
+  const hoverProps = canHover
     ? {
         onPointerEnter: () => setHovered(true),
         onPointerLeave: () => setHovered(false),
