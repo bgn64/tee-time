@@ -3,38 +3,32 @@
  * feed card. Replaces the segmented `TabbedRoundShell` on the feed
  * surface only (the editing/detail surfaces keep the tabbed shell).
  *
- * Behaviour mirrors the mockup (`mockups/feed-card-redesign.html`):
- *   - Swipe / drag between panes (native paging via a horizontal
- *     `ScrollView` with `pagingEnabled` — follow-finger + snap on
- *     iOS/Android, and works on RN-Web).
- *   - Constant height: the band is locked to the tallest pane so the
- *     card never resizes between panes; shorter panes are vertically
- *     centred.
- *   - Minimal dots indicator (one per pane), tappable to jump.
- *   - Desktop-only hover edge arrows (web `pointer: fine`); hidden on
- *     touch. Edge-aware — no prev arrow on the first pane, no next on
- *     the last.
+ * Behaviour (mockups/feed-card-redesign.html):
+ *   - Swipe / drag between panes, driven by `PanResponder` + `Animated`
+ *     (not a paging `ScrollView`) so a gesture advances **at most one
+ *     pane** — a fast flick can't skip several sections, which felt
+ *     disorienting. (A paging ScrollView on RN-Web carries momentum
+ *     across multiple snap points.)
+ *   - Constant height: the band is locked to the tallest pane so the card
+ *     never resizes between panes; shorter panes are vertically centred.
+ *   - Minimal dots indicator (one per pane), tappable to jump (a tap may
+ *     move more than one — only the swipe is limited to one).
+ *   - Desktop-only hover edge arrows (web); hidden on touch; edge-aware.
  *
- * Pure layout: callers pass fully-rendered pane content. The active
- * index is owned here and not persisted across mounts.
+ * Pure layout: callers pass fully-rendered pane content. The active index
+ * is owned here and not persisted across mounts.
  */
 
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import {
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import {
+  Animated,
+  PanResponder,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -52,12 +46,17 @@ type Props = {
 };
 
 const IS_WEB = Platform.OS === 'web';
+// Release thresholds for committing a one-step move.
+const SWIPE_DISTANCE = 0.18; // fraction of the pane width
+const SWIPE_VELOCITY = 0.3;
 
 export function SwipeableCardContent({ panes }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const scrollRef = useRef<ScrollView>(null);
+  // The Animated.Value lives in state (not a ref) so we never read a ref
+  // during render — satisfies the React Compiler's `react-hooks/refs` rule.
+  const [tx] = useState(() => new Animated.Value(0));
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
   const [hovered, setHovered] = useState(false);
@@ -66,15 +65,59 @@ export function SwipeableCardContent({ panes }: Props) {
   const maxHeight = heights.reduce((m, h) => (h > m ? h : m), 0);
   const count = panes.length;
 
+  const animateTo = useCallback(
+    (i: number) => {
+      const clamped = Math.max(0, Math.min(count - 1, i));
+      setIndex(clamped);
+      Animated.timing(tx, {
+        toValue: -clamped * width,
+        duration: 240,
+        useNativeDriver: false,
+      }).start();
+    },
+    [count, width, tx]
+  );
+
+  // PanResponder pager: a swipe advances at most one pane (the drag is
+  // clamped to ±1 page), so a fast flick can't skip several sections.
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        // Claim only horizontal-dominant drags so vertical scrolling (the
+        // feed) and taps pass through untouched.
+        onMoveShouldSetPanResponder: (_e, g) =>
+          Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
+        onPanResponderMove: (_e, g) => {
+          if (!width) return;
+          const base = -index * width;
+          let dx = g.dx;
+          if (dx > width) dx = width + (dx - width) * 0.2;
+          if (dx < -width) dx = -width + (dx + width) * 0.2;
+          let val = base + dx;
+          const lower = -(count - 1) * width;
+          if (val > 0) val = val * 0.2;
+          else if (val < lower) val = lower + (val - lower) * 0.2;
+          tx.setValue(val);
+        },
+        onPanResponderRelease: (_e, g) => {
+          if (!width) return;
+          let target = index;
+          if (g.dx <= -width * SWIPE_DISTANCE || g.vx <= -SWIPE_VELOCITY)
+            target += 1;
+          else if (g.dx >= width * SWIPE_DISTANCE || g.vx >= SWIPE_VELOCITY)
+            target -= 1;
+          animateTo(target);
+        },
+        onPanResponderTerminate: () => animateTo(index),
+      }),
+    [index, width, count, tx, animateTo]
+  );
+
   function onViewportLayout(e: LayoutChangeEvent) {
     const w = e.nativeEvent.layout.width;
     if (w && Math.abs(w - width) > 0.5) {
       setWidth(w);
-      // Keep the current page aligned after a width change (resize /
-      // orientation) without animating.
-      requestAnimationFrame(() =>
-        scrollRef.current?.scrollTo({ x: index * w, animated: false })
-      );
+      tx.setValue(-index * w);
     }
   }
 
@@ -87,30 +130,7 @@ export function SwipeableCardContent({ panes }: Props) {
     });
   }
 
-  function goTo(i: number) {
-    const clamped = Math.max(0, Math.min(count - 1, i));
-    setIndex(clamped);
-    if (width) scrollRef.current?.scrollTo({ x: clamped * width, animated: true });
-  }
-
-  function onMomentumEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (!width) return;
-    const i = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (i !== index) setIndex(Math.max(0, Math.min(count - 1, i)));
-  }
-
-  // Web's paging ScrollView doesn't reliably emit onMomentumScrollEnd, so we
-  // also derive the active page from onScroll (rounded to the nearest page)
-  // — otherwise the dots never update on web.
-  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (!width) return;
-    const i = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (i !== index) setIndex(Math.max(0, Math.min(count - 1, i)));
-  }
-
-  // On web we wrap in a Pressable purely to get hover in/out events so
-  // the edge arrows can fade in. On native it's a plain View (no hover,
-  // no arrows) so nothing interferes with the scroll gesture.
+  // Web-only hover handlers (no-ops on native) so the edge arrows fade in.
   const hoverProps = IS_WEB
     ? { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) }
     : {};
@@ -121,23 +141,21 @@ export function SwipeableCardContent({ panes }: Props) {
         style={styles.viewport}
         onLayout={onViewportLayout}
         {...hoverProps}>
-        <ScrollView
-          ref={scrollRef}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          scrollEventThrottle={16}
-          onScroll={onScroll}
-          onMomentumScrollEnd={onMomentumEnd}
-          style={maxHeight ? { height: maxHeight } : undefined}>
+        <Animated.View
+          style={[
+            styles.track,
+            {
+              width: width ? width * count : undefined,
+              height: maxHeight || undefined,
+              transform: [{ translateX: tx }],
+            },
+          ]}
+          {...pan.panHandlers}>
           {width > 0
             ? panes.map((pane, i) => (
                 <View
                   key={pane.key}
-                  style={[
-                    styles.page,
-                    { width, height: maxHeight || undefined },
-                  ]}>
+                  style={[styles.page, { width, height: maxHeight || undefined }]}>
                   <View
                     onLayout={(e) =>
                       setPaneHeight(i, e.nativeEvent.layout.height)
@@ -147,12 +165,12 @@ export function SwipeableCardContent({ panes }: Props) {
                 </View>
               ))
             : null}
-        </ScrollView>
+        </Animated.View>
 
         {IS_WEB && hovered && index > 0 ? (
           <Pressable
             style={[styles.arrow, styles.arrowPrev]}
-            onPress={() => goTo(index - 1)}
+            onPress={() => animateTo(index - 1)}
             accessibilityRole="button"
             accessibilityLabel="Previous">
             <Text style={styles.arrowText}>‹</Text>
@@ -161,7 +179,7 @@ export function SwipeableCardContent({ panes }: Props) {
         {IS_WEB && hovered && index < count - 1 ? (
           <Pressable
             style={[styles.arrow, styles.arrowNext]}
-            onPress={() => goTo(index + 1)}
+            onPress={() => animateTo(index + 1)}
             accessibilityRole="button"
             accessibilityLabel="Next">
             <Text style={styles.arrowText}>›</Text>
@@ -173,7 +191,7 @@ export function SwipeableCardContent({ panes }: Props) {
         {panes.map((pane, i) => (
           <Pressable
             key={pane.key}
-            onPress={() => goTo(i)}
+            onPress={() => animateTo(i)}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityState={{ selected: i === index }}
@@ -189,14 +207,16 @@ export function SwipeableCardContent({ panes }: Props) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
-      // Faint divider between the header and the content band, mirroring
-      // the action bar's top border below.
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.hairline,
       paddingTop: 6,
     },
     viewport: {
       position: 'relative',
+      overflow: 'hidden',
+    },
+    track: {
+      flexDirection: 'row',
     },
     page: {
       justifyContent: 'center',

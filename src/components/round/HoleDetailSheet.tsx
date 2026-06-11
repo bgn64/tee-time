@@ -4,10 +4,9 @@
  * hole-number pill on the scorecard (or the caption link, which defaults
  * to the first playable hole).
  *
- * Per the mockup (`mockups/feed-card-redesign.html`) the sheet hosts a
- * horizontal hole pager that mirrors the card's content pager:
- *   - Swipe / drag between holes (paging `ScrollView` — follow-finger +
- *     snap on native, works on RN-Web).
+ * Per the mockup (`mockups/feed-card-redesign.html`):
+ *   - Swipe / drag between holes (PanResponder + Animated track) — a swipe
+ *     advances at most one hole; taps on dots/arrows may jump further.
  *   - Web-only hover edge arrows + arrow-key / Escape support.
  *   - Constant height locked to the tallest hole.
  *   - Minimal dots (one per hole) at the bottom, tappable to jump.
@@ -19,18 +18,17 @@
  * matches everywhere. Modal pattern mirrors `CommentsSheet`.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Animated,
   Modal,
+  PanResponder,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   type LayoutChangeEvent,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 
 import { HoleStatsLine } from './HoleStatsLine';
@@ -56,6 +54,8 @@ type Props = {
 };
 
 const IS_WEB = Platform.OS === 'web';
+const SWIPE_DISTANCE = 0.18;
+const SWIPE_VELOCITY = 0.3;
 
 export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props) {
   const { colors } = useTheme();
@@ -83,7 +83,7 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
     return i >= 0 ? i : 0;
   }, [holes, initialHole]);
 
-  const scrollRef = useRef<ScrollView>(null);
+  const [tx] = useState(() => new Animated.Value(0));
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(startIndex);
   const [hovered, setHovered] = useState(false);
@@ -92,45 +92,88 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
   const maxHeight = heights.reduce((m, h) => (h > m ? h : m), 0);
   const count = holes.length;
 
-  // Reset to the requested hole when the sheet (re)opens. Adjusting
-  // state during render — not in an effect — is the React-recommended
-  // way to reset state in response to a prop change, and sidesteps the
-  // cascading-render lint on setState-in-effect.
+  const animateTo = useCallback(
+    (i: number) => {
+      const clamped = Math.max(0, Math.min(count - 1, i));
+      setIndex(clamped);
+      Animated.timing(tx, {
+        toValue: -clamped * width,
+        duration: 240,
+        useNativeDriver: false,
+      }).start();
+    },
+    [count, width, tx]
+  );
+
+  // PanResponder pager: a swipe advances at most one hole (drag clamped to
+  // ±1 page), so a fast flick can't skip several holes.
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_e, g) =>
+          Math.abs(g.dx) > Math.abs(g.dy) && Math.abs(g.dx) > 8,
+        onPanResponderMove: (_e, g) => {
+          if (!width) return;
+          const base = -index * width;
+          let dx = g.dx;
+          if (dx > width) dx = width + (dx - width) * 0.2;
+          if (dx < -width) dx = -width + (dx + width) * 0.2;
+          let val = base + dx;
+          const lower = -(count - 1) * width;
+          if (val > 0) val = val * 0.2;
+          else if (val < lower) val = lower + (val - lower) * 0.2;
+          tx.setValue(val);
+        },
+        onPanResponderRelease: (_e, g) => {
+          if (!width) return;
+          let target = index;
+          if (g.dx <= -width * SWIPE_DISTANCE || g.vx <= -SWIPE_VELOCITY)
+            target += 1;
+          else if (g.dx >= width * SWIPE_DISTANCE || g.vx >= SWIPE_VELOCITY)
+            target -= 1;
+          animateTo(target);
+        },
+        onPanResponderTerminate: () => animateTo(index),
+      }),
+    [index, width, count, tx, animateTo]
+  );
+
+  // Reset to the requested hole when the sheet (re)opens (state during
+  // render — the React-recommended reset pattern; avoids setState-in-effect).
   const [wasVisible, setWasVisible] = useState(visible);
   if (visible !== wasVisible) {
     setWasVisible(visible);
     if (visible) setIndex(startIndex);
   }
 
-  // Snap to the requested hole once width is known (no animation). Only
-  // depends on visibility + width so user-driven index changes don't
-  // re-trigger it.
+  // Position the track on open / once width is measured (no animation).
   useEffect(() => {
     if (visible && width > 0) {
-      requestAnimationFrame(() =>
-        scrollRef.current?.scrollTo({ x: startIndex * width, animated: false })
-      );
+      tx.setValue(-startIndex * width);
     }
-  }, [visible, width, startIndex]);
+  }, [visible, width, startIndex, tx]);
 
-  // Web keyboard: ← / → step holes, Escape closes.
+  // Web keyboard: ← / → step one hole, Escape closes.
   useEffect(() => {
     if (!IS_WEB || !visible) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowLeft') {
-        setIndex((i) => stepTo(i - 1, count, width, scrollRef));
-      } else if (e.key === 'ArrowRight') {
-        setIndex((i) => stepTo(i + 1, count, width, scrollRef));
+      if (e.key === 'Escape') {
+        onClose();
+        return;
       }
+      if (e.key === 'ArrowLeft') animateTo(index - 1);
+      else if (e.key === 'ArrowRight') animateTo(index + 1);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [visible, count, width, onClose]);
+  }, [visible, onClose, index, animateTo]);
 
   function onViewportLayout(e: LayoutChangeEvent) {
     const w = e.nativeEvent.layout.width;
-    if (w && Math.abs(w - width) > 0.5) setWidth(w);
+    if (w && Math.abs(w - width) > 0.5) {
+      setWidth(w);
+      tx.setValue(-index * w);
+    }
   }
 
   function setPaneHeight(i: number, h: number) {
@@ -140,26 +183,6 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
       next[i] = h;
       return next;
     });
-  }
-
-  function goTo(i: number) {
-    const clamped = Math.max(0, Math.min(count - 1, i));
-    setIndex(clamped);
-    if (width) scrollRef.current?.scrollTo({ x: clamped * width, animated: true });
-  }
-
-  function onMomentumEnd(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (!width) return;
-    const i = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (i !== index) setIndex(Math.max(0, Math.min(count - 1, i)));
-  }
-
-  // Web's paging ScrollView doesn't reliably emit onMomentumScrollEnd, so we
-  // also derive the active hole from onScroll so the header + dots update.
-  function onScroll(e: NativeSyntheticEvent<NativeScrollEvent>) {
-    if (!width) return;
-    const i = Math.round(e.nativeEvent.contentOffset.x / width);
-    if (i !== index) setIndex(Math.max(0, Math.min(count - 1, i)));
   }
 
   const hoverProps = IS_WEB
@@ -201,15 +224,16 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
             style={styles.viewport}
             onLayout={onViewportLayout}
             {...hoverProps}>
-            <ScrollView
-              ref={scrollRef}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              scrollEventThrottle={16}
-              onScroll={onScroll}
-              onMomentumScrollEnd={onMomentumEnd}
-              style={maxHeight ? { height: maxHeight } : undefined}>
+            <Animated.View
+              style={[
+                styles.track,
+                {
+                  width: width ? width * count : undefined,
+                  height: maxHeight || undefined,
+                  transform: [{ translateX: tx }],
+                },
+              ]}
+              {...pan.panHandlers}>
               {width > 0
                 ? holes.map((hole, i) => (
                     <View
@@ -294,12 +318,12 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
                     </View>
                   ))
                 : null}
-            </ScrollView>
+            </Animated.View>
 
             {IS_WEB && hovered && index > 0 ? (
               <Pressable
                 style={[styles.arrow, styles.arrowPrev]}
-                onPress={() => goTo(index - 1)}
+                onPress={() => animateTo(index - 1)}
                 accessibilityRole="button"
                 accessibilityLabel="Previous hole">
                 <Text style={styles.arrowText}>‹</Text>
@@ -308,7 +332,7 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
             {IS_WEB && hovered && index < count - 1 ? (
               <Pressable
                 style={[styles.arrow, styles.arrowNext]}
-                onPress={() => goTo(index + 1)}
+                onPress={() => animateTo(index + 1)}
                 accessibilityRole="button"
                 accessibilityLabel="Next hole">
                 <Text style={styles.arrowText}>›</Text>
@@ -320,7 +344,7 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
             {holes.map((hole, i) => (
               <Pressable
                 key={hole.number}
-                onPress={() => goTo(i)}
+                onPress={() => animateTo(i)}
                 hitSlop={6}
                 accessibilityRole="button"
                 accessibilityState={{ selected: i === index }}
@@ -335,17 +359,6 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
       </View>
     </Modal>
   );
-}
-
-function stepTo(
-  next: number,
-  count: number,
-  width: number,
-  ref: React.RefObject<ScrollView | null>
-): number {
-  const clamped = Math.max(0, Math.min(count - 1, next));
-  if (width) ref.current?.scrollTo({ x: clamped * width, animated: true });
-  return clamped;
 }
 
 function makeStyles(colors: ThemeColors) {
@@ -405,6 +418,10 @@ function makeStyles(colors: ThemeColors) {
     },
     viewport: {
       position: 'relative',
+      overflow: 'hidden',
+    },
+    track: {
+      flexDirection: 'row',
     },
     page: {
       justifyContent: 'center',

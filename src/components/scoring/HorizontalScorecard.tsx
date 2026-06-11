@@ -72,6 +72,8 @@ type Props = {
 type GridProps = {
   round: Round;
   range: HoleRange;
+  /** Fit the grid to the container width (no horizontal scroll). */
+  fit?: boolean;
   currentHoleNumber?: number;
   onHolePress?: (holeNumber: number) => void;
   onPressHoleDetail?: (holeNumber: number) => void;
@@ -111,6 +113,7 @@ export function HorizontalScorecard({
         <ScorecardGrid
           round={round}
           range={range ?? 'all'}
+          fit
           currentHoleNumber={currentHoleNumber}
           onHolePress={onHolePress}
           onPressHoleDetail={onPressHoleDetail}
@@ -191,13 +194,14 @@ export function HorizontalScorecard({
 function ScorecardGrid({
   round,
   range,
+  fit,
   currentHoleNumber,
   onHolePress,
   onPressHoleDetail,
   onPressParticipant,
 }: GridProps) {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
+  const styles = useMemo(() => makeStyles(colors, fit), [colors, fit]);
 
   const resolver = useParticipantResolver(round.playerIds ?? []);
   const isScramble =
@@ -364,15 +368,9 @@ function ScorecardGrid({
     return null;
   }
 
-  return (
-    <View style={styles.wrap}>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        bounces={false}
-        contentContainerStyle={styles.scrollContent}>
-        <View>
-          <HoleHeaderRow
+  const grid = (
+    <View>
+      <HoleHeaderRow
             visibleHoles={visibleHoles}
             totals={totals}
             styles={styles}
@@ -528,8 +526,25 @@ function ScorecardGrid({
               </View>
             );
           })}
-        </View>
-      </ScrollView>
+    </View>
+  );
+
+  // Fit mode (feed) renders the grid at the container width — no inner
+  // horizontal scroll, so it can't fight the content pager's swipe. Other
+  // modes keep the scrollable fixed-width grid.
+  return (
+    <View style={styles.wrap}>
+      {fit ? (
+        grid
+      ) : (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          contentContainerStyle={styles.scrollContent}>
+          {grid}
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -783,7 +798,16 @@ function Cell({ children, label, style }: CellProps) {
   return <View style={style}>{children}</View>;
 }
 
-function makeStyles(colors: ThemeColors) {
+function makeStyles(colors: ThemeColors, fit = false) {
+  // Feed 'single' mode fits the grid to the content width: hole columns
+  // flex, label/total columns trimmed — so it never needs a horizontal
+  // scroll. Editing/detail modes keep fixed widths + scroll.
+  const holeSize = fit
+    ? ({ flexGrow: 1, flexBasis: 0, minWidth: 0 } as const)
+    : ({ width: 26 } as const);
+  const labelW = fit ? 44 : 56;
+  const totW = fit ? 34 : 46;
+  const totOutInW = fit ? 30 : 42;
   return StyleSheet.create({
     wrap: {
       paddingHorizontal: 14,
@@ -819,7 +843,7 @@ function makeStyles(colors: ThemeColors) {
       borderTopColor: colors.hairline,
     },
     cellLabel: {
-      width: 56,
+      width: labelW,
       paddingLeft: 4,
       paddingVertical: 5,
       flexDirection: 'row',
@@ -848,7 +872,7 @@ function makeStyles(colors: ThemeColors) {
       letterSpacing: 0.4,
     },
     cellHead: {
-      width: 26,
+      ...holeSize,
       paddingVertical: 4,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -888,7 +912,7 @@ function makeStyles(colors: ThemeColors) {
       paddingTop: 8,
     },
     cellYds: {
-      width: 26,
+      ...holeSize,
       paddingVertical: 3,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -899,7 +923,7 @@ function makeStyles(colors: ThemeColors) {
       fontWeight: '700',
     },
     cellPar: {
-      width: 26,
+      ...holeSize,
       paddingVertical: 5,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -911,7 +935,7 @@ function makeStyles(colors: ThemeColors) {
       color: colors.textTitle,
     },
     cellHcp: {
-      width: 26,
+      ...holeSize,
       paddingVertical: 3,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -923,7 +947,7 @@ function makeStyles(colors: ThemeColors) {
       color: colors.textMuted,
     },
     cellScorer: {
-      width: 26,
+      ...holeSize,
       paddingVertical: 7,
       paddingHorizontal: 2,
       alignItems: 'center',
@@ -939,11 +963,11 @@ function makeStyles(colors: ThemeColors) {
       // the row. OUT/IN columns use `cellTotOutIn` (narrower)
       // because their values cap around 3500. Layered last in the
       // style array so it overrides the base cell's width.
-      width: 46,
+      width: totW,
       backgroundColor: colors.chipBg,
     },
     cellTotOutIn: {
-      width: 42,
+      width: totOutInW,
       backgroundColor: colors.chipBg,
     },
     cellDivergent: {
