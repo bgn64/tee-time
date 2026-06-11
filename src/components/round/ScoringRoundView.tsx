@@ -84,52 +84,50 @@ export function ScoringRoundView({
   const isInProgress = !round.completedAt;
 
   return (
-    <View style={[styles.page, { paddingBottom: insets.bottom + 10 }]}>
-      <View style={styles.cardShadow}>
-        <View style={styles.card}>
-          <EditorialHeader
-            liveStripVisible={isInProgress}
-            topLineLeft={topLineLeft}
-            topLineRight={topLineRight}
-            title={round.course.name}
-            subtitle={subtitle}
-          />
+    <View style={[styles.page, { paddingBottom: insets.bottom + 14 }]}>
+      <View style={styles.card}>
+        <EditorialHeader
+          liveStripVisible={isInProgress}
+          topLineLeft={topLineLeft}
+          topLineRight={topLineRight}
+          title={round.course.name}
+          subtitle={subtitle}
+        />
 
-          <SwipeableHoleEditor
-            round={round}
-            currentHoleNumber={currentHoleNumber}
-            onChangeCurrentHole={onChangeCurrentHole}
-            onChangeScore={onChangeScore}
-            onPressTeeForScorer={onPressTeeForScorer}
-          />
+        <SwipeableHoleEditor
+          round={round}
+          currentHoleNumber={currentHoleNumber}
+          onChangeCurrentHole={onChangeCurrentHole}
+          onChangeScore={onChangeScore}
+          onPressTeeForScorer={onPressTeeForScorer}
+        />
 
-          <View style={styles.footer}>
-            <Pressable
-              style={styles.scorecardBtn}
-              onPress={() => setScorecardOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Open scorecard">
-              <Ionicons name="grid-outline" size={17} color={colors.primaryDark} />
-              <Text style={styles.scorecardBtnText}>Scorecard</Text>
-            </Pressable>
+        <View style={styles.footer}>
+          <Pressable
+            style={styles.scorecardBtn}
+            onPress={() => setScorecardOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Open scorecard">
+            <Ionicons name="grid-outline" size={17} color={colors.primaryDark} />
+            <Text style={styles.scorecardBtnText}>Scorecard</Text>
+          </Pressable>
 
-            <Pressable
-              style={styles.primaryBtn}
-              onPress={onPrimary}
-              accessibilityRole="button"
-              accessibilityLabel={primaryLabel}>
-              <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
-            </Pressable>
+          <Pressable
+            style={styles.primaryBtn}
+            onPress={onPrimary}
+            accessibilityRole="button"
+            accessibilityLabel={primaryLabel}>
+            <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
+          </Pressable>
 
-            <View style={styles.actionBarWrap}>
-              <RoundActionBar
-                liked={likedByMe}
-                likeCount={likeCount}
-                commentCount={commentCount}
-                onToggleLike={toggleLike}
-                onOpenComments={() => setCommentsOpen(true)}
-              />
-            </View>
+          <View style={styles.actionBarWrap}>
+            <RoundActionBar
+              liked={likedByMe}
+              likeCount={likeCount}
+              commentCount={commentCount}
+              onToggleLike={toggleLike}
+              onOpenComments={() => setCommentsOpen(true)}
+            />
           </View>
         </View>
       </View>
@@ -186,29 +184,21 @@ function makeStyles(colors: ThemeColors) {
     page: {
       flex: 1,
       backgroundColor: colors.background,
-      paddingHorizontal: 10,
-      paddingTop: 10,
-    },
-    cardShadow: {
-      flex: 1,
-      borderRadius: 18,
-      backgroundColor: colors.cardBg,
-      ...colors.shadowCard,
+      paddingHorizontal: 14,
+      paddingTop: 14,
     },
     card: {
+      // Match the feed card (RoundListCard): square corners, no border
+      // line, soft drop shadow only — just sized to fill the screen.
       flex: 1,
-      borderRadius: 18,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
       backgroundColor: colors.cardBg,
-      overflow: 'hidden',
+      ...colors.shadowCard,
     },
     footer: {
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.hairline,
       paddingHorizontal: 16,
       paddingTop: 10,
-      paddingBottom: 8,
       gap: 8,
     },
     scorecardBtn: {
