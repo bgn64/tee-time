@@ -94,10 +94,10 @@ export function ScorerSummaryRow({
 
   let teeChip: React.ReactNode = null;
   if (holeContext && tee && teeColor) {
-    // Per-hole meta line: [swatch] [tee name] · [per-hole yds] · Par X · Hcp Y.
-    // On editing surfaces (onPressTee set) the whole line is tappable with a
-    // "▾" caret so the tee can be changed mid-round; read-only surfaces render
-    // it as a plain, non-interactive line.
+    // Per-hole meta line. The swatch + tee name is a filled pill (matching
+    // the round-config tee pill); the per-hole yds · Par · Hcp follow as
+    // plain text. On editing surfaces (onPressTee set) the pill is a button
+    // with a "▾" caret so the tee can be changed mid-round.
     const parts: string[] = [];
     if (holeContext.yardage != null) {
       parts.push(`${holeContext.yardage.toLocaleString()} yds`);
@@ -106,12 +106,29 @@ export function ScorerSummaryRow({
     if (holeContext.handicapIndex != null) {
       parts.push(`Hcp ${holeContext.handicapIndex}`);
     }
-    const metaInner = (
-      <>
+    const teeNode = onPressTee ? (
+      <Pressable
+        onPress={onPressTee}
+        style={styles.teePill}
+        accessibilityRole="button"
+        accessibilityLabel={`Change tee from ${tee.name}`}>
+        <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
+        <Text style={styles.teePillText} numberOfLines={1}>
+          {tee.name}
+        </Text>
+        <Text style={styles.teeChev}>▾</Text>
+      </Pressable>
+    ) : (
+      <View style={styles.teeNameBare}>
         <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
         <Text style={styles.teeBareName} numberOfLines={1}>
           {tee.name}
         </Text>
+      </View>
+    );
+    teeChip = (
+      <View style={styles.teeBare}>
+        {teeNode}
         {parts.map((p) => (
           <View key={p} style={styles.teeMetaPart}>
             <Text style={styles.teeBareSep}>·</Text>
@@ -120,19 +137,7 @@ export function ScorerSummaryRow({
             </Text>
           </View>
         ))}
-        {onPressTee ? <Text style={styles.teeChev}>▾</Text> : null}
-      </>
-    );
-    teeChip = onPressTee ? (
-      <Pressable
-        onPress={onPressTee}
-        style={styles.teeBare}
-        accessibilityRole="button"
-        accessibilityLabel={`Change tee from ${tee.name}`}>
-        {metaInner}
-      </Pressable>
-    ) : (
-      <View style={styles.teeBare}>{metaInner}</View>
+      </View>
     );
   } else if (tee && teeColor && teeLabel) {
     // Two visual styles for the total-yardage variant:
@@ -245,6 +250,25 @@ function makeStyles(colors: ThemeColors) {
       gap: 6,
       alignSelf: 'flex-start',
       flexWrap: 'wrap',
+    },
+    teePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: colors.chipBg,
+    },
+    teePillText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    teeNameBare: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     teeMetaPart: {
       flexDirection: 'row',
