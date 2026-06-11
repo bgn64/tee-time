@@ -54,10 +54,10 @@ type Props = {
   /** Sub-label under the hero score (e.g. "THRU 11", "FINAL"). */
   scoreSub?: string;
   /**
-   * When set, the tee chip becomes a Pressable with a "▾" caret and
-   * (if `tee` is null) renders a dashed "+ Tee" placeholder so the
-   * picker stays reachable. Editing surfaces (Summary tab in scoring
-   * mode) wire this; other surfaces leave it undefined.
+   * When set, the tee display becomes tappable (with a "▾" caret) so the
+   * picker stays reachable, and a dashed "+ Tee" placeholder is shown when
+   * `tee` is null. Editing surfaces (live scoring + completed-round edit,
+   * on the per-hole rows) wire this; read-only surfaces leave it undefined.
    */
   onPressTee?: () => void;
   /**
@@ -65,9 +65,9 @@ type Props = {
    * (yardage · Par X · Hcp Y). When undefined, falls back to the
    * tee's total-yardage display (Summary tab behaviour).
    *
-   * Incompatible with `onPressTee` — the Holes tab doesn't expose
-   * the picker (users change tees from Summary). We don't enforce
-   * this at the type level, but callers should not set both.
+   * May be combined with `onPressTee`: on the per-hole scoring rows
+   * (where the Summary tab no longer exists) the per-hole line itself
+   * becomes the tappable tee-change affordance.
    */
   holeContext?: HoleContext;
 };
@@ -94,8 +94,10 @@ export function ScorerSummaryRow({
 
   let teeChip: React.ReactNode = null;
   if (holeContext && tee && teeColor) {
-    // Per-hole meta line: [swatch] [tee name] · [per-hole yds] · Par X · Hcp Y
-    // No pill, no chevron — viewing/scoring Holes tab share this look.
+    // Per-hole meta line: [swatch] [tee name] · [per-hole yds] · Par X · Hcp Y.
+    // On editing surfaces (onPressTee set) the whole line is tappable with a
+    // "▾" caret so the tee can be changed mid-round; read-only surfaces render
+    // it as a plain, non-interactive line.
     const parts: string[] = [];
     if (holeContext.yardage != null) {
       parts.push(`${holeContext.yardage.toLocaleString()} yds`);
@@ -104,8 +106,8 @@ export function ScorerSummaryRow({
     if (holeContext.handicapIndex != null) {
       parts.push(`Hcp ${holeContext.handicapIndex}`);
     }
-    teeChip = (
-      <View style={styles.teeBare}>
+    const metaInner = (
+      <>
         <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
         <Text style={styles.teeBareName} numberOfLines={1}>
           {tee.name}
@@ -118,7 +120,19 @@ export function ScorerSummaryRow({
             </Text>
           </View>
         ))}
-      </View>
+        {onPressTee ? <Text style={styles.teeChev}>▾</Text> : null}
+      </>
+    );
+    teeChip = onPressTee ? (
+      <Pressable
+        onPress={onPressTee}
+        style={styles.teeBare}
+        accessibilityRole="button"
+        accessibilityLabel={`Change tee from ${tee.name}`}>
+        {metaInner}
+      </Pressable>
+    ) : (
+      <View style={styles.teeBare}>{metaInner}</View>
     );
   } else if (tee && teeColor && teeLabel) {
     // Two visual styles for the total-yardage variant:
