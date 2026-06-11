@@ -5,48 +5,38 @@
  * State ② of the four-state round-detail model (in-progress +
  * editing). Composes:
  *
- *   - Native stack header with Finish in headerRight; back arrow
- *     reaches the hub naturally because format.tsx's Start handler
- *     calls navigation.reset to make the stack [hub, scoring]
- *     regardless of entry path.
- *   - Optional sub-toolbar below the header (range pill, only on
- *     18-hole courses) — kept out of the header so it can own its
- *     dropdown state.
- *   - <RoundDetailView isEditing> for the band + HoleNavBar +
- *     ScorerStack + ReadOnlyScorecard + CommentsSection, with the
- *     Abandon button passed in via `footerActions`.
- *   - Modals: ConfirmAbandonSheet, RangeDropdown, TeePickerSheet.
+ *   - Native stack header with the destructive "Abandon round" tucked
+ *     into a ⋯ overflow (headerRight). Back arrow reaches the hub
+ *     naturally because format.tsx's Start handler calls
+ *     navigation.reset to make the stack [hub, scoring] regardless of
+ *     entry path.
+ *   - <ScoringRoundView> — the shared edge-to-edge editing surface:
+ *     EditorialHeader + per-hole swipeable editing pager + footer
+ *     (Scorecard sheet button · Finish primary · Like/Comments). The
+ *     SUMMARY section and the Front/Back range pill were removed in the
+ *     redesign.
+ *   - Modals: ConfirmAbandonSheet, TeePickerSheet.
  *
- * Why this screen isn't *just* <RoundDetailView>: it owns the
- * pinned sub-toolbar (so the range pill stays visible during long
- * scrolls), the modal stack, and the RoundContext write-handler
- * wiring (setCustomHoleScore, setHoleRange, setParticipantTees,
- * etc). The shared component handles the scrollable content.
+ * This screen owns the RoundContext write-handler wiring
+ * (setCustomHoleScore, setParticipantTees, etc), the modal stack, and
+ * the Finish completion-gap check; ScoringRoundView handles the chrome.
  *
- * Round-ending exits flow only through Finish or Abandon. Hardware
- * back is intercepted on Android, and stack-level
- * `gestureEnabled: false` handles iOS swipe-back; both prevent
- * accidental round-loss. The header back arrow simply pops to the
- * hub — the round stays in flight and "Continue" brings the user
+ * Round-ending exits flow only through Finish (footer primary) or
+ * Abandon (⋯ overflow). Hardware back is intercepted on Android, and
+ * stack-level `gestureEnabled: false` handles iOS swipe-back; both
+ * prevent accidental round-loss. The header back arrow simply pops to
+ * the hub — the round stays in flight and "Continue" brings the user
  * right back.
  */
 
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import {
-  ActivityIndicator,
-  BackHandler,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
 
 import { ConfirmAbandonSheet } from '@/components/scoring/ConfirmAbandonSheet';
-import { RangeDropdown, rangeLabel } from '@/components/scoring/RangeDropdown';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
-import { RoundDetailView } from '@/components/round/RoundDetailView';
+import { HeaderOverflowMenu } from '@/components/round/HeaderOverflowMenu';
+import { ScoringRoundView } from '@/components/round/ScoringRoundView';
 import { useRound } from '@/library/golf/RoundContext';
 import {
   computeRoundCompletionGaps,
@@ -65,7 +55,6 @@ export default function ScoringScreen() {
     currentHoleHydrated,
     setCustomHoleScore,
     setCurrentHole,
-    setHoleRange,
     setParticipantTee,
     setParticipantTees,
     completeCurrentRound,
@@ -73,15 +62,12 @@ export default function ScoringScreen() {
   } = useRound();
 
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
-  const [rangeMenuOpen, setRangeMenuOpen] = useState(false);
   const [teeEditTarget, setTeeEditTarget] = useState<string | null>(null);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   // Per-hole-details rows + participant resolver are read here so
   // the Finish handler can synchronously compute missing-score AND
   // missing-stat warnings without spinning up another fetch.
-  // PowerSync dedupes queries; this subscription joins the same
-  // local SQLite watch the round's tabs already drive.
   const { rows: detailsRows } = useRoundHoleDetails(currentRound?.id ?? null);
   const resolverKeys = useMemo<string[]>(
     () => currentRound?.playerIds ?? [],
@@ -133,21 +119,18 @@ export default function ScoringScreen() {
   );
 
   // Bounce back to the score-tab root when there is no active round
-  // and PowerSync's local cache has been read. Covers Finish, Abandon,
-  // remote completion, and direct-URL loads with no active round.
-  // Replace (not dismissAll) to avoid POP_TO_TOP on a freshly-loaded
-  // stack with no entries beneath.
+  // and the local cache has been read. Covers Finish, Abandon, remote
+  // completion, and direct-URL loads with no active round. Replace (not
+  // dismissAll) to avoid POP_TO_TOP on a freshly-loaded stack with no
+  // entries beneath.
   //
-  // Mount-grace window: format.tsx's "Start round" handler calls
-  // navigation.reset to scoring immediately after startRound's
-  // local PowerSync write resolves. There's a brief tick between
-  // that write landing and RoundProvider's useQuery subscription
-  // firing to surface the new currentRound. Without the grace
-  // window, scoring would mount, see currentRound=null while
-  // roundHydrated=true (from a prior session), and bounce back
-  // to the hub before the subscription caught up. 120ms is well
-  // under perceptible latency and well over the subscription's
-  // typical settle time.
+  // Mount-grace window: format.tsx's "Start round" handler navigates to
+  // scoring immediately after startRound's local write resolves. There's
+  // a brief tick between that write landing and RoundProvider surfacing
+  // the new currentRound. Without the grace window, scoring would mount,
+  // see currentRound=null while roundHydrated=true (from a prior
+  // session), and bounce back to the hub before the subscription caught
+  // up. 120ms is well under perceptible latency.
   const [mountGraceExpired, setMountGraceExpired] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => setMountGraceExpired(true), 120);
@@ -186,8 +169,8 @@ export default function ScoringScreen() {
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
 
-  // Score-change handler wired into ScorerStack. Just upserts the
-  // score for the active hole; no longer auto-advances after entry.
+  // Score-change handler wired into the pager. Just upserts the score
+  // for the given hole; no longer auto-advances after entry.
   const handleChangeScore = (
     scorerId: string,
     holeNumber: number,
@@ -196,63 +179,37 @@ export default function ScoringScreen() {
     void setCustomHoleScore(scorerId, holeNumber, strokes);
   };
 
-  const abandonButton = (
-    <Pressable
-      style={styles.abandonBtn}
-      onPress={() => setAbandonConfirmVisible(true)}>
-      <Text style={styles.abandonBtnText}>Abandon round</Text>
-    </Pressable>
-  );
-
   return (
     <View style={styles.container}>
       <Stack.Screen
         options={{
           title: 'Round',
           headerRight: () => (
-            <Pressable onPress={() => handleFinish()} style={styles.finishBtn}>
-              <Text style={styles.finishBtnText}>Finish</Text>
-            </Pressable>
+            <HeaderOverflowMenu
+              items={[
+                {
+                  key: 'abandon',
+                  label: 'Abandon round',
+                  icon: 'trash-outline',
+                  destructive: true,
+                  onPress: () => setAbandonConfirmVisible(true),
+                },
+              ]}
+            />
           ),
         }}
       />
 
-      {round.course.holes.length >= 18 ? (
-        <View style={styles.subToolbar}>
-          <Pressable
-            style={[styles.rangePill, rangeMenuOpen && styles.rangePillActive]}
-            onPress={() => setRangeMenuOpen(true)}
-            hitSlop={4}>
-            <Text
-              style={[
-                styles.rangePillText,
-                rangeMenuOpen && styles.rangePillTextActive,
-              ]}>
-              {rangeLabel(round.holeRange)}
-            </Text>
-            <Text
-              style={[
-                styles.rangePillChev,
-                rangeMenuOpen && styles.rangePillChevActive,
-              ]}>
-              {rangeMenuOpen ? '▴' : '▾'}
-            </Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      <ScrollView contentContainerStyle={styles.content}>
-        <RoundDetailView
-          round={round}
-          isEditing
-          currentHoleNumber={currentHole.number}
-          onChangeCurrentHole={(n) => void setCurrentHole(n)}
-          onChangeScore={handleChangeScore}
-          onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
-          profileRoutePrefix="/(tabs)/(score)/profile"
-          footerActions={abandonButton}
-        />
-      </ScrollView>
+      <ScoringRoundView
+        round={round}
+        profileRoutePrefix="/(tabs)/(score)/profile"
+        currentHoleNumber={currentHole.number}
+        onChangeCurrentHole={(n) => void setCurrentHole(n)}
+        onChangeScore={handleChangeScore}
+        onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
+        primaryLabel="Finish round"
+        onPrimary={() => void handleFinish()}
+      />
 
       <ConfirmAbandonSheet
         visible={abandonConfirmVisible}
@@ -268,16 +225,6 @@ export default function ScoringScreen() {
         }}
       />
 
-      <RangeDropdown
-        visible={rangeMenuOpen}
-        current={round.holeRange}
-        onCancel={() => setRangeMenuOpen(false)}
-        onPick={(next) => {
-          setRangeMenuOpen(false);
-          void setHoleRange(next);
-        }}
-      />
-
       <TeePickerSheet
         visible={teeEditTarget != null}
         scorerName={(() => {
@@ -286,10 +233,8 @@ export default function ScoringScreen() {
             const team = round.teams?.find((t) => t.id === teeEditTarget);
             return team?.name ?? '';
           }
-          // Stroke: scorerId IS the participantKey; the team-avatar
-          // cluster carries the name, but for the picker title we
-          // just look up the first member's resolver name. Keeping
-          // simple — TeePickerSheet's scorerName is informational.
+          // Stroke: scorerId IS the participantKey; the picker title is
+          // informational, so we leave it blank rather than resolving.
           return '';
         })()}
         tees={round.course.tees ?? []}
@@ -313,12 +258,11 @@ export default function ScoringScreen() {
         onPick={(teeId) => {
           if (teeEditTarget) {
             if (isScramble) {
-              // Fan out to every team member so the whole team
-              // continues to share a tee. Single batched UPDATE so
-              // the JSON snapshot lands atomically (looping
-              // setParticipantTee would silently drop earlier
-              // updates because each call uses the same render-time
-              // participants snapshot).
+              // Fan out to every team member so the whole team continues
+              // to share a tee. Single batched UPDATE so the JSON
+              // snapshot lands atomically (looping setParticipantTee would
+              // silently drop earlier updates because each call uses the
+              // same render-time participants snapshot).
               const team = round.teams?.find((t) => t.id === teeEditTarget);
               const updates = (team?.playerIds ?? []).map((pid) => ({
                 participantKey: pid,
@@ -346,67 +290,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    subToolbar: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingTop: 8,
-      paddingBottom: 4,
-    },
-    finishBtn: {
-      backgroundColor: colors.primary,
-      paddingHorizontal: 14,
-      paddingVertical: 7,
-      borderRadius: 999,
-      marginRight: 4,
-    },
-    finishBtnText: {
-      color: '#fff',
-      fontWeight: '800',
-      fontSize: 12,
-      letterSpacing: 0.4,
-    },
-    rangePill: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 3,
-      backgroundColor: colors.chipBg,
-      paddingHorizontal: 8,
-      paddingVertical: 4,
-      borderRadius: 6,
-    },
-    rangePillActive: {
-      backgroundColor: colors.primary,
-    },
-    rangePillText: {
-      fontSize: 9.5,
-      fontWeight: '800',
-      letterSpacing: 0.4,
-      color: colors.primaryDark,
-    },
-    rangePillTextActive: { color: '#fff' },
-    rangePillChev: {
-      fontSize: 10,
-      color: colors.textMuted,
-      fontWeight: '800',
-    },
-    rangePillChevActive: { color: '#fff' },
-    content: {
-      padding: 14,
-      paddingBottom: 40,
-    },
-    abandonBtn: {
-      borderWidth: 1,
-      borderColor: '#f5cccc',
-      borderRadius: 11,
-      paddingVertical: 11,
-      alignItems: 'center',
-    },
-    abandonBtnText: {
-      color: '#d54848',
-      fontWeight: '800',
-      fontSize: 12,
     },
   });
 }

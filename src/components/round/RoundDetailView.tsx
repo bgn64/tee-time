@@ -3,28 +3,18 @@
  * every detail-view state in the app:
  *
  *   ① Completed + viewing  (feed / Previous-rounds read-only)
- *   ② In-progress + editing (scoring tab — wires `isEditing=true`
- *      + handlers + topActions + footerActions)
- *   ③ Completed + editing  (Previous-rounds Edit route)
  *   ④ In-progress + viewing (feed live round)
  *
- * Phase 1 redesign — like `RoundListCard`, this is now an
- * edge-to-edge tabbed surface (Summary · Scorecard · Holes) hosted
- * inside the same `TabbedRoundShell` so both surfaces share the
- * same chrome.
- *
- * The Holes tab body during editing intentionally keeps the legacy
- * `<HoleNavBar>` + `<ScorerStack>` arrangement so score entry stays
- * functional through Phase 1. Phase 3 replaces that with
- * `HoleStepperCombo` + per-scorer entry blocks; Phases 4–6 fill in
- * achievement tags and scramble shot attribution. The viewing
- * variant (no editing) renders a "Coming soon" placeholder until
- * Phase 3 lands the read-only viewer.
+ * Read-only surface. Like `RoundListCard`, it's an edge-to-edge tabbed
+ * surface (Summary · Scorecard · Holes) hosted inside `TabbedRoundShell`
+ * so the surfaces share the same chrome. The editing states (② live
+ * scoring, ③ completed-round edit) now use the dedicated
+ * `ScoringRoundView` instead of this component.
  *
  * Action bar (Like + Comments) sits at the bottom of the card; the
  * Comments tap opens a bottom-sheet modal. `topActions` and
- * `footerActions` slots are preserved so the scoring route can keep
- * mounting Finish + Abandon outside the card.
+ * `footerActions` slots host the route-specific Edit / Delete buttons
+ * on the viewing screens.
  */
 
 import { useRouter } from 'expo-router';
@@ -35,7 +25,6 @@ import { CommentsSheet } from './CommentsSheet';
 import { EditorialHeader } from './EditorialHeader';
 import { HolesTabContent } from './HolesTabContent';
 import { RoundActionBar } from './RoundActionBar';
-import { ScoringHolesBody } from './ScoringHolesBody';
 import { SummaryTabContent } from './SummaryTabContent';
 import { TabbedRoundShell } from './TabbedRoundShell';
 import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
@@ -61,42 +50,17 @@ type Props = {
    */
   profileRoutePrefix: string;
 
-  /** True when score-entry affordances should be visible. */
-  isEditing?: boolean;
-  /**
-   * Hole the editing UI is focused on. Drives both the HoleNavBar
-   * and the score-chips' active value. Also drives the scorecard's
-   * current-hole row tint in editing mode.
-   */
-  currentHoleNumber?: number;
-  /** Required when `isEditing` for the HoleNavBar arrows. */
-  onChangeCurrentHole?: (n: number) => void;
-
-  /** Optional slot above the card (e.g. Finish / Done / Edit buttons). */
+  /** Optional slot above the card (e.g. Edit button). */
   topActions?: ReactNode;
-  /** Optional slot below the card (e.g. Delete / Abandon buttons). */
+  /** Optional slot below the card (e.g. Delete button). */
   footerActions?: ReactNode;
-
-  /** Editing-only score-change handler. Wired into ScorerStack. */
-  onChangeScore?: (
-    scorerId: string,
-    holeNumber: number,
-    strokes: number
-  ) => void;
-  /** Editing-only tee-pill tap handler. Wired into ScorerStack. */
-  onPressTeeForScorer?: (scorerId: string) => void;
 };
 
 export function RoundDetailView({
   round,
   profileRoutePrefix,
-  isEditing = false,
-  currentHoleNumber,
-  onChangeCurrentHole,
   topActions,
   footerActions,
-  onChangeScore,
-  onPressTeeForScorer,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -116,26 +80,12 @@ export function RoundDetailView({
   const subtitle = useMemo(() => deriveSubtitle(round), [round]);
   const isInProgress = !round.completedAt;
 
-  // Holes tab visibility: editing mode always shows it (it's where
-  // score entry lives). Viewing mode only shows it when at least one
-  // scorer has tracked-stat data — otherwise the tab has nothing
-  // useful to render and we hide it to keep the segmented control
-  // focused on tabs with real content.
-  const showHolesTab = isEditing || engagement.hasAny;
-  const holesBody = showHolesTab
-    ? isEditing && currentHoleNumber != null && onChangeCurrentHole
-      ? (
-          <ScoringHolesBody
-            round={round}
-            currentHoleNumber={currentHoleNumber}
-            onChangeCurrentHole={onChangeCurrentHole}
-            onChangeScore={onChangeScore}
-          />
-        )
-      : (
-          <HolesTabContent round={round} />
-        )
-    : undefined;
+  // Holes tab visibility: shown only when at least one scorer has
+  // tracked-stat data — otherwise the tab has nothing useful to render
+  // and we hide it to keep the segmented control focused on tabs with
+  // real content.
+  const showHolesTab = engagement.hasAny;
+  const holesBody = showHolesTab ? <HolesTabContent round={round} /> : undefined;
 
   return (
     <View style={styles.shell}>
@@ -150,18 +100,11 @@ export function RoundDetailView({
           subtitle={subtitle}
         />
         <TabbedRoundShell
-          summary={
-            <SummaryTabContent
-              round={round}
-              onPressTeeForScorer={isEditing ? onPressTeeForScorer : undefined}
-            />
-          }
+          summary={<SummaryTabContent round={round} />}
           scorecard={
             <View style={styles.tabBody}>
               <HorizontalScorecard
                 round={round}
-                currentHoleNumber={currentHoleNumber}
-                onHolePress={onChangeCurrentHole}
                 onPressParticipant={(userId) =>
                   router.push(`${profileRoutePrefix}/${userId}` as never)
                 }
@@ -236,14 +179,6 @@ function makeStyles(colors: ThemeColors) {
     tabBody: {
       paddingHorizontal: 4,
       paddingBottom: 8,
-    },
-    holesEditing: {
-      // Holes tab in editing mode: HoleNavBar + ScorerStack with
-      // score-chip rows. Preserves the existing entry experience
-      // until Phase 3 replaces it.
-      paddingHorizontal: 4,
-      paddingBottom: 8,
-      gap: 10,
     },
     actionsSlot: {
       // Lets the route wrapper inject any padding it wants on the
