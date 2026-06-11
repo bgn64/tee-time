@@ -131,16 +131,23 @@ export function SwipeableCardContent({ panes }: Props) {
   }
 
   // Web-only hover handlers (no-ops on native) so the edge arrows fade in.
+  // Pointer events (not a Pressable wrapper): a Pressable around the pager
+  // would claim the touch responder on RN-Web and the PanResponder swipe
+  // would never engage.
   const hoverProps = IS_WEB
-    ? { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) }
+    ? {
+        onPointerEnter: () => setHovered(true),
+        onPointerLeave: () => setHovered(false),
+      }
     : {};
 
   return (
     <View style={styles.wrap}>
-      <Pressable
+      <View
         style={styles.viewport}
         onLayout={onViewportLayout}
-        {...hoverProps}>
+        {...hoverProps}
+        {...pan.panHandlers}>
         <Animated.View
           style={[
             styles.track,
@@ -149,8 +156,7 @@ export function SwipeableCardContent({ panes }: Props) {
               height: maxHeight || undefined,
               transform: [{ translateX: tx }],
             },
-          ]}
-          {...pan.panHandlers}>
+          ]}>
           {width > 0
             ? panes.map((pane, i) => (
                 <View
@@ -185,7 +191,7 @@ export function SwipeableCardContent({ panes }: Props) {
             <Text style={styles.arrowText}>›</Text>
           </Pressable>
         ) : null}
-      </Pressable>
+      </View>
 
       <View style={styles.dots}>
         {panes.map((pane, i) => (
