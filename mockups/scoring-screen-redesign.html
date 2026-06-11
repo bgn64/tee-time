@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tee-Time · Scoring screen redesign</title>
+<!--
+  Scoring / editing screen redesign mockup.
+
+  Goal: bring the feed-card patterns to the live-scoring screen.
+    1. Established header + footer (header mirrors the feed card's
+       EditorialHeader; footer is an action bar).
+    2. The swipeable "content" section is a per-hole pager (like the
+       feed's hole-detail sheet) — swipe one hole at a time — but each
+       hole shows EDITING controls (score chips + stat inputs) under a
+       small "Hole N" header, instead of read-only detail.
+    3. The SUMMARY section is gone.
+    4. Quick full scorecard access: a "Scorecard" button at the top of
+       the footer opens a bottom sheet that swipes between the Front 9
+       and Back 9 (read-only, fit-to-width).
+    5. No card — the surface fills the screen edge-to-edge (no border /
+       shadow), since this isn't a feed screen.
+
+  Editing controls are interactive (tap chips, steppers, radios) so the
+  per-hole editing layout can be felt. Tokens mirror
+  src/library/theme/themes.ts; controls mirror ScoreChipRow /
+  HoleDetailRow / ScoreEntryAccordion.
+-->
+<style>
+  :root, [data-theme="light"] {
+    --bg:#f6f7f2; --primary:#2f7d4b; --primary-dark:#14543a; --accent:#d94835;
+    --text-title:#123322; --text-body:#39423d; --text-muted:#718077;
+    --card-bg:#ffffff; --chip-bg:#edf1e9; --border:#dce2d8; --hairline:#ebeee6;
+    --tee-blue:#4b8fd1; --tee-white:#8a8f81; --tee-red:#c9442f;
+    --stat-good:#2f7d4b; --stat-bad:#c0492f;
+    --shadow-card:0 10px 14px rgba(20,84,58,0.10); --page-text:#2b332e;
+  }
+  [data-theme="dark"] {
+    --bg:#0f1419; --primary:#91d45f; --primary-dark:#66b34e; --accent:#f97066;
+    --text-title:#edf5e8; --text-body:#cbd6cf; --text-muted:#91a095;
+    --card-bg:#18222b; --chip-bg:#24313a; --border:#34424b; --hairline:rgba(255,255,255,.06);
+    --tee-blue:#6aa9e5; --tee-white:#c2c8b8; --tee-red:#f08e7e;
+    --stat-good:#8fce6a; --stat-bad:#f3a59f;
+    --shadow-card:0 10px 16px rgba(0,0,0,.45); --page-text:#cdd6cf;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--page-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; padding: 26px 16px 70px;
+  }
+  .page-head { max-width: 820px; margin: 0 auto 8px; }
+  .page-head h1 { font-size: 20px; margin: 0 0 6px; color: var(--text-title); letter-spacing: -.3px; }
+  .page-head p  { font-size: 13px; line-height: 1.55; margin: 0; color: var(--text-muted); max-width: 660px; }
+  .toolbar { max-width: 820px; margin: 14px auto 0; display: flex; gap: 10px; }
+  .btn { font: inherit; font-size: 12.5px; font-weight: 700; border: 1px solid var(--border);
+    background: var(--card-bg); color: var(--text-title); padding: 8px 13px; border-radius: 9px; cursor: pointer; }
+  .btn[aria-pressed="true"] { background: var(--primary); color:#fff; border-color: var(--primary); }
+
+  .stage { display: flex; justify-content: center; margin-top: 26px; }
+
+  /* ---- Device frame; the screen inside is EDGE-TO-EDGE (no card) ---- */
+  .phone {
+    width: 392px; max-width: 100%; background: #000; border-radius: 38px; padding: 10px;
+    box-shadow: 0 20px 50px rgba(0,0,0,.25);
+  }
+  .screen {
+    position: relative; background: var(--card-bg); border-radius: 30px; overflow: hidden;
+    height: 760px; display: flex; flex-direction: column;
+  }
+
+  /* ---- Native stack header ---- */
+  .nav {
+    flex: none; display: flex; align-items: center; gap: 8px;
+    padding: 12px 12px 10px; border-bottom: 1px solid var(--hairline);
+  }
+  .nav .back { font-size: 22px; color: var(--text-title); width: 26px; text-align: center; }
+  .nav .nav-title { font-size: 16px; font-weight: 800; color: var(--text-title); }
+  .nav .spacer { flex: 1; }
+  .nav .more { width: 32px; height: 32px; border: none; background: none; cursor: pointer;
+    font-size: 22px; line-height: 1; color: var(--text-title); font-weight: 900; border-radius: 999px; }
+  .nav .more:hover { background: var(--chip-bg); }
+
+  /* overflow menu (⋯ → Abandon) */
+  .overflow-backdrop { position: absolute; inset: 0; z-index: 39; display: none; }
+  .overflow-backdrop.open { display: block; }
+  .overflow { position: absolute; top: 46px; right: 10px; z-index: 40; min-width: 176px; display: none;
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 5px;
+    box-shadow: 0 12px 28px rgba(0,0,0,.20); }
+  .overflow.open { display: block; }
+  .overflow-item { display: flex; align-items: center; gap: 9px; width: 100%; border: none; background: none;
+    cursor: pointer; font: inherit; font-size: 13.5px; font-weight: 700; color: var(--text-title);
+    padding: 10px 11px; border-radius: 8px; text-align: left; }
+  .overflow-item:hover { background: var(--chip-bg); }
+  .overflow-item.destructive { color: var(--accent); }
+  .overflow-item .ico { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+  /* ---- Editorial header (mirrors the feed card) ---- */
+  .ed-header { flex: none; padding: 14px 18px 10px; }
+  .live-strip { flex: none; height: 4px; background: var(--primary); width: 100%; position: relative; overflow: hidden; }
+  .live-strip::after { content:""; position:absolute; inset:0; background:linear-gradient(90deg,transparent,rgba(255,255,255,.55),transparent); transform: translateX(-100%); animation: shine 2.4s ease-in-out infinite; }
+  @keyframes shine { 60%,100%{ transform: translateX(100%);} }
+  .top-row { display: flex; align-items: center; gap: 6px; }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .top-text { font-size: 11.5px; color: var(--text-muted); font-weight: 700; letter-spacing: .3px; }
+  .top-sep { font-size: 11.5px; color: var(--text-muted); font-weight: 700; }
+  .course-title { margin: 4px 0 0; font-size: 20px; line-height: 22px; color: var(--text-title); font-weight: 900; letter-spacing: -.4px; }
+  .subtitle { margin: 4px 0 0; font-size: 11.5px; color: var(--text-muted); font-weight: 500; }
+
+  /* ---- Content: per-hole pager (edit controls) ---- */
+  .content { flex: 1; position: relative; border-top: 1px solid var(--hairline); min-height: 0; display: flex; flex-direction: column; }
+  .viewport { position: relative; overflow: hidden; flex: 1; cursor: grab; }
+  .viewport:active { cursor: grabbing; }
+  .track { display: flex; height: 100%; will-change: transform; }
+  .pane { flex: 0 0 100%; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+  .pane::-webkit-scrollbar { display: none; }
+  .pane-inner { padding: 6px 18px 10px; }
+
+  .hole-head { text-align: center; padding: 8px 0 4px; }
+  .hole-title { font-size: 15px; font-weight: 900; color: var(--text-title); letter-spacing: -.2px; }
+
+  /* scorer edit block (mirrors ScoreEntryAccordion) */
+  .scorer-block { padding: 13px 0; border-top: 1px solid var(--hairline); }
+  .scorer-row { display: flex; align-items: center; gap: 12px; }
+  .avatar-cluster { flex: none; }
+  .avatar { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--card-bg);
+    display: inline-flex; align-items: center; justify-content: center; color:#fff; font-weight: 800; font-size: 12px; }
+  .scorer-body { flex: 1; min-width: 0; }
+  .scorer-name { font-size: 14px; font-weight: 800; color: var(--text-title); }
+  .tee-bare { margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tee-dot { width: 9px; height: 9px; border-radius: 50%; }
+  .tee-name, .tee-yds { font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
+  .tee-sep { font-size: 11.5px; color: var(--border); }
+  .score-col { text-align: right; flex: none; }
+  .score-text { font-size: 28px; font-weight: 800; line-height: 30px; color: var(--primary-dark); }
+  .score-text.even { color: var(--text-body); }
+  .score-text.over { color: var(--text-title); }
+  .score-sub { margin-top: 3px; font-size: 10px; font-weight: 700; letter-spacing: .4px; color: var(--text-muted); }
+
+  /* score chips (mirrors ScoreChipRow) */
+  .chip-row { margin-top: 12px; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+  .chip { height: 38px; min-width: 40px; padding: 0 6px; border-radius: 9px; background: var(--chip-bg);
+    border: none; cursor: pointer; font: inherit; font-size: 12px; font-weight: 800; color: var(--primary-dark); }
+  .chip.active { background: var(--primary); color:#fff; }
+  .chip.over { background: var(--accent); color:#fff; }
+  [data-theme="dark"] .chip.active, [data-theme="dark"] .chip.over { color:#0f1419; }
+
+  /* stat rows (mirrors HoleDetailRow) */
+  .stat-section { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .stat-row { display: flex; align-items: center; gap: 10px; min-height: 40px; }
+  .stat-label { flex: 1; font-size: 13px; font-weight: 700; color: var(--text-body); }
+  .radio-group { display: flex; gap: 16px; }
+  .radio-opt { display: flex; align-items: center; gap: 7px; padding: 4px; cursor: pointer; }
+  .radio-ring { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border);
+    display: flex; align-items: center; justify-content: center; }
+  .radio-ring.good { border-color: var(--primary); }
+  .radio-ring.bad { border-color: var(--accent); }
+  .radio-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .radio-dot.good { background: var(--primary); }
+  .radio-dot.bad { background: var(--accent); }
+  .radio-label { font-size: 13px; font-weight: 700; color: var(--text-body); }
+  .radio-opt.selected .radio-label { color: var(--text-title); }
+  .stepper { display: flex; align-items: center; background: var(--chip-bg); border-radius: 999px; padding: 3px; }
+  .step-btn { width: 30px; height: 30px; border-radius: 999px; background: var(--card-bg); border: none; cursor: pointer;
+    font-size: 16px; font-weight: 900; color: var(--text-title); line-height: 18px; }
+  .step-val { min-width: 32px; text-align: center; padding: 0 6px; font-size: 14px; font-weight: 900; color: var(--text-title); }
+
+  /* content dots + arrows */
+  .dots { flex: none; display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; align-items: center;
+    padding: 9px 18px; border-top: 1px solid var(--hairline); }
+  .dot { width: 6px; height: 6px; border-radius: 3px; background: var(--border); border: none; cursor: pointer; padding: 0; }
+  .dot.active { width: 18px; background: var(--primary-dark); }
+  [data-theme="dark"] .dot.active { background: var(--primary); }
+  .arrow { position: absolute; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; background: var(--card-bg); color: var(--text-title);
+    border: 1px solid var(--border); box-shadow: 0 2px 6px rgba(0,0,0,.10); font-size: 17px; font-weight: 900;
+    cursor: pointer; z-index: 4; opacity: 0; transition: opacity .15s; }
+  .arrow.prev { left: 8px; } .arrow.next { right: 8px; } .arrow.hidden { display: none; }
+  @media (hover:hover) and (pointer:fine){ .viewport:hover .arrow:not(.hidden){ opacity: 1; } .arrow:hover{ border-color: var(--primary);} }
+  @media (hover:none),(pointer:coarse){ .arrow{ display:none !important; } }
+
+  /* ---- Footer ---- */
+  .footer { flex: none; border-top: 1px solid var(--hairline); padding: 10px 16px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .scorecard-btn { display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--chip-bg); border: none; border-radius: 12px; padding: 13px; cursor: pointer;
+    font: inherit; font-size: 13px; font-weight: 800; color: var(--primary-dark); }
+  [data-theme="dark"] .scorecard-btn { color: var(--text-title); }
+  .scorecard-btn .ico { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .finish-primary { background: var(--primary); color:#fff; border: none; border-radius: 12px; padding: 14px;
+    cursor: pointer; font: inherit; font-size: 15px; font-weight: 800; }
+  [data-theme="dark"] .finish-primary { color: #0f1419; }
+  /* Like + Comments at the very bottom (mirrors the feed card's RoundActionBar). */
+  .action-bar { display: flex; border-top: 1px solid var(--hairline); margin: 6px -16px -14px; padding: 4px 0 6px; }
+  .action-bar .seg { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 8px 0; background: none; border: none; cursor: pointer; }
+  .action-bar .ico { width: 22px; height: 22px; stroke: var(--text-title); fill: none; stroke-width: 1.7; }
+  .action-bar .seg-label { font-size: 11px; font-weight: 700; color: var(--text-title); }
+
+  /* ---- Scorecard bottom sheet ---- */
+  .sheet-overlay { position: absolute; inset: 0; z-index: 30; display: none; }
+  .sheet-overlay.open { display: block; }
+  .sheet-backdrop { position: absolute; inset: 0; background: rgba(0,0,0,.4); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 88%; display: flex; flex-direction: column;
+    background: var(--card-bg); border-radius: 20px 20px 0 0; box-shadow: 0 -12px 34px rgba(0,0,0,.3); animation: up .26s cubic-bezier(.22,.61,.36,1); }
+  @keyframes up { from { transform: translateY(100%);} to { transform: translateY(0);} }
+  .sheet-grab { width: 38px; height: 4px; border-radius: 2px; background: var(--border); margin: 8px auto 4px; }
+  .sheet-x { position: absolute; right: 12px; top: 10px; border: none; background: none; font-size: 15px; color: var(--text-muted); cursor: pointer; }
+  .sheet-head { text-align: center; padding: 2px 18px 10px; border-bottom: 1px solid var(--hairline); }
+  .sheet-title { font-size: 16px; font-weight: 900; color: var(--text-title); }
+  .sheet-body { overflow-y: auto; padding: 12px 14px 18px; scrollbar-width: none; -ms-overflow-style: none; }
+  .sheet-body::-webkit-scrollbar { display: none; }
+  /* Front 9 stacked over Back 9 (no swiping). */
+  .sc-nine + .sc-nine { margin-top: 14px; }
+
+  /* fit-to-width scorecard (mirrors HorizontalScorecard single+fit) */
+  .sc-row { display: grid; grid-template-columns: 34px repeat(9, minmax(0,1fr)) 28px 32px; align-items: center; }
+  .sc-cell { text-align: center; font-size: 11px; padding: 3px 0; min-width: 0; }
+  .sc-label { display: flex; align-items: center; gap: 4px; padding-left: 2px; text-align: left;
+    font-size: 9.5px; font-weight: 900; color: var(--text-muted); white-space: nowrap; overflow: hidden; }
+  .sc-head { border-bottom: 1.5px solid var(--text-title); padding-bottom: 2px; }
+  .sc-head .sc-cell { font-weight: 900; color: var(--text-title); font-size: 10.5px; }
+  .sc-par .sc-cell { font-size: 12px; font-weight: 800; color: var(--text-title); }
+  .sc-hcp .sc-cell { font-size: 9px; font-weight: 700; color: var(--text-muted); }
+  .sc-scorer { border-top: 1px solid var(--hairline); }
+  .sc-scorer .sc-label { font-weight: 800; color: var(--text-title); font-size: 11px; }
+  .sc-scorer .sc-cell { padding: 5px 0; }
+  .col-out, .col-tot { background: var(--chip-bg); }
+  .sc-scorer .col-out, .sc-scorer .col-tot { font-weight: 900; font-size: 10.5px; color: var(--text-title); }
+  .sc-avatar { width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color:#fff; font-weight: 800; font-size: 8px; }
+  .mark { width: 20px; height: 20px; margin: 0 auto; position: relative; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 11px; color: var(--text-title); }
+  .mark.circle { border: 1.5px solid var(--text-title); border-radius: 50%; }
+  .mark.square { border: 1.5px solid var(--text-title); border-radius: 4px; }
+  .mark.dsquare { border: 1.5px solid var(--text-title); border-radius: 4px; }
+  .mark.dsquare::after { content:""; position:absolute; inset:2px; border:1.5px solid var(--text-title); border-radius:2px; }
+  .mark.empty { color: var(--text-muted); opacity: .5; font-weight: 700; }
+</style>
+</head>
+<body data-theme="light">
+
+  <div class="page-head">
+    <h1>Scoring screen redesign</h1>
+    <p>
+      Edge-to-edge (no card). Header + footer are fixed; the middle is a <strong>per-hole pager</strong> — swipe
+      one hole at a time — showing <strong>editing controls</strong> (score chips + stat inputs) per scorer under a
+      small &ldquo;Hole&nbsp;N&rdquo; header. No Summary section. The footer's <strong>Scorecard</strong> button opens a
+      bottom sheet showing the Front&nbsp;9 stacked over the Back&nbsp;9. <strong>Finish</strong> is the primary button at the
+      bottom; <strong>Abandon</strong> lives in the header&rsquo;s <strong>⋯</strong> overflow. Tap the chips / steppers / radios — they're live.
+    </p>
+  </div>
+  <div class="toolbar">
+    <button class="btn" id="themeBtn" aria-pressed="false">🌙 Dark theme</button>
+  </div>
+
+  <div class="stage">
+    <div class="phone">
+      <div class="screen" id="screen">
+        <div class="nav">
+          <span class="back">‹</span>
+          <span class="nav-title">Round</span>
+          <span class="spacer"></span>
+          <button class="more" id="moreBtn" aria-label="More options">⋯</button>
+        </div>
+        <div class="overflow-backdrop" id="overflowBackdrop"></div>
+        <div class="overflow" id="overflow">
+          <button class="overflow-item destructive" id="abandonItem">
+            <svg class="ico" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+            Abandon round
+          </button>
+        </div>
+
+        <div class="live-strip"></div>
+        <div class="ed-header">
+          <div class="top-row">
+            <span class="live-dot"></span>
+            <span class="top-text">LIVE · THRU 7</span>
+            <span class="top-sep">·</span>
+            <span class="top-text">12m ago</span>
+          </div>
+          <h3 class="course-title">Torrey Pines (South)</h3>
+          <p class="subtitle">La Jolla, CA · Stroke · 18 holes</p>
+        </div>
+
+        <div class="content" data-pager>
+          <div class="viewport">
+            <button class="arrow prev" aria-label="Previous hole">‹</button>
+            <button class="arrow next" aria-label="Next hole">›</button>
+            <div class="track" id="holeTrack"></div>
+          </div>
+          <div class="dots" id="holeDots"></div>
+        </div>
+
+        <div class="footer">
+          <button class="scorecard-btn" id="openScorecard">
+            <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 9v11"/></svg>
+            Scorecard
+          </button>
+          <button class="finish-primary" id="finishBtn">Finish round</button>
+          <div class="action-bar">
+            <button class="seg">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+              <span class="seg-label">Like</span>
+            </button>
+            <button class="seg">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+              <span class="seg-label">Comments</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Scorecard bottom sheet -->
+        <div class="sheet-overlay" id="scorecardSheet">
+          <div class="sheet-backdrop" data-close></div>
+          <div class="sheet">
+            <div class="sheet-grab"></div>
+            <button class="sheet-x" data-close aria-label="Close">✕</button>
+            <div class="sheet-head">
+              <div class="sheet-title">Scorecard</div>
+            </div>
+            <div class="sheet-body" id="scBody"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+(function () {
+  "use strict";
+
+  var PAR = [4,4,4,3,5,4,4,3,5, 4,5,4,3,4,4,5,3,4];
+  var HCP = [5,9,3,17,1,11,7,15,13, 6,2,8,18,4,10,12,16,14];
+  var YDS = [452,387,553,176,453,541,462,170,614, 416,221,504,196,435,478,477,441,570];
+
+  var SCORERS = [
+    { name:"Ben Nguyen", initial:"B", color:"#4a6f3a", tee:"Blue",  teeVar:"--tee-blue",  f:0,
+      scores:[4,3,5,3,4,4,4, null,null, null,null,null,null,null,null,null,null,null] },
+    { name:"Sam Rivera", initial:"S", color:"#0e9491", tee:"White", teeVar:"--tee-white", f:0.92,
+      scores:[5,4,4,4,5,5,4, null,null, null,null,null,null,null,null,null,null,null] }
+  ];
+
+  function relText(rel) { return rel === 0 ? "E" : rel > 0 ? "+" + rel : "\u2212" + Math.abs(rel); }
+  function tone(rel) { return rel == null ? "even" : rel < 0 ? "under" : rel === 0 ? "even" : "over"; }
+  function yds(i, f) { return f ? Math.round(YDS[i] * f / 5) * 5 : YDS[i]; }
+
+  function chipRow(rel) {
+    var quick = [-2, -1, 0, 1, 2].map(function (r) {
+      var on = rel === r;
+      var cls = "chip" + (on ? (r > 0 ? " over" : " active") : "");
+      return '<button class="' + cls + '" data-rel="' + r + '">' + relText(r) + "</button>";
+    }).join("");
+    var customOn = rel != null && (rel > 2 || rel < -2);
+    var custom = '<button class="chip' + (customOn ? (rel > 0 ? " over" : " active") : "") +
+      '" data-custom>' + (customOn ? relText(rel) : "\u2715") + "</button>";
+    return '<div class="chip-row">' + quick + custom + "</div>";
+  }
+
+  function binaryRow(label, goodTone, yes) {
+    function opt(val, sel) {
+      var fill = val === "yes" ? (goodTone ? "good" : "bad") : (goodTone ? "bad" : "good");
+      var ring = sel ? " " + fill : "";
+      var dot = sel ? '<span class="radio-dot ' + fill + '"></span>' : "";
+      return '<div class="radio-opt' + (sel ? " selected" : "") + '" data-val="' + val + '" data-fill="' + fill +
+        '"><span class="radio-ring' + ring + '">' + dot + '</span><span class="radio-label">' +
+        (val === "yes" ? "Yes" : "No") + "</span></div>";
+    }
+    return '<div class="stat-row"><div class="stat-label">' + label + '</div>' +
+      '<div class="radio-group">' + opt("yes", yes) + opt("no", !yes) + "</div></div>";
+  }
+
+  function intRow(label, val) {
+    return '<div class="stat-row"><div class="stat-label">' + label + '</div>' +
+      '<div class="stepper"><button class="step-btn" data-dir="-1">\u2212</button>' +
+      '<span class="step-val">' + val + '</span>' +
+      '<button class="step-btn" data-dir="1">+</button></div></div>';
+  }
+
+  function scorerBlock(s, i) {
+    var par = PAR[i], hcp = HCP[i];
+    var score = s.scores[i];
+    var rel = score == null ? null : score - par;
+    var hero = rel == null ? "\u2014" : relText(rel);
+    var sub = score == null ? "PAR " + par : score + (score === 1 ? " STROKE" : " STROKES");
+    var meta = '<span class="tee-dot" style="background:var(' + s.teeVar + ')"></span>' +
+      '<span class="tee-name">' + s.tee + '</span><span class="tee-sep">·</span>' +
+      '<span class="tee-yds">' + yds(i, s.f) + ' yds</span><span class="tee-sep">·</span>' +
+      '<span class="tee-yds">Par ' + par + '</span><span class="tee-sep">·</span>' +
+      '<span class="tee-yds">Hcp ' + hcp + '</span>';
+    var stats = binaryRow("GIR", true, score != null && score <= par);
+    if (par > 3) stats += binaryRow("Fairway", true, true);
+    stats += intRow("Putts", 2);
+    return '<div class="scorer-block" data-par="' + par + '">' +
+      '<div class="scorer-row">' +
+        '<div class="avatar-cluster"><span class="avatar" style="background:' + s.color + '">' + s.initial + '</span></div>' +
+        '<div class="scorer-body"><div class="scorer-name">' + s.name + '</div><div class="tee-bare">' + meta + '</div></div>' +
+        '<div class="score-col"><div class="score-text ' + tone(rel) + '">' + hero + '</div><div class="score-sub">' + sub + '</div></div>' +
+      '</div>' + chipRow(rel) + '<div class="stat-section">' + stats + '</div>' +
+    '</div>';
+  }
+
+  function holePane(i) {
+    var inner = '<div class="hole-head"><div class="hole-title">Hole ' + (i + 1) + '</div></div>';
+    inner += SCORERS.map(function (s) { return scorerBlock(s, i); }).join("");
+    return '<div class="pane"><div class="pane-inner">' + inner + "</div></div>";
+  }
+
+  // ---- Build hole pager + scorecard sheet panes ----
+  var holeTrack = document.getElementById("holeTrack");
+  var holeDots = document.getElementById("holeDots");
+  holeTrack.innerHTML = PAR.map(function (_p, i) { return holePane(i); }).join("");
+  holeDots.innerHTML = PAR.map(function (_p, i) {
+    return '<button class="dot" data-i="' + i + '" aria-label="Hole ' + (i + 1) + '"></button>';
+  }).join("");
+
+  function variant(score, par) {
+    if (score == null) return "empty";
+    var rel = score - par;
+    if (rel <= -1) return "circle";
+    if (rel === 1) return "square";
+    if (rel >= 2) return "dsquare";
+    return "";
+  }
+  function nine(range) {
+    var idx = range === "front" ? [0,1,2,3,4,5,6,7,8] : [9,10,11,12,13,14,15,16,17];
+    var label = range === "front" ? "OUT" : "IN";
+    function row(cls, cells, lbl, out, tot) {
+      return '<div class="sc-row ' + cls + '"><div class="sc-cell sc-label">' + lbl + '</div>' +
+        cells.join("") + '<div class="sc-cell col-out">' + out + '</div><div class="sc-cell col-tot">' + tot + '</div></div>';
+    }
+    var head = row("sc-head", idx.map(function (i) { return '<div class="sc-cell">' + (i + 1) + "</div>"; }), "HOLE", label, "TOT");
+    var par = row("sc-par", idx.map(function (i) { return '<div class="sc-cell">' + PAR[i] + "</div>"; }), "PAR", sum(idx, PAR), 72);
+    var hcp = row("sc-hcp", idx.map(function (i) { return '<div class="sc-cell">' + HCP[i] + "</div>"; }), "HCP", "", "");
+    var scorers = SCORERS.map(function (s) {
+      var cells = idx.map(function (i) {
+        var v = s.scores[i];
+        return '<div class="sc-cell"><span class="mark ' + variant(v, PAR[i]) + '">' + (v == null ? "\u2014" : v) + "</span></div>";
+      });
+      var out = relStr(s, idx), tot = relStr(s, [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]);
+      var lbl = '<span class="sc-avatar" style="background:' + s.color + '">' + s.initial + "</span>" + s.name.split(" ")[0];
+      return row("sc-scorer", cells, lbl, out, tot);
+    }).join("");
+    return '<div class="sc-nine">' + head + par + hcp + scorers + "</div>";
+  }
+  function sum(idx, arr) { var t = 0; idx.forEach(function (i) { t += arr[i]; }); return t; }
+  function relStr(s, idx) {
+    var rel = 0, any = false;
+    idx.forEach(function (i) { if (s.scores[i] != null) { rel += s.scores[i] - PAR[i]; any = true; } });
+    if (!any) return "\u2014";
+    return rel === 0 ? "E" : rel > 0 ? "+" + rel : "\u2212" + Math.abs(rel);
+  }
+  // Front 9 stacked over Back 9 — no swiping.
+  document.getElementById("scBody").innerHTML = nine("front") + nine("back");
+
+  // ---- Generic one-step pager (swipe = ±1; dots/arrows can jump) ----
+  function initPager(opts) {
+    var viewport = opts.viewport, track = opts.track, dots = opts.dots, count = opts.count;
+    var prev = viewport.querySelector(".arrow.prev"), next = viewport.querySelector(".arrow.next");
+    var index = 0, w = 0, startX = 0, startY = 0, dx = 0, dragging = false, decided = false, horiz = false;
+
+    function layout() { w = viewport.clientWidth; place(false); }
+    function place(animate) {
+      track.style.transition = animate ? "transform .3s cubic-bezier(.22,.61,.36,1)" : "none";
+      track.style.transform = "translateX(" + (-index * w) + "px)";
+      if (dots) Array.prototype.forEach.call(dots.children, function (d, i) { d.classList.toggle("active", i === index); });
+      if (prev) prev.classList.toggle("hidden", index === 0);
+      if (next) next.classList.toggle("hidden", index === count - 1);
+      if (opts.onChange) opts.onChange(index);
+    }
+    function go(i) { index = Math.max(0, Math.min(count - 1, i)); place(true); }
+
+    if (prev) prev.addEventListener("click", function () { go(index - 1); });
+    if (next) next.addEventListener("click", function () { go(index + 1); });
+    if (dots) Array.prototype.forEach.call(dots.children, function (d) {
+      d.addEventListener("click", function () { go(parseInt(d.dataset.i, 10)); });
+    });
+
+    viewport.addEventListener("pointerdown", function (e) {
+      if (e.target.closest(".arrow") || e.target.closest("button")) return;
+      dragging = true; decided = false; horiz = false; dx = 0; startX = e.clientX; startY = e.clientY;
+      track.style.transition = "none";
+    });
+    viewport.addEventListener("pointermove", function (e) {
+      if (!dragging) return;
+      var mx = e.clientX - startX, my = e.clientY - startY;
+      if (!decided) {
+        if (Math.abs(mx) < 6 && Math.abs(my) < 6) return;
+        horiz = Math.abs(mx) > Math.abs(my); decided = true;
+        if (!horiz) { dragging = false; return; }
+        try { viewport.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+      dx = mx;
+      var offset = -index * w + dx;
+      if (offset > 0) offset *= 0.3;
+      if (offset < -(count - 1) * w) offset = -(count - 1) * w + (offset + (count - 1) * w) * 0.3;
+      track.style.transform = "translateX(" + offset + "px)";
+      e.preventDefault();
+    });
+    function end() {
+      if (!dragging) return; dragging = false;
+      var t = w * 0.18;
+      if (dx <= -t) index = Math.min(count - 1, index + 1);
+      else if (dx >= t) index = Math.max(0, index - 1);
+      place(true);
+    }
+    viewport.addEventListener("pointerup", end);
+    viewport.addEventListener("pointercancel", end);
+
+    layout();
+    return { layout: layout, go: go };
+  }
+
+  var holePager = initPager({
+    viewport: document.querySelector("[data-pager] .viewport"),
+    track: holeTrack, dots: holeDots, count: PAR.length
+  });
+
+  // ---- Editing control interactivity (local to the tapped block) ----
+  document.getElementById("holeTrack").addEventListener("click", function (e) {
+    var chip = e.target.closest(".chip[data-rel]");
+    if (chip) {
+      var block = chip.closest(".scorer-block"), par = parseInt(block.dataset.par, 10);
+      var rel = parseInt(chip.dataset.rel, 10);
+      block.querySelectorAll(".chip").forEach(function (c) { c.classList.remove("active", "over"); });
+      chip.classList.add(rel > 0 ? "over" : "active");
+      var strokes = Math.max(1, par + rel);
+      var st = block.querySelector(".score-text");
+      st.textContent = relText(rel);
+      st.className = "score-text " + tone(rel);
+      block.querySelector(".score-sub").textContent = strokes + (strokes === 1 ? " STROKE" : " STROKES");
+      return;
+    }
+    var step = e.target.closest(".step-btn");
+    if (step) {
+      var val = step.parentElement.querySelector(".step-val");
+      var v = Math.max(0, parseInt(val.textContent, 10) + parseInt(step.dataset.dir, 10));
+      val.textContent = v;
+      return;
+    }
+    var opt = e.target.closest(".radio-opt");
+    if (opt) {
+      var group = opt.closest(".radio-group");
+      group.querySelectorAll(".radio-opt").forEach(function (o) {
+        o.classList.remove("selected");
+        o.querySelector(".radio-ring").className = "radio-ring";
+        o.querySelector(".radio-ring").innerHTML = "";
+      });
+      opt.classList.add("selected");
+      var fill = opt.dataset.fill;
+      opt.querySelector(".radio-ring").className = "radio-ring " + fill;
+      opt.querySelector(".radio-ring").innerHTML = '<span class="radio-dot ' + fill + '"></span>';
+    }
+  });
+
+  // ---- Overflow menu (⋯ → Abandon) ----
+  var moreBtn = document.getElementById("moreBtn");
+  var overflow = document.getElementById("overflow");
+  var overflowBackdrop = document.getElementById("overflowBackdrop");
+  function closeMenu() { overflow.classList.remove("open"); overflowBackdrop.classList.remove("open"); }
+  moreBtn.addEventListener("click", function () {
+    overflow.classList.toggle("open"); overflowBackdrop.classList.toggle("open");
+  });
+  overflowBackdrop.addEventListener("click", closeMenu);
+  document.getElementById("abandonItem").addEventListener("click", closeMenu);
+
+  // ---- Scorecard sheet open/close ----
+  var sheet = document.getElementById("scorecardSheet");
+  document.getElementById("openScorecard").addEventListener("click", function () {
+    sheet.classList.add("open");
+  });
+  sheet.addEventListener("click", function (e) { if (e.target.closest("[data-close]")) sheet.classList.remove("open"); });
+
+  // ---- Theme toggle + relayout ----
+  var body = document.body, themeBtn = document.getElementById("themeBtn");
+  themeBtn.addEventListener("click", function () {
+    var dark = body.getAttribute("data-theme") === "dark";
+    body.setAttribute("data-theme", dark ? "light" : "dark");
+    themeBtn.setAttribute("aria-pressed", String(!dark));
+    themeBtn.textContent = dark ? "🌙 Dark theme" : "☀️ Light theme";
+  });
+  window.addEventListener("resize", function () { holePager.layout(); });
+})();
+</script>
+</body>
+</html>
