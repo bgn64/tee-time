@@ -22,7 +22,7 @@
 
 import { Ionicons } from '@expo/vector-icons';
 import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommentsSheet } from './CommentsSheet';
@@ -84,51 +84,61 @@ export function ScoringRoundView({
   const isInProgress = !round.completedAt;
 
   return (
-    <View style={styles.container}>
-      <EditorialHeader
-        liveStripVisible={isInProgress}
-        topLineLeft={topLineLeft}
-        topLineRight={topLineRight}
-        title={round.course.name}
-        subtitle={subtitle}
-      />
-
-      <SwipeableHoleEditor
-        round={round}
-        currentHoleNumber={currentHoleNumber}
-        onChangeCurrentHole={onChangeCurrentHole}
-        onChangeScore={onChangeScore}
-        onPressTeeForScorer={onPressTeeForScorer}
-      />
-
-      <View style={[styles.footer, { paddingBottom: insets.bottom }]}>
-        <Pressable
-          style={styles.scorecardBtn}
-          onPress={() => setScorecardOpen(true)}
-          accessibilityRole="button"
-          accessibilityLabel="Open scorecard">
-          <Ionicons name="grid-outline" size={17} color={colors.primaryDark} />
-          <Text style={styles.scorecardBtnText}>Scorecard</Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.primaryBtn}
-          onPress={onPrimary}
-          accessibilityRole="button"
-          accessibilityLabel={primaryLabel}>
-          <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
-        </Pressable>
-
-        <View style={styles.actionBarWrap}>
-          <RoundActionBar
-            liked={likedByMe}
-            likeCount={likeCount}
-            commentCount={commentCount}
-            onToggleLike={toggleLike}
-            onOpenComments={() => setCommentsOpen(true)}
+    <View style={styles.root}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: insets.bottom + 14 },
+        ]}
+        showsVerticalScrollIndicator={false}>
+        <View style={styles.card}>
+          <EditorialHeader
+            liveStripVisible={isInProgress}
+            topLineLeft={topLineLeft}
+            topLineRight={topLineRight}
+            title={round.course.name}
+            subtitle={subtitle}
           />
+
+          <SwipeableHoleEditor
+            round={round}
+            currentHoleNumber={currentHoleNumber}
+            onChangeCurrentHole={onChangeCurrentHole}
+            onChangeScore={onChangeScore}
+            onPressTeeForScorer={onPressTeeForScorer}
+          />
+
+          <View style={styles.footer}>
+            <Pressable
+              style={styles.scorecardBtn}
+              onPress={() => setScorecardOpen(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Open scorecard">
+              <Ionicons name="grid-outline" size={17} color={colors.primaryDark} />
+              <Text style={styles.scorecardBtnText}>Scorecard</Text>
+            </Pressable>
+
+            <Pressable
+              style={styles.primaryBtn}
+              onPress={onPrimary}
+              accessibilityRole="button"
+              accessibilityLabel={primaryLabel}>
+              <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
+            </Pressable>
+
+            <View style={styles.actionBarWrap}>
+              <RoundActionBar
+                liked={likedByMe}
+                likeCount={likeCount}
+                commentCount={commentCount}
+                onToggleLike={toggleLike}
+                onOpenComments={() => setCommentsOpen(true)}
+              />
+            </View>
+          </View>
         </View>
-      </View>
+      </ScrollView>
 
       <ScorecardSheet
         round={round}
@@ -179,9 +189,23 @@ function deriveSubtitle(round: Round): string {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: {
+    root: {
       flex: 1,
+      backgroundColor: colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 14,
+      paddingTop: 14,
+    },
+    card: {
+      // Match the feed card (RoundListCard): square corners, no border
+      // line, soft drop shadow only. Sizes to its content (the pager
+      // locks to the tallest hole) so a one-scorer round stays compact.
       backgroundColor: colors.cardBg,
+      ...colors.shadowCard,
     },
     footer: {
       borderTopWidth: StyleSheet.hairlineWidth,

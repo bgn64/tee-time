@@ -54,10 +54,10 @@ type Props = {
   /** Sub-label under the hero score (e.g. "THRU 11", "FINAL"). */
   scoreSub?: string;
   /**
-   * When set, the tee chip becomes a Pressable with a "▾" caret and
-   * (if `tee` is null) renders a dashed "+ Tee" placeholder so the
-   * picker stays reachable. Editing surfaces (Summary tab in scoring
-   * mode) wire this; other surfaces leave it undefined.
+   * When set, the tee display becomes tappable (with a "▾" caret) so the
+   * picker stays reachable, and a dashed "+ Tee" placeholder is shown when
+   * `tee` is null. Editing surfaces (live scoring + completed-round edit,
+   * on the per-hole rows) wire this; read-only surfaces leave it undefined.
    */
   onPressTee?: () => void;
   /**
@@ -65,9 +65,9 @@ type Props = {
    * (yardage · Par X · Hcp Y). When undefined, falls back to the
    * tee's total-yardage display (Summary tab behaviour).
    *
-   * Incompatible with `onPressTee` — the Holes tab doesn't expose
-   * the picker (users change tees from Summary). We don't enforce
-   * this at the type level, but callers should not set both.
+   * May be combined with `onPressTee`: on the per-hole scoring rows
+   * (where the Summary tab no longer exists) the per-hole line itself
+   * becomes the tappable tee-change affordance.
    */
   holeContext?: HoleContext;
 };
@@ -94,8 +94,10 @@ export function ScorerSummaryRow({
 
   let teeChip: React.ReactNode = null;
   if (holeContext && tee && teeColor) {
-    // Per-hole meta line: [swatch] [tee name] · [per-hole yds] · Par X · Hcp Y
-    // No pill, no chevron — viewing/scoring Holes tab share this look.
+    // Per-hole meta line. The swatch + tee name is a filled pill (matching
+    // the round-config tee pill); the per-hole yds · Par · Hcp follow as
+    // plain text. On editing surfaces (onPressTee set) the pill is a button
+    // with a "▾" caret so the tee can be changed mid-round.
     const parts: string[] = [];
     if (holeContext.yardage != null) {
       parts.push(`${holeContext.yardage.toLocaleString()} yds`);
@@ -104,12 +106,29 @@ export function ScorerSummaryRow({
     if (holeContext.handicapIndex != null) {
       parts.push(`Hcp ${holeContext.handicapIndex}`);
     }
-    teeChip = (
-      <View style={styles.teeBare}>
+    const teeNode = onPressTee ? (
+      <Pressable
+        onPress={onPressTee}
+        style={styles.teePill}
+        accessibilityRole="button"
+        accessibilityLabel={`Change tee from ${tee.name}`}>
+        <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
+        <Text style={styles.teePillText} numberOfLines={1}>
+          {tee.name}
+        </Text>
+        <Text style={styles.teeChev}>▾</Text>
+      </Pressable>
+    ) : (
+      <View style={styles.teeNameBare}>
         <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
         <Text style={styles.teeBareName} numberOfLines={1}>
           {tee.name}
         </Text>
+      </View>
+    );
+    teeChip = (
+      <View style={styles.teeBare}>
+        {teeNode}
         {parts.map((p) => (
           <View key={p} style={styles.teeMetaPart}>
             <Text style={styles.teeBareSep}>·</Text>
@@ -231,6 +250,25 @@ function makeStyles(colors: ThemeColors) {
       gap: 6,
       alignSelf: 'flex-start',
       flexWrap: 'wrap',
+    },
+    teePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 999,
+      backgroundColor: colors.chipBg,
+    },
+    teePillText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    teeNameBare: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     teeMetaPart: {
       flexDirection: 'row',

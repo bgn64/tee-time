@@ -13,11 +13,11 @@
  *     useMemo, animate in useCallback; `panHandlers` on a plain View —
  *     a Pressable wrapper would steal the touch responder on RN-Web).
  *
- * KEY difference from the feed pagers: this fills the space between the
- * fixed header and footer (`flex: 1`) rather than locking to the tallest
- * pane. Each pane is a full-height vertical `ScrollView` so a tall hole
- * (many stats / scramble) scrolls internally while a short hole stays
- * vertically centred.
+ * Like the feed pagers, the band locks to the tallest hole pane so the
+ * height stays constant as you swipe and the card hugs its content
+ * instead of stretching to fill the screen; shorter holes are centred.
+ * A tall hole (many stats / scramble) is handled by the parent
+ * ScrollView, which scrolls the whole surface.
  *
  * Data hooks are called ONCE here and the resolved values handed down to
  * each `HoleEditPane`. The active index is reported up via
@@ -30,7 +30,6 @@ import {
   PanResponder,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -44,6 +43,7 @@ import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
+import { deviceSupportsHover } from '@/library/utils/hoverCapability';
 import type { Round } from '@/types/golf';
 
 type Props = {
@@ -100,8 +100,11 @@ export function SwipeableHoleEditor({
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(startIndex);
   const [hovered, setHovered] = useState(false);
+  const [canHover] = useState(deviceSupportsHover);
+  const [heights, setHeights] = useState<number[]>(() => holes.map(() => 0));
 
   const count = holes.length;
+  const maxHeight = heights.reduce((m, h) => (h > m ? h : m), 0);
 
   const animateTo = useCallback(
     (i: number) => {
@@ -188,7 +191,16 @@ export function SwipeableHoleEditor({
     }
   }
 
-  const hoverProps = IS_WEB
+  function setPaneHeight(i: number, h: number) {
+    setHeights((prev) => {
+      if (Math.abs((prev[i] ?? 0) - h) < 0.5) return prev;
+      const next = prev.slice();
+      next[i] = h;
+      return next;
+    });
+  }
+
+  const hoverProps = canHover
     ? {
         onPointerEnter: () => setHovered(true),
         onPointerLeave: () => setHovered(false),
@@ -207,15 +219,19 @@ export function SwipeableHoleEditor({
             styles.track,
             {
               width: width ? width * count : undefined,
+              height: maxHeight || undefined,
               transform: [{ translateX: tx }],
             },
           ]}>
           {width > 0
-            ? holes.map((hole) => (
-                <View key={hole.number} style={[styles.page, { width }]}>
-                  <ScrollView
-                    contentContainerStyle={styles.pageScroll}
-                    showsVerticalScrollIndicator={false}>
+            ? holes.map((hole, i) => (
+                <View
+                  key={hole.number}
+                  style={[styles.page, { width, height: maxHeight || undefined }]}>
+                  <View
+                    onLayout={(e) =>
+                      setPaneHeight(i, e.nativeEvent.layout.height)
+                    }>
                     <HoleEditPane
                       round={round}
                       hole={hole}
@@ -236,7 +252,7 @@ export function SwipeableHoleEditor({
                       }
                       onPressTeeForScorer={onPressTeeForScorer}
                     />
-                  </ScrollView>
+                  </View>
                 </View>
               ))
             : null}
@@ -282,25 +298,17 @@ export function SwipeableHoleEditor({
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
-      flex: 1,
-      minHeight: 0,
       borderTopWidth: StyleSheet.hairlineWidth,
       borderTopColor: colors.hairline,
     },
     viewport: {
-      flex: 1,
       position: 'relative',
       overflow: 'hidden',
     },
     track: {
       flexDirection: 'row',
-      height: '100%',
     },
     page: {
-      height: '100%',
-    },
-    pageScroll: {
-      flexGrow: 1,
       justifyContent: 'center',
     },
     arrow: {

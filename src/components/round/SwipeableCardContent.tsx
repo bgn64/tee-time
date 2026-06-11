@@ -33,6 +33,7 @@ import {
 
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
+import { deviceSupportsHover } from '@/library/utils/hoverCapability';
 
 export type SwipePane = {
   /** Stable key + accessibility label for the dot (e.g. "Summary"). */
@@ -60,6 +61,7 @@ export function SwipeableCardContent({ panes }: Props) {
   const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
   const [hovered, setHovered] = useState(false);
+  const [canHover] = useState(deviceSupportsHover);
   const [heights, setHeights] = useState<number[]>(() => panes.map(() => 0));
 
   const maxHeight = heights.reduce((m, h) => (h > m ? h : m), 0);
@@ -134,7 +136,7 @@ export function SwipeableCardContent({ panes }: Props) {
   // Pointer events (not a Pressable wrapper): a Pressable around the pager
   // would claim the touch responder on RN-Web and the PanResponder swipe
   // would never engage.
-  const hoverProps = IS_WEB
+  const hoverProps = canHover
     ? {
         onPointerEnter: () => setHovered(true),
         onPointerLeave: () => setHovered(false),
