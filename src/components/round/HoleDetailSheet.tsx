@@ -186,7 +186,10 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
   }
 
   const hoverProps = IS_WEB
-    ? { onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) }
+    ? {
+        onPointerEnter: () => setHovered(true),
+        onPointerLeave: () => setHovered(false),
+      }
     : {};
 
   const currentHole = holes[index];
@@ -220,10 +223,11 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
             </Pressable>
           </View>
 
-          <Pressable
+          <View
             style={styles.viewport}
             onLayout={onViewportLayout}
-            {...hoverProps}>
+            {...hoverProps}
+            {...pan.panHandlers}>
             <Animated.View
               style={[
                 styles.track,
@@ -232,8 +236,7 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
                   height: maxHeight || undefined,
                   transform: [{ translateX: tx }],
                 },
-              ]}
-              {...pan.panHandlers}>
+              ]}>
               {width > 0
                 ? holes.map((hole, i) => (
                     <View
@@ -338,7 +341,7 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
                 <Text style={styles.arrowText}>›</Text>
               </Pressable>
             ) : null}
-          </Pressable>
+          </View>
 
           <View style={styles.dots}>
             {holes.map((hole, i) => (
