@@ -1,18 +1,17 @@
 /**
  * RoundActionBar — action bar at the bottom of every round card.
  *
- * Layout: equal-width Like + Comments segments, with an optional Edit
- * segment appended when `onEdit` is wired (typically only on the
- * owner's completed rounds — feed cards leave it undefined).
+ * Layout: equal-width Like + Comments segments — uniform on every
+ * round. Round-level actions (Edit, …) live in the header's ⋯ menu,
+ * not here, so the footer looks the same across all cards.
  *
  * Per the mockup, the heart fills with the accent colour when
  * `liked` is true; the label flips between "Like"/"Liked" and the
  * count is shown when > 0 ("3 likes" / "3 liked").
  *
  * Icon choice: Ionicons (already a dep via `@expo/vector-icons`);
- * `heart-outline` / `heart` + `chatbubble-outline` + `create-outline`
- * give us the line + filled looks the mockup uses without bringing in
- * a second icon library.
+ * `heart-outline` / `heart` + `chatbubble-outline` give us the line +
+ * filled looks the mockup uses without bringing in a second icon library.
  */
 
 import { Ionicons } from '@expo/vector-icons';
@@ -28,13 +27,6 @@ type Props = {
   commentCount?: number;
   onToggleLike?: () => void;
   onOpenComments?: () => void;
-  /**
-   * When wired, an "Edit" segment is rendered after Comments. The
-   * RoundListCard passes this only when the signed-in user owns the
-   * round AND it's completed — feed cards for friends' rounds leave
-   * it undefined so the segment is hidden.
-   */
-  onEdit?: () => void;
 };
 
 export function RoundActionBar({
@@ -43,7 +35,6 @@ export function RoundActionBar({
   commentCount = 0,
   onToggleLike,
   onOpenComments,
-  onEdit,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -83,20 +74,6 @@ export function RoundActionBar({
         />
         <Text style={styles.segLabel}>{commentLabel}</Text>
       </Pressable>
-      {onEdit ? (
-        <Pressable
-          style={styles.seg}
-          onPress={onEdit}
-          accessibilityRole="button"
-          accessibilityLabel="Edit this round">
-          <Ionicons
-            name="create-outline"
-            size={22}
-            color={colors.textTitle}
-          />
-          <Text style={styles.segLabel}>Edit</Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }

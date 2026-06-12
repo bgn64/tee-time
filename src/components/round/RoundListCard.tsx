@@ -3,10 +3,12 @@
  *
  * Edge-to-edge tabbed surface:
  *
- *   1. `<EditorialHeader>` — live strip (in-flight only) + small-caps
- *      meta line + course name + sub-line. The owner avatar, format
- *      pills, and big score block that used to live here have moved
- *      into the per-scorer rows on the Summary tab.
+ *   1. `<CourseBanner>` — a deterministically generated course banner
+ *      (gradient + motif, seeded per course) titled Instagram-style:
+ *      the round owner's @handle on top, course · location beneath, and
+ *      the small-caps meta (completed/live + relative time). A ⋯ overflow
+ *      opens an anchored popover for round actions (Edit, owner-only on
+ *      completed rounds). Replaces the former `<EditorialHeader>`.
  *   2. `<SwipeableCardContent>` — a horizontally-swipeable band. Panes:
  *      Summary, then the scorecard split into Front 9 / Back 9 sections
  *      (a single Scorecard pane for one-nine rounds). Constant height
@@ -14,13 +16,14 @@
  *      edge arrows. When the round has tracked stats, scorecard hole
  *      numbers are pills and a caption opens the per-hole
  *      `<HoleDetailSheet>`; with no stats the numbers are plain text.
- *   3. `<RoundActionBar>` — Like + Comments. Comments-tap opens the
+ *   3. `<RoundActionBar>` — Like + Comments (uniform on every round;
+ *      Edit lives in the banner's ⋯ menu). Comments-tap opens the
  *      `<CommentsSheet>` modal hosted by this card.
  *
  * The card is intentionally NOT tappable as a whole. Everything is
  * shown inline now — the previous "tap to view details" hover affordance
- * was retired so the cards behave like static social-feed posts. Likes
- * and comments are the only interactive surfaces on the card; tabs are
+ * was retired so the cards behave like static social-feed posts. Likes,
+ * comments, and the banner ⋯ menu are the interactive surfaces; tabs are
  * used in place to read details.
  */
 
@@ -29,7 +32,8 @@ import { StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import { CommentsSheet } from './CommentsSheet';
-import { EditorialHeader } from './EditorialHeader';
+import { CourseBanner } from './CourseBanner';
+import type { OverflowItem } from './HeaderOverflowMenu';
 import { HoleDetailSheet } from './HoleDetailSheet';
 import { RoundActionBar } from './RoundActionBar';
 import { SummaryTabContent } from './SummaryTabContent';
@@ -46,6 +50,7 @@ import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useAccount } from '@/library/social/AccountContext';
+import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -60,6 +65,7 @@ export function RoundListCard({ round }: Props) {
   const router = useRouter();
 
   const { account } = useAccount();
+  const { profile: ownerProfile } = useProfile(round.ownerUserId ?? null);
   const { count: commentCount } = useCommentSummary(round.id);
   const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
     round.id
@@ -78,7 +84,6 @@ export function RoundListCard({ round }: Props) {
     () => deriveTopLine(round),
     [round]
   );
-  const subtitle = useMemo(() => deriveSubtitle(round), [round]);
 
   const isInProgress = !round.completedAt;
   // Edit affordance is owner-only for completed rounds. In-progress
@@ -86,6 +91,22 @@ export function RoundListCard({ round }: Props) {
   const isOwner =
     !!account?.userId && account.userId === (round.ownerUserId ?? '');
   const canEdit = isOwner && !isInProgress;
+
+  // Round-level actions live in the banner's ⋯ menu (not the footer, so
+  // the action bar stays uniform). Edit is owner-only on completed rounds.
+  const overflowActions: OverflowItem[] = canEdit
+    ? [
+        {
+          key: 'edit',
+          label: 'Edit round',
+          icon: 'create-outline',
+          onPress: () =>
+            router.push(
+              `/(tabs)/(score)/previous/${round.id}/edit` as never
+            ),
+        },
+      ]
+    : [];
 
   // Per-hole detail is only worth surfacing when the round actually has
   // tracked stats — otherwise the sheet has nothing extra to show. With no
@@ -178,12 +199,14 @@ export function RoundListCard({ round }: Props) {
 
   return (
     <View style={styles.card}>
-      <EditorialHeader
-        liveStripVisible={isInProgress}
-        topLineLeft={topLineLeft}
-        topLineRight={topLineRight}
-        title={round.course.name}
-        subtitle={subtitle}
+      <CourseBanner
+        course={round.course}
+        handle={ownerProfile?.handle}
+        displayName={ownerProfile?.displayName}
+        metaLeft={topLineLeft}
+        metaRight={topLineRight}
+        isLive={isInProgress}
+        overflowActions={overflowActions}
       />
       <SwipeableCardContent panes={panes} />
       <RoundActionBar
@@ -192,14 +215,6 @@ export function RoundListCard({ round }: Props) {
         commentCount={commentCount}
         onToggleLike={toggleLike}
         onOpenComments={() => setSheetVisible(true)}
-        onEdit={
-          canEdit
-            ? () =>
-                router.push(
-                  `/(tabs)/(score)/previous/${round.id}/edit` as never
-                )
-            : undefined
-        }
       />
       <CommentsSheet
         visible={sheetVisible}
@@ -236,16 +251,6 @@ function deriveTopLine(round: Round): {
   }
   const left = `Completed · ${formatRelativeTime(round.completedAt ?? round.startedAt)}`;
   return { topLineLeft: left };
-}
-
-function deriveSubtitle(round: Round): string {
-  const location = round.course.location?.trim();
-  const format = round.scoringRule === 'scramble' ? 'Scramble' : 'Stroke';
-  const holes = `${round.course.holes.length} holes`;
-  const parts = [location, format, holes].filter(
-    (s): s is string => typeof s === 'string' && s.length > 0
-  );
-  return parts.join(' · ');
 }
 
 function makeStyles(colors: ThemeColors) {
