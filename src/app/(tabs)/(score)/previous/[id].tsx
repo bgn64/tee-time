@@ -26,6 +26,7 @@ import {
   View
 } from 'react-native';
 import { RoundDetailView } from '@/components/round/RoundDetailView';
+import type { OverflowItem } from '@/components/round/HeaderOverflowMenu';
 import { useRoundDetail } from '@/library/golf/useRoundDetail';
 import { useRound } from '@/library/golf/RoundContext';
 import { useRequiredAccount } from '@/library/social/AccountContext';
@@ -43,12 +44,9 @@ export default function RoundDetailScreen() {
 
   const { round, isLoading } = useRoundDetail(id ?? null);
 
-  const [isDeleting, setIsDeleting] = React.useState(false);
-
   const onPressDelete = React.useCallback(() => {
     if (!id) return;
     const proceed = async () => {
-      setIsDeleting(true);
       try {
         await deleteRound(id);
         // replace, not back — avoids stale-detail flash if the local
@@ -56,7 +54,6 @@ export default function RoundDetailScreen() {
         // deleted round" entry in the history.
         router.replace('/(tabs)/(score)/previous' as never);
       } catch (e) {
-        setIsDeleting(false);
         console.warn('[RoundDetail] delete failed', e);
         if (Platform.OS === 'web') {
           window.alert('Failed to delete this round. Please try again.');
@@ -117,32 +114,32 @@ export default function RoundDetailScreen() {
     );
   }
 
-  const deleteButton = (
-    <Pressable
-      style={[styles.deleteBtn, isDeleting && styles.deleteBtnDisabled]}
-      onPress={onPressDelete}
-      disabled={isDeleting}>
-      <Text style={styles.deleteBtnText}>
-        {isDeleting ? 'Deleting…' : 'Delete this round'}
-      </Text>
-    </Pressable>
-  );
-
-  // Owner-only Edit button. Pushes into the nested `[id]/edit`
-  // route so back-nav returns here. The query above is owner-scoped
-  // already (so reaching this branch implies the user is the owner),
-  // but the explicit account check guards against future refactors.
-  const editButton =
-    account.userId === round.ownerUserId ? (
-      <View style={styles.topRow}>
-        <Pressable
-          style={styles.editBtn}
-          onPress={() => router.push(`/(tabs)/(score)/previous/${round.id}/edit` as never)}
-          accessibilityLabel="Edit this round">
-          <Text style={styles.editBtnText}>Edit</Text>
-        </Pressable>
-      </View>
-    ) : null;
+  // Round actions live in the banner's ⋯ overflow (matching the feed
+  // card). Owner-only — the query above is owner-scoped, but the
+  // explicit account check guards against future refactors. Edit
+  // pushes into the nested `[id]/edit` route; Delete runs the
+  // confirm-then-delete flow above.
+  const overflowActions: OverflowItem[] =
+    account.userId === round.ownerUserId
+      ? [
+          {
+            key: 'edit',
+            label: 'Edit round',
+            icon: 'create-outline',
+            onPress: () =>
+              router.push(
+                `/(tabs)/(score)/previous/${round.id}/edit` as never
+              ),
+          },
+          {
+            key: 'delete',
+            label: 'Delete round',
+            icon: 'trash-outline',
+            destructive: true,
+            onPress: onPressDelete,
+          },
+        ]
+      : [];
 
   return (
     <>
@@ -153,8 +150,7 @@ export default function RoundDetailScreen() {
         <RoundDetailView
           round={round}
           profileRoutePrefix="/(tabs)/(score)/profile"
-          topActions={editButton}
-          footerActions={deleteButton}
+          overflowActions={overflowActions}
         />
       </ScrollView>
     </>
@@ -208,37 +204,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '800',
       fontSize: 13,
       letterSpacing: 0.4
-    },
-    deleteBtn: {
-      borderWidth: 1,
-      borderColor: '#f5cccc',
-      borderRadius: 11,
-      paddingVertical: 11,
-      alignItems: 'center'
-    },
-    deleteBtnDisabled: { opacity: 0.5 },
-    deleteBtnText: {
-      color: '#d54848',
-      fontWeight: '800',
-      fontSize: 12
-    },
-    topRow: {
-      flexDirection: 'row',
-      justifyContent: 'flex-end',
-    },
-    editBtn: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.cardBg,
-      paddingHorizontal: 14,
-      paddingVertical: 7,
-      borderRadius: 999,
-    },
-    editBtnText: {
-      color: colors.textTitle,
-      fontWeight: '800',
-      fontSize: 12,
-      letterSpacing: 0.4,
     }
   });
 }

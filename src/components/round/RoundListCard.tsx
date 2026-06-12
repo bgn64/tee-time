@@ -7,8 +7,9 @@
  *      (gradient + motif, seeded per course) titled Instagram-style:
  *      the round owner's @handle on top, course · location beneath, and
  *      the small-caps meta (completed/live + relative time). A ⋯ overflow
- *      opens an anchored popover for round actions (Edit, owner-only on
- *      completed rounds). Replaces the former `<EditorialHeader>`.
+ *      opens an anchored popover for round actions (View details; plus
+ *      Edit, owner-only on completed rounds). Replaces the former
+ *      `<EditorialHeader>`.
  *   2. `<SwipeableCardContent>` — a horizontally-swipeable band. Panes:
  *      Summary, then the scorecard split into Front 9 / Back 9 sections
  *      (a single Scorecard pane for one-nine rounds). Constant height
@@ -57,9 +58,16 @@ import type { Round } from '@/types/golf';
 
 type Props = {
   round: Round;
+  /**
+   * Route prefix for this card's detail screen, e.g.
+   * `/(tabs)/(home)/round` on the home feed or
+   * `/(tabs)/(score)/previous` on the Previous-rounds list. The "View
+   * details" overflow item pushes `${detailRoutePrefix}/${round.id}`.
+   */
+  detailRoutePrefix: string;
 };
 
-export function RoundListCard({ round }: Props) {
+export function RoundListCard({ round, detailRoutePrefix }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
@@ -93,20 +101,27 @@ export function RoundListCard({ round }: Props) {
   const canEdit = isOwner && !isInProgress;
 
   // Round-level actions live in the banner's ⋯ menu (not the footer, so
-  // the action bar stays uniform). Edit is owner-only on completed rounds.
-  const overflowActions: OverflowItem[] = canEdit
-    ? [
-        {
-          key: 'edit',
-          label: 'Edit round',
-          icon: 'create-outline',
-          onPress: () =>
-            router.push(
-              `/(tabs)/(score)/previous/${round.id}/edit` as never
-            ),
-        },
-      ]
-    : [];
+  // the action bar stays uniform). "View details" opens the full
+  // round-detail screen (every card); Edit is owner-only on completed
+  // rounds. In-progress rounds resume editing via the scoring tab.
+  const overflowActions: OverflowItem[] = [
+    {
+      key: 'view',
+      label: 'View details',
+      icon: 'open-outline',
+      onPress: () =>
+        router.push(`${detailRoutePrefix}/${round.id}` as never),
+    },
+  ];
+  if (canEdit) {
+    overflowActions.push({
+      key: 'edit',
+      label: 'Edit round',
+      icon: 'create-outline',
+      onPress: () =>
+        router.push(`/(tabs)/(score)/previous/${round.id}/edit` as never),
+    });
+  }
 
   // Per-hole detail is only worth surfacing when the round actually has
   // tracked stats — otherwise the sheet has nothing extra to show. With no

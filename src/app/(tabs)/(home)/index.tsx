@@ -128,7 +128,11 @@ export default function HomeFeedScreen() {
       contentContainerStyle={styles.content}>
       <IncomingRequestsBanner style={styles.banner} />
       {feedRounds.map((round) => (
-        <RoundListCard key={round.id} round={round} />
+        <RoundListCard
+          key={round.id}
+          round={round}
+          detailRoutePrefix="/(tabs)/(home)/round"
+        />
       ))}
     </PullToRefreshScrollView>
   );

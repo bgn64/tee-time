@@ -5,24 +5,27 @@
  *   ① Completed + viewing  (feed / Previous-rounds read-only)
  *   ④ In-progress + viewing (feed live round)
  *
- * Read-only surface. Like `RoundListCard`, it's an edge-to-edge tabbed
- * surface (Summary · Scorecard · Holes) hosted inside `TabbedRoundShell`
- * so the surfaces share the same chrome. The editing states (② live
- * scoring, ③ completed-round edit) now use the dedicated
- * `ScoringRoundView` instead of this component.
+ * Read-only surface. Like `RoundListCard`, it leads with the
+ * deterministic `CourseBanner` (per-course gradient + @handle-led
+ * title) and is an edge-to-edge tabbed surface (Summary · Scorecard ·
+ * Holes) hosted inside `TabbedRoundShell` so the surfaces share the
+ * same chrome. The editing states (② live scoring, ③ completed-round
+ * edit) now use the dedicated `ScoringRoundView` instead.
  *
  * Action bar (Like + Comments) sits at the bottom of the card; the
- * Comments tap opens a bottom-sheet modal. `topActions` and
- * `footerActions` slots host the route-specific Edit / Delete buttons
- * on the viewing screens.
+ * Comments tap opens a bottom-sheet modal. Route-specific round
+ * actions (Edit / Delete on the owner's Previous-rounds detail) are
+ * passed via `overflowActions` and live in the banner's ⋯ menu —
+ * matching the feed card.
  */
 
 import { useRouter } from 'expo-router';
-import { ReactNode, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { CommentsSheet } from './CommentsSheet';
-import { EditorialHeader } from './EditorialHeader';
+import { CourseBanner } from './CourseBanner';
+import type { OverflowItem } from './HeaderOverflowMenu';
 import { HolesTabContent } from './HolesTabContent';
 import { RoundActionBar } from './RoundActionBar';
 import { SummaryTabContent } from './SummaryTabContent';
@@ -37,6 +40,7 @@ import {
 } from '@/library/golf/scoring';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
+import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -50,22 +54,25 @@ type Props = {
    */
   profileRoutePrefix: string;
 
-  /** Optional slot above the card (e.g. Edit button). */
-  topActions?: ReactNode;
-  /** Optional slot below the card (e.g. Delete button). */
-  footerActions?: ReactNode;
+  /**
+   * Round-level actions for the banner's ⋯ overflow (e.g. Edit /
+   * Delete on the owner's Previous-rounds detail). Omitted on
+   * read-only views (e.g. a friend's round in the home tab), where
+   * the banner shows no ⋯.
+   */
+  overflowActions?: OverflowItem[];
 };
 
 export function RoundDetailView({
   round,
   profileRoutePrefix,
-  topActions,
-  footerActions,
+  overflowActions,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
 
+  const { profile: ownerProfile } = useProfile(round.ownerUserId ?? null);
   const { count: commentCount } = useCommentSummary(round.id);
   const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
     round.id
@@ -77,7 +84,6 @@ export function RoundDetailView({
     () => deriveTopLine(round),
     [round]
   );
-  const subtitle = useMemo(() => deriveSubtitle(round), [round]);
   const isInProgress = !round.completedAt;
 
   // Holes tab visibility: shown only when at least one scorer has
@@ -89,15 +95,15 @@ export function RoundDetailView({
 
   return (
     <View style={styles.shell}>
-      {topActions ? <View style={styles.actionsSlot}>{topActions}</View> : null}
-
       <View style={styles.card}>
-        <EditorialHeader
-          liveStripVisible={isInProgress}
-          topLineLeft={topLineLeft}
-          topLineRight={topLineRight}
-          title={round.course.name}
-          subtitle={subtitle}
+        <CourseBanner
+          course={round.course}
+          handle={ownerProfile?.handle}
+          displayName={ownerProfile?.displayName}
+          metaLeft={topLineLeft}
+          metaRight={topLineRight}
+          isLive={isInProgress}
+          overflowActions={overflowActions}
         />
         <TabbedRoundShell
           summary={<SummaryTabContent round={round} />}
@@ -129,10 +135,6 @@ export function RoundDetailView({
         commentCount={commentCount}
         onClose={() => setSheetVisible(false)}
       />
-
-      {footerActions ? (
-        <View style={styles.actionsSlot}>{footerActions}</View>
-      ) : null}
     </View>
   );
 }
@@ -157,16 +159,6 @@ function deriveTopLine(round: Round): {
   return { topLineLeft: left };
 }
 
-function deriveSubtitle(round: Round): string {
-  const location = round.course.location?.trim();
-  const format = round.scoringRule === 'scramble' ? 'Scramble' : 'Stroke';
-  const holes = `${round.course.holes.length} holes`;
-  const parts = [location, format, holes].filter(
-    (s): s is string => typeof s === 'string' && s.length > 0
-  );
-  return parts.join(' · ');
-}
-
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     shell: {
@@ -179,10 +171,6 @@ function makeStyles(colors: ThemeColors) {
     tabBody: {
       paddingHorizontal: 4,
       paddingBottom: 8,
-    },
-    actionsSlot: {
-      // Lets the route wrapper inject any padding it wants on the
-      // children it passes.
     },
   });
 }

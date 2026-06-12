@@ -11,7 +11,7 @@
  *     navigation.reset to make the stack [hub, scoring] regardless of
  *     entry path.
  *   - <ScoringRoundView> — the shared edge-to-edge editing surface:
- *     EditorialHeader + per-hole swipeable editing pager + footer
+ *     CourseBanner + per-hole swipeable editing pager + footer
  *     (Scorecard sheet button · Finish primary · Like/Comments). The
  *     SUMMARY section and the Front/Back range pill were removed in the
  *     redesign.

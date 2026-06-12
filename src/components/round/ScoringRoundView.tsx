@@ -3,20 +3,24 @@
  * the live-scoring screen and the completed-round edit screen.
  *
  * Edge-to-edge (no card), mirroring the feed card's chrome but for
- * editing (mockups `scoring-screen-redesign.html` /
- * `edit-round-screen-redesign.html`):
+ * editing (mockups `scoring-banner.html`,
+ * `scoring-screen-redesign.html`, `edit-round-screen-redesign.html`):
  *
- *   [EditorialHeader]            live strip + meta + course title
+ *   [CourseBanner]               per-course gradient + @handle title +
+ *                                live/completed meta (purely visual
+ *                                here — no ⋯ on the banner)
  *   [SwipeableHoleEditor]        per-hole editing pager (flex: 1)
  *   [footer]
  *     Scorecard button           → ScorecardSheet (Front 9 / Back 9)
- *     primary button             "Finish round" / "Done" (onPrimary)
+ *     primary button             optional — "Finish round" on live
+ *                                scoring; omitted on edit (Done is in
+ *                                the header there)
  *     RoundActionBar             Like + Comments
  *
  * The route owns the native stack header (back + title + ⋯ overflow for
  * the destructive Abandon/Delete), the destructive confirm, the tee
  * picker, and the score/tee write wiring (passed in as callbacks). This
- * component owns the editorial header, the pager, the footer, and the
+ * component owns the course banner, the pager, the footer, and the
  * scorecard + comments sheets.
  */
 
@@ -26,7 +30,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommentsSheet } from './CommentsSheet';
-import { EditorialHeader } from './EditorialHeader';
+import { CourseBanner } from './CourseBanner';
 import { RoundActionBar } from './RoundActionBar';
 import { ScorecardSheet } from './ScorecardSheet';
 import { SwipeableHoleEditor } from './SwipeableHoleEditor';
@@ -38,6 +42,7 @@ import {
   scorerIdForUser,
 } from '@/library/golf/scoring';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
+import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -49,9 +54,13 @@ type Props = {
   onChangeCurrentHole: (n: number) => void;
   onChangeScore?: (scorerId: string, holeNumber: number, strokes: number) => void;
   onPressTeeForScorer?: (scorerId: string) => void;
-  /** Footer primary button label, e.g. "Finish round" / "Done". */
-  primaryLabel: string;
-  onPrimary: () => void;
+  /**
+   * Footer primary button, e.g. "Finish round" on the live-scoring
+   * screen. Omit both to hide the footer primary entirely (the
+   * edit-round screen does this — its "Done" lives in the header).
+   */
+  primaryLabel?: string;
+  onPrimary?: () => void;
 };
 
 export function ScoringRoundView({
@@ -72,6 +81,7 @@ export function ScoringRoundView({
   const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
     round.id
   );
+  const { profile: ownerProfile } = useProfile(round.ownerUserId ?? null);
 
   const [scorecardOpen, setScorecardOpen] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
@@ -80,7 +90,6 @@ export function ScoringRoundView({
     () => deriveTopLine(round),
     [round]
   );
-  const subtitle = useMemo(() => deriveSubtitle(round), [round]);
   const isInProgress = !round.completedAt;
 
   return (
@@ -93,12 +102,13 @@ export function ScoringRoundView({
         ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
-          <EditorialHeader
-            liveStripVisible={isInProgress}
-            topLineLeft={topLineLeft}
-            topLineRight={topLineRight}
-            title={round.course.name}
-            subtitle={subtitle}
+          <CourseBanner
+            course={round.course}
+            handle={ownerProfile?.handle}
+            displayName={ownerProfile?.displayName}
+            metaLeft={topLineLeft}
+            metaRight={topLineRight}
+            isLive={isInProgress}
           />
 
           <SwipeableHoleEditor
@@ -119,13 +129,15 @@ export function ScoringRoundView({
               <Text style={styles.scorecardBtnText}>Scorecard</Text>
             </Pressable>
 
-            <Pressable
-              style={styles.primaryBtn}
-              onPress={onPrimary}
-              accessibilityRole="button"
-              accessibilityLabel={primaryLabel}>
-              <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
-            </Pressable>
+            {onPrimary ? (
+              <Pressable
+                style={styles.primaryBtn}
+                onPress={onPrimary}
+                accessibilityRole="button"
+                accessibilityLabel={primaryLabel}>
+                <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
+              </Pressable>
+            ) : null}
 
             <View style={styles.actionBarWrap}>
               <RoundActionBar
@@ -175,16 +187,6 @@ function deriveTopLine(round: Round): {
   }
   const left = `Completed · ${formatRelativeTime(round.completedAt ?? round.startedAt)}`;
   return { topLineLeft: left };
-}
-
-function deriveSubtitle(round: Round): string {
-  const location = round.course.location?.trim();
-  const format = round.scoringRule === 'scramble' ? 'Scramble' : 'Stroke';
-  const holes = `${round.course.holes.length} holes`;
-  const parts = [location, format, holes].filter(
-    (s): s is string => typeof s === 'string' && s.length > 0
-  );
-  return parts.join(' · ');
 }
 
 function makeStyles(colors: ThemeColors) {

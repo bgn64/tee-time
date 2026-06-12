@@ -3,15 +3,14 @@
  * State ③ of the four-state round-detail model.
  *
  * Same shared editing surface as the live-scoring screen (state ②) —
- * `<ScoringRoundView />` (EditorialHeader + per-hole swipeable editing
+ * `<ScoringRoundView />` (CourseBanner + per-hole swipeable editing
  * pager + footer) — with the chrome differences for an already-finished
  * round:
  *
  *   - No live strip; the meta line reads "Completed · <time>".
- *   - Native header title is "Edit round"; the ⋯ overflow holds the
- *     destructive "Delete round".
- *   - Footer primary is "Done" (edits autosave; Done just navigates
- *     back) rather than "Finish round".
+ *   - Native header title is "Edit round"; a top-right "Done" header
+ *     button returns to the detail view (edits autosave). No footer
+ *     primary and no destructive Delete affordance here for now.
  *   - Round is fetched by id (owner-scoped — RLS + the query's
  *     `owner_user_id = ?` clause prevent anyone but the owner from
  *     reaching this screen).
@@ -27,15 +26,12 @@ import React from 'react';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ActivityIndicator,
-  Alert,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 
-import { HeaderOverflowMenu } from '@/components/round/HeaderOverflowMenu';
 import { ScoringRoundView } from '@/components/round/ScoringRoundView';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
 import { useRoundDetail } from '@/library/golf/useRoundDetail';
@@ -45,8 +41,7 @@ import { useTheme } from '@/library/theme/ThemeContext';
 export default function EditRoundScreen() {
   const { colors } = useTheme();
   const router = useRouter();
-  const { setScoreForRound, setParticipantTeesForRound, deleteRound } =
-    useRound();
+  const { setScoreForRound, setParticipantTeesForRound } = useRound();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const params = useLocalSearchParams<{ id: string | string[] }>();
@@ -61,33 +56,6 @@ export default function EditRoundScreen() {
 
   // Tee picker state — same pattern scoring.tsx uses.
   const [teeEditTarget, setTeeEditTarget] = React.useState<string | null>(null);
-
-  const onPressDelete = React.useCallback(() => {
-    if (!id) return;
-    const proceed = async () => {
-      try {
-        await deleteRound(id);
-        router.replace('/(tabs)/(score)/previous' as never);
-      } catch (e) {
-        console.warn('[EditRound] delete failed', e);
-        if (Platform.OS === 'web') {
-          window.alert('Failed to delete this round. Please try again.');
-        } else {
-          Alert.alert('Could not delete', 'Please try again.');
-        }
-      }
-    };
-    if (Platform.OS === 'web') {
-      if (window.confirm('Delete this round? This cannot be undone.')) {
-        void proceed();
-      }
-      return;
-    }
-    Alert.alert('Delete this round?', 'This cannot be undone.', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => void proceed() },
-    ]);
-  }, [id, deleteRound, router]);
 
   if (!id) {
     return (
@@ -161,18 +129,20 @@ export default function EditRoundScreen() {
       <Stack.Screen
         options={{
           title: 'Edit round',
+          // "Done" lives in the header (top-right) rather than the
+          // footer: a completed round autosaves edits, so Done is just
+          // "finished editing → go back" and reads more naturally as a
+          // header action than as a footer primary in the Finish slot.
+          // No destructive Delete affordance here for now.
           headerRight: () => (
-            <HeaderOverflowMenu
-              items={[
-                {
-                  key: 'delete',
-                  label: 'Delete round',
-                  icon: 'trash-outline',
-                  destructive: true,
-                  onPress: onPressDelete,
-                },
-              ]}
-            />
+            <Pressable
+              onPress={() => router.back()}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Done editing"
+              style={styles.headerDone}>
+              <Text style={styles.headerDoneText}>Done</Text>
+            </Pressable>
           ),
         }}
       />
@@ -184,8 +154,6 @@ export default function EditRoundScreen() {
         onChangeCurrentHole={setCurrentHoleNumber}
         onChangeScore={handleChangeScore}
         onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
-        primaryLabel="Done"
-        onPrimary={() => router.back()}
       />
 
       <TeePickerSheet
@@ -265,6 +233,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '800',
       fontSize: 13,
       letterSpacing: 0.4,
+    },
+    headerDone: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      marginRight: 2,
+    },
+    headerDoneText: {
+      color: colors.primary,
+      fontSize: 15,
+      fontWeight: '800',
     },
   });
 }
