@@ -338,7 +338,11 @@ export default function RoundsListScreen() {
             <View key={group.key ?? `flat-${gi}`}>
               {group.key ? <Text style={styles.monthLabel}>{group.key}</Text> : null}
               {group.rounds.map((round) => (
-                <RoundListCard key={round.id} round={round} />
+                <RoundListCard
+                  key={round.id}
+                  round={round}
+                  detailRoutePrefix="/(tabs)/(score)/previous"
+                />
               ))}
             </View>
           ))
