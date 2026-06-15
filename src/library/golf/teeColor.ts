@@ -26,6 +26,13 @@ export type ColorToken =
   | 'teeWhite'
   | 'teeRed'
   | 'teeGold'
+  | 'teeGreen'
+  | 'teeBlack'
+  | 'teeYellow'
+  | 'teeBurgundy'
+  | 'teeSilver'
+  | 'teeOrange'
+  | 'teePurple'
   | 'teeFallback1'
   | 'teeFallback2'
   | 'teeFallback3'
@@ -42,22 +49,79 @@ const FALLBACK_TOKENS: readonly ColorToken[] = [
   'teeFallback6',
 ];
 
-const CANONICAL_TOKENS: Record<string, ColorToken> = {
+const NAMED_TOKENS: Record<string, ColorToken> = {
+  black: 'teeBlack',
   blue: 'teeBlue',
   white: 'teeWhite',
-  red: 'teeRed',
   gold: 'teeGold',
+  yellow: 'teeYellow',
+  red: 'teeRed',
+  green: 'teeGreen',
+  burgundy: 'teeBurgundy',
+  silver: 'teeSilver',
+  orange: 'teeOrange',
+  purple: 'teePurple',
 };
 
+// Names tried longest-first so "burgundy" matches before "red" via the
+// substring fallback ("Forward Red", "Senior Gold", "Green Tees", …).
+const NAMED_KEYS_BY_LENGTH = Object.keys(NAMED_TOKENS).sort(
+  (a, b) => b.length - a.length
+);
+
+const ALL_TOKENS: ReadonlySet<string> = new Set<ColorToken>([
+  'teeBlue',
+  'teeWhite',
+  'teeRed',
+  'teeGold',
+  'teeGreen',
+  'teeBlack',
+  'teeYellow',
+  'teeBurgundy',
+  'teeSilver',
+  'teeOrange',
+  'teePurple',
+  ...FALLBACK_TOKENS,
+]);
+
+function isColorToken(value: string | undefined): value is ColorToken {
+  return !!value && ALL_TOKENS.has(value);
+}
+
 /**
- * Map a tee's display name to a canonical token, if any. Match is
- * case-insensitive and trims surrounding whitespace. Returns `null`
- * for non-canonical names so the caller falls back to the hashed
- * palette.
+ * Match a free-form string (a tee's name or `color` field) to a named
+ * palette token: exact match first, then a longest-first substring
+ * match so "Green Tees" / "Senior Gold" still resolve. Returns `null`
+ * when nothing matches so the caller falls back to the hashed palette.
  */
-export function canonicalTeeColor(name: string): ColorToken | null {
-  const key = name.trim().toLowerCase();
-  return CANONICAL_TOKENS[key] ?? null;
+export function namedTeeColorToken(
+  raw: string | undefined | null
+): ColorToken | null {
+  if (!raw) return null;
+  const lower = raw.trim().toLowerCase();
+  if (lower.length === 0) return null;
+  if (NAMED_TOKENS[lower]) return NAMED_TOKENS[lower];
+  for (const key of NAMED_KEYS_BY_LENGTH) {
+    if (lower.includes(key)) return NAMED_TOKENS[key];
+  }
+  return null;
+}
+
+/**
+ * Resolve a tee to its colour token: an explicit (valid) `colorToken`
+ * wins, then the `color` field, then the display name. Returns `null`
+ * for custom/unnamed tees so the caller can fall back (the scorecard
+ * hashes a palette slot; the picker greys out). Shared by the scorecard
+ * (`assignTeeColors`) and the tee picker (`teeSwatch`) so a given tee
+ * reads the same colour on every surface.
+ */
+export function teeColorToken(tee: {
+  name: string;
+  color?: string;
+  colorToken?: string;
+}): ColorToken | null {
+  if (isColorToken(tee.colorToken)) return tee.colorToken;
+  return namedTeeColorToken(tee.color) ?? namedTeeColorToken(tee.name);
 }
 
 /**
@@ -104,10 +168,9 @@ export function assignTeeColors(tees: readonly Tee[]): Map<string, ColorToken> {
   const out = new Map<string, ColorToken>();
   const used = new Set<ColorToken>();
 
-  // First pass: take explicit / canonical assignments.
+  // First pass: take explicit colorToken / named-palette assignments.
   for (const tee of tees) {
-    const explicit =
-      (tee.colorToken as ColorToken | undefined) ?? canonicalTeeColor(tee.name);
+    const explicit = teeColorToken(tee);
     if (explicit) {
       out.set(tee.id, explicit);
       used.add(explicit);

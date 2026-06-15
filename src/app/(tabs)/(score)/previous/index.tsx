@@ -342,6 +342,7 @@ export default function RoundsListScreen() {
                   key={round.id}
                   round={round}
                   detailRoutePrefix="/(tabs)/(score)/previous"
+                  profileRoutePrefix="/(tabs)/(score)/profile"
                 />
               ))}
             </View>

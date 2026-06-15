@@ -58,6 +58,18 @@ export type ThemeColors = {
   teeRed: string;
   teeGold: string;
   /**
+   * Named-palette tokens beyond the four canonical names — so courses
+   * with Green / Black / Yellow / etc. tees render the right colour
+   * (matched by name in `teeColor.ts`), tuned to read as text on the card.
+   */
+  teeGreen: string;
+  teeBlack: string;
+  teeYellow: string;
+  teeBurgundy: string;
+  teeSilver: string;
+  teeOrange: string;
+  teePurple: string;
+  /**
    * Deterministic fallback palette for non-canonical tee names
    * ("Senior", "Member", "Forward Gold", etc.). Tee colour assignment
    * (see `src/library/golf/teeColor.ts`) hashes the tee's stable id
@@ -105,6 +117,13 @@ export const themes: Record<ThemeName, ThemeColors> = {
     teeWhite: '#8a8f81',
     teeRed: '#c9442f',
     teeGold: '#b08a1d',
+    teeGreen: '#4e9a3e',
+    teeBlack: '#333333',
+    teeYellow: '#9a7d10',
+    teeBurgundy: '#8a3a44',
+    teeSilver: '#9aa0a8',
+    teeOrange: '#cf6a1f',
+    teePurple: '#8a44ad',
     teeFallback1: '#a05fb2',
     teeFallback2: '#0e9491',
     teeFallback3: '#d77a2e',
@@ -141,6 +160,13 @@ export const themes: Record<ThemeName, ThemeColors> = {
     teeWhite: '#c2c8b8',
     teeRed: '#f08e7e',
     teeGold: '#d4a839',
+    teeGreen: '#8fce6a',
+    teeBlack: '#b8b8b8',
+    teeYellow: '#e0c34a',
+    teeBurgundy: '#d59aa1',
+    teeSilver: '#c4cad2',
+    teeOrange: '#ef9b5a',
+    teePurple: '#a86fc8',
     teeFallback1: '#c08fd2',
     teeFallback2: '#4cc7c4',
     teeFallback3: '#ef9b5a',

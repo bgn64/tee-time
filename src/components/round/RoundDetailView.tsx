@@ -32,12 +32,7 @@ import { SummaryTabContent } from './SummaryTabContent';
 import { TabbedRoundShell } from './TabbedRoundShell';
 import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
-import { userParticipantKey } from '@/library/golf/participantKey';
-import {
-  formatRelativeTime,
-  getScorerProgress,
-  scorerIdForUser,
-} from '@/library/golf/scoring';
+import { formatRelativeTime } from '@/library/golf/scoring';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useProfile } from '@/library/social/FriendsContext';
@@ -80,11 +75,17 @@ export function RoundDetailView({
   const engagement = useRoundStatEngagement(round.id);
   const [sheetVisible, setSheetVisible] = useState(false);
 
-  const { topLineLeft, topLineRight } = useMemo(
-    () => deriveTopLine(round),
-    [round]
-  );
   const isInProgress = !round.completedAt;
+  const timeText = formatRelativeTime(
+    isInProgress
+      ? round.lastScoreAt ?? round.startedAt
+      : round.completedAt ?? round.startedAt
+  );
+
+  const ownerUserId = round.ownerUserId ?? '';
+  const onPressOwner = ownerUserId
+    ? () => router.push(`${profileRoutePrefix}/${ownerUserId}` as never)
+    : undefined;
 
   // Holes tab visibility: shown only when at least one scorer has
   // tracked-stat data — otherwise the tab has nothing useful to render
@@ -97,12 +98,14 @@ export function RoundDetailView({
     <View style={styles.shell}>
       <View style={styles.card}>
         <CourseBanner
-          course={round.course}
           handle={ownerProfile?.handle}
           displayName={ownerProfile?.displayName}
-          metaLeft={topLineLeft}
-          metaRight={topLineRight}
+          avatarColor={ownerProfile?.avatarColor}
+          avatarSeed={round.ownerUserId}
+          courseName={round.course.name}
+          timeText={timeText}
           isLive={isInProgress}
+          onPressOwner={onPressOwner}
           overflowActions={overflowActions}
         />
         <TabbedRoundShell
@@ -137,26 +140,6 @@ export function RoundDetailView({
       />
     </View>
   );
-}
-
-function deriveTopLine(round: Round): {
-  topLineLeft: string;
-  topLineRight?: string;
-} {
-  const isInProgress = !round.completedAt;
-  const ownerUserId = round.ownerUserId ?? '';
-  const ownerScorerId =
-    scorerIdForUser(round, ownerUserId) ?? userParticipantKey(ownerUserId);
-
-  if (isInProgress) {
-    const { thruCount } = getScorerProgress(round, ownerScorerId);
-    const left =
-      thruCount > 0 ? `LIVE · THRU ${thruCount}` : 'LIVE · NOT STARTED';
-    const right = formatRelativeTime(round.lastScoreAt ?? round.startedAt);
-    return { topLineLeft: left, topLineRight: right };
-  }
-  const left = `Completed · ${formatRelativeTime(round.completedAt ?? round.startedAt)}`;
-  return { topLineLeft: left };
 }
 
 function makeStyles(colors: ThemeColors) {

@@ -1,23 +1,31 @@
 /**
- * CourseBanner — the feed card's header.
+ * CourseBanner — the round header row.
  *
- * A deterministically generated course banner (gradient + motif; see
- * `courseBanner.ts`) titled Instagram-style: the round owner's @handle
- * is the prominent line, with `course · location` as a subscript. It
- * replaces the text `EditorialHeader` on the feed card and stands in
- * for course photos.
+ * A compact, social-app header (mockup `feed-card-header-redesign.html`):
  *
- * A ⋯ overflow (top-right) opens an anchored popover with round actions
- * (e.g. Edit) — same look as `HeaderOverflowMenu`, but anchored to the
- * button's measured position since a card sits anywhere in the scroll.
- * Moving Edit here keeps the footer action bar uniform (Like + Comments)
- * across every round.
+ *   [avatar]  @handle                         ⋯
+ *             Course Name · 2h ago
+ *
+ * The owner's avatar (deterministic colour + initial) and @handle link to
+ * their profile via `onPressOwner` (the caller routes within its own tab
+ * stack). The course name sits beneath; course location is intentionally
+ * dropped. For live rounds the time means "last updated" and renders in the
+ * live colour with a small pulsing dot.
+ *
+ * A ⋯ overflow (right, vertically centred) opens an anchored popover with
+ * round actions — same look as `HeaderOverflowMenu`, anchored to the
+ * button's measured position since a card sits anywhere in the scroll. It
+ * is rendered only when `overflowActions` is non-empty (e.g. the scoring
+ * screen passes none — its actions live in the native stack header).
+ *
+ * Shared by every round surface: `RoundListCard` (feed + Previous list),
+ * `RoundDetailView` (detail screen) and `ScoringRoundView` (scoring + edit).
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Animated,
   Dimensions,
   Modal,
   Pressable,
@@ -25,92 +33,94 @@ import {
   Text,
   View,
 } from 'react-native';
-import Svg, { Ellipse, G, Line, Path, Polygon } from 'react-native-svg';
 
-import {
-  bannerStyleForCourse,
-  gradientColors,
-  gradientVector,
-  type BannerMotif,
-  type CourseBannerStyle,
-} from '@/library/golf/courseBanner';
+import { pickAvatarColor } from '@/library/social/avatarColors';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
-import type { Course } from '@/types/golf';
 
 import type { OverflowItem } from './HeaderOverflowMenu';
 
-const BANNER_HEIGHT = 124;
-const MOTIF_W = 404;
-
 type Props = {
-  course: Course;
   /** Round owner's @handle (without the leading @). */
   handle?: string | null;
-  /** Fallback title when no handle is known. */
+  /** Fallback title + avatar initial when no handle is known. */
   displayName?: string | null;
-  /** Small-caps meta, e.g. "Completed · 2h ago" or "LIVE · THRU 11". */
-  metaLeft: string;
-  /** Optional trailing meta after a dot, e.g. "12m ago". */
-  metaRight?: string;
+  /** Owner avatar colour; falls back to a hash of `avatarSeed`. */
+  avatarColor?: string | null;
+  /** Seed for the avatar-colour fallback (the owner's userId). */
+  avatarSeed?: string | null;
+  /** Course name (no location). */
+  courseName: string;
+  /** Relative time, e.g. "2h ago" (completed) or last-updated (live). */
+  timeText: string;
+  /** Live rounds render the time in the live colour with a pulsing dot. */
   isLive?: boolean;
+  /** Avatar + @handle tap → owner profile (routed by the caller). */
+  onPressOwner?: () => void;
   /** When non-empty, a ⋯ opens an anchored popover with these actions. */
   overflowActions?: OverflowItem[];
 };
 
 export function CourseBanner({
-  course,
   handle,
   displayName,
-  metaLeft,
-  metaRight,
+  avatarColor,
+  avatarSeed,
+  courseName,
+  timeText,
   isLive = false,
+  onPressOwner,
   overflowActions,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const bannerStyle = useMemo(() => bannerStyleForCourse(course), [course]);
-  const grad = useMemo(() => gradientColors(bannerStyle), [bannerStyle]);
-  const vector = useMemo(
-    () => gradientVector(bannerStyle.angle),
-    [bannerStyle.angle]
-  );
-
-  const title = handle ? `@${handle}` : displayName || course.name;
-  const subtitle = course.location
-    ? `${course.name} · ${course.location}`
-    : course.name;
-  const meta = metaRight ? `${metaLeft} · ${metaRight}` : metaLeft;
+  const title = handle || displayName || 'Someone';
+  const initial = (
+    displayName?.trim()?.[0] ??
+    handle?.trim()?.[0] ??
+    '?'
+  ).toUpperCase();
+  const avatarBg =
+    avatarColor || pickAvatarColor(avatarSeed || handle || displayName || '?');
+  const profileLabel = handle ? `View ${handle}'s profile` : 'View profile';
 
   return (
-    <View style={styles.banner}>
-      <LinearGradient
-        colors={grad}
-        start={vector.start}
-        end={vector.end}
-        style={StyleSheet.absoluteFill}
-      />
-      <CourseMotif bannerStyle={bannerStyle} />
-      <LinearGradient
-        colors={['rgba(0,0,0,0.18)', 'rgba(0,0,0,0)', 'rgba(0,0,0,0.58)']}
-        locations={[0, 0.4, 1]}
-        style={StyleSheet.absoluteFill}
-      />
-
-      <View style={styles.content} pointerEvents="box-none">
-        <View style={styles.metaRow}>
-          {isLive ? <View style={styles.liveDot} /> : null}
-          <Text style={styles.metaText} numberOfLines={1}>
-            {meta}
-          </Text>
+    <View style={styles.header}>
+      <Pressable
+        onPress={onPressOwner}
+        disabled={!onPressOwner}
+        hitSlop={4}
+        accessibilityRole="button"
+        accessibilityLabel={profileLabel}>
+        <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+          <Text style={styles.avatarText}>{initial}</Text>
         </View>
-        <View>
+      </Pressable>
+
+      <View style={styles.textCol}>
+        <Pressable
+          onPress={onPressOwner}
+          disabled={!onPressOwner}
+          hitSlop={4}
+          accessibilityRole="button"
+          accessibilityLabel={profileLabel}>
           <Text style={styles.handle} numberOfLines={1}>
             {title}
           </Text>
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {subtitle}
+        </Pressable>
+        <View style={styles.subRow}>
+          {/* TODO(course-screen): make the course name tappable
+              (push course/[id]) once that route exists. */}
+          <Text style={styles.course} numberOfLines={1}>
+            {courseName}
+          </Text>
+          <Text style={styles.sep}> · </Text>
+          {isLive ? <PulseDot color={colors.primary} /> : null}
+          <Text
+            style={isLive ? styles.liveTime : styles.metaTime}
+            numberOfLines={1}>
+            {timeText}
           </Text>
         </View>
       </View>
@@ -123,95 +133,42 @@ export function CourseBanner({
 }
 
 /* ------------------------------------------------------------------ */
-/* Background motif (react-native-svg) — white, low-opacity over the   */
-/* gradient. One of four variants picked deterministically per course. */
+/* Pulsing live dot (Animated opacity loop; only mounts for live).     */
 /* ------------------------------------------------------------------ */
 
-function CourseMotif({ bannerStyle }: { bannerStyle: CourseBannerStyle }) {
-  const fx = Math.round((bannerStyle.flagX / 100) * MOTIF_W);
-  return (
-    <Svg
-      width="100%"
-      height="100%"
-      viewBox={`0 0 ${MOTIF_W} ${BANNER_HEIGHT}`}
-      preserveAspectRatio="none"
-      style={StyleSheet.absoluteFill}>
-      {renderMotif(bannerStyle.motif, fx)}
-    </Svg>
-  );
-}
+function PulseDot({ color }: { color: string }) {
+  const [opacity] = useState(() => new Animated.Value(1));
 
-function Flag({ x, topY }: { x: number; topY: number }) {
-  return (
-    <G>
-      <Line
-        x1={x}
-        y1={topY}
-        x2={x}
-        y2={topY + 40}
-        stroke="#ffffff"
-        strokeOpacity={0.85}
-        strokeWidth={2}
-      />
-      <Polygon
-        points={`${x},${topY} ${x + 20},${topY + 6} ${x},${topY + 12}`}
-        fill="#ffffff"
-        fillOpacity={0.9}
-      />
-    </G>
-  );
-}
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(opacity, {
+          toValue: 0.25,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 1,
+          duration: 750,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [opacity]);
 
-function renderMotif(motif: BannerMotif, fx: number) {
-  if (motif === 0) {
-    return (
-      <>
-        <G fill="none" stroke="#ffffff" strokeOpacity={0.42} strokeWidth={1.2}>
-          <Path d="M-10 90 C 80 70, 150 100, 240 80 S 380 64, 420 84" />
-          <Path d="M-10 102 C 80 84, 150 112, 240 92 S 380 78, 420 96" />
-          <Path d="M-10 78 C 80 58, 160 90, 250 68 S 380 52, 420 72" />
-        </G>
-        <Flag x={fx} topY={34} />
-      </>
-    );
-  }
-  if (motif === 1) {
-    return (
-      <>
-        <G fill="none" stroke="#ffffff" strokeOpacity={0.42} strokeWidth={1.2}>
-          <Path d="M-10 98 C 60 58, 140 110, 210 78 S 360 48, 420 96" />
-          <Path d="M-10 84 C 70 50, 150 100, 230 70 S 370 40, 420 82" />
-          <Path d="M-10 110 C 60 78, 150 120, 220 96 S 360 70, 420 108" />
-        </G>
-        <Flag x={fx} topY={30} />
-      </>
-    );
-  }
-  if (motif === 2) {
-    return (
-      <>
-        <Path
-          d="M-10 124 L-10 92 C 90 74, 180 106, 280 88 S 420 72, 420 98 L420 124 Z"
-          fill="#ffffff"
-          fillOpacity={0.13}
-        />
-        <G fill="none" stroke="#ffffff" strokeOpacity={0.4} strokeWidth={1.1}>
-          <Path d="M-10 80 C 90 64, 180 92, 280 76 S 420 62, 420 86" />
-        </G>
-        <Flag x={fx} topY={30} />
-      </>
-    );
-  }
   return (
-    <>
-      <G fill="none" stroke="#ffffff" strokeOpacity={0.4} strokeWidth={1.2}>
-        <Ellipse cx={fx} cy={82} rx={26} ry={13} />
-        <Ellipse cx={fx} cy={82} rx={52} ry={26} />
-        <Ellipse cx={fx} cy={82} rx={82} ry={40} />
-        <Ellipse cx={fx} cy={82} rx={116} ry={56} />
-      </G>
-      <Flag x={fx} topY={40} />
-    </>
+    <Animated.View
+      style={{
+        width: 7,
+        height: 7,
+        borderRadius: 3.5,
+        marginRight: 5,
+        backgroundColor: color,
+        opacity,
+      }}
+    />
   );
 }
 
@@ -250,14 +207,18 @@ function BannerOverflowMenu({ items }: { items: OverflowItem[] }) {
 
   return (
     <>
-      <View ref={triggerRef} style={styles.moreWrap} collapsable={false}>
+      <View ref={triggerRef} collapsable={false}>
         <Pressable
           onPress={openMenu}
           hitSlop={8}
           accessibilityRole="button"
           accessibilityLabel="More options"
           style={styles.moreBtn}>
-          <Ionicons name="ellipsis-horizontal" size={18} color="#ffffff" />
+          <Ionicons
+            name="ellipsis-horizontal"
+            size={20}
+            color={colors.textMuted}
+          />
         </Pressable>
       </View>
 
@@ -306,72 +267,67 @@ function BannerOverflowMenu({ items }: { items: OverflowItem[] }) {
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    banner: {
-      height: BANNER_HEIGHT,
-      width: '100%',
-      overflow: 'hidden',
-    },
-    content: {
-      position: 'absolute',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      paddingHorizontal: 16,
-      paddingTop: 13,
-      paddingBottom: 13,
-      justifyContent: 'space-between',
-    },
-    metaRow: {
+    header: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 11,
+      paddingLeft: 14,
+      paddingRight: 6,
+      paddingVertical: 10,
     },
-    liveDot: {
-      width: 6,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: '#ffffff',
-    },
-    metaText: {
-      color: 'rgba(255,255,255,0.92)',
-      fontSize: 11.5,
-      fontWeight: '700',
-      letterSpacing: 0.3,
-      textShadowColor: 'rgba(0,0,0,0.45)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 6,
-    },
-    handle: {
-      color: '#ffffff',
-      fontSize: 20,
-      fontWeight: '900',
-      letterSpacing: -0.3,
-      textShadowColor: 'rgba(0,0,0,0.45)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 10,
-    },
-    subtitle: {
-      marginTop: 4,
-      color: 'rgba(255,255,255,0.92)',
-      fontSize: 12,
-      fontWeight: '600',
-      textShadowColor: 'rgba(0,0,0,0.45)',
-      textShadowOffset: { width: 0, height: 1 },
-      textShadowRadius: 8,
-    },
-    moreWrap: {
-      position: 'absolute',
-      top: 9,
-      right: 9,
-    },
-    moreBtn: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
+    avatar: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(0,0,0,0.3)',
+    },
+    avatarText: {
+      color: '#ffffff',
+      fontWeight: '800',
+      fontSize: 17,
+    },
+    textCol: {
+      flex: 1,
+      minWidth: 0,
+    },
+    handle: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: colors.textTitle,
+      letterSpacing: -0.1,
+    },
+    subRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 2,
+    },
+    course: {
+      flexShrink: 1,
+      fontSize: 12.5,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    sep: {
+      fontSize: 12.5,
+      color: colors.textMuted,
+    },
+    metaTime: {
+      fontSize: 12.5,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    liveTime: {
+      fontSize: 12.5,
+      fontWeight: '800',
+      color: colors.primary,
+    },
+    moreBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     backdrop: {
       position: 'absolute',

@@ -397,7 +397,7 @@ export default function FormatScreen() {
                           <View
                             style={[
                               styles.teePillDot,
-                              { backgroundColor: teeSwatch(tee) },
+                              { backgroundColor: teeSwatch(tee, colors) },
                             ]}
                           />
                           <Text style={styles.teePillText} numberOfLines={1}>
