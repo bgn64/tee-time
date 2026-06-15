@@ -35,7 +35,7 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { TeamAvatarCluster, type AvatarMember } from './TeamAvatarCluster';
+import { type AvatarMember } from './TeamAvatarCluster';
 import { FrontBackPill } from './FrontBackPill';
 import { ScoreMark } from './ScoreMark';
 import { holesInRange } from '@/library/golf/scoring';
@@ -289,6 +289,7 @@ function ScorecardGrid({
             id: pid,
             name: r?.displayName || 'Player',
             color: r?.avatarColor || colors.primary,
+            handle: r?.handle,
           };
         });
         const firstMember = team.playerIds[0];
@@ -321,7 +322,7 @@ function ScorecardGrid({
       return {
         id: pid,
         label: shortLabel,
-        members: [{ id: pid, name, color }],
+        members: [{ id: pid, name, color, handle: r?.handle }],
         teeId,
         userId: r?.userId,
       };
@@ -390,9 +391,6 @@ function ScorecardGrid({
                   return (
                     <View key={`yds-${tee.id}`} style={styles.rowYds}>
                       <Cell label style={[styles.cellLabel, styles.cellYdsLabel]}>
-                        <View
-                          style={[styles.teeDot, { backgroundColor: teeHex }]}
-                        />
                         <Text
                           style={[styles.cellYdsLabelText, { color: teeHex }]}
                           numberOfLines={1}>
@@ -509,18 +507,8 @@ function ScorecardGrid({
                     visibleHoles={visibleHoles}
                     round={round}
                     totals={totals}
-                    teeColor={
-                      // Only resolve a swatch when the scorer has
-                      // explicitly picked a tee. Falling back to the
-                      // first tee in the matched group would paint a
-                      // misleading colour next to the avatar (e.g.
-                      // blue for a no-tee scorer in a Blue/White/Red
-                      // course).
-                      scorer.teeId ? (teeColorMap.get(scorer.teeId) ?? null) : null
-                    }
                     onPressParticipant={onPressParticipant}
                     styles={styles}
-                    colors={colors}
                   />
                 ))}
               </View>
@@ -678,10 +666,8 @@ type ScorerRowProps = {
   visibleHoles: readonly Hole[];
   round: Round;
   totals: TotalFlags;
-  teeColor: string | null;
   onPressParticipant?: (userId: string) => void;
   styles: ReturnType<typeof makeStyles>;
-  colors: ThemeColors;
 };
 
 function ScorerRow({
@@ -689,10 +675,8 @@ function ScorerRow({
   visibleHoles,
   round,
   totals,
-  teeColor,
   onPressParticipant,
   styles,
-  colors,
 }: ScorerRowProps) {
   // Per-hole strokes for this scorer, indexed by hole number.
   const strokesByHole = useMemo(() => {
@@ -714,25 +698,32 @@ function ScorerRow({
     ? computeRelative(strokesByHole, visibleHoles, 'back9')
     : null;
 
-  const dotHex = teeColor ? colors[teeColor as keyof ThemeColors] as string : undefined;
-
   return (
     <View style={styles.rowScorer}>
       <Cell label style={styles.cellLabel}>
-        <View style={styles.scorerLabelInner}>
-          {onPressParticipant && scorer.userId ? (
-            <Pressable
-              onPress={() => scorer.userId && onPressParticipant(scorer.userId)}
-              accessibilityRole="button"
-              accessibilityLabel={`View ${scorer.label}'s profile`}>
-              <TeamAvatarCluster members={scorer.members} size="sm" />
-            </Pressable>
-          ) : (
-            <TeamAvatarCluster members={scorer.members} size="sm" />
-          )}
-          {dotHex ? (
-            <View style={[styles.teeDotSmall, { backgroundColor: dotHex }]} />
-          ) : null}
+        <View style={styles.scorerHandleStack}>
+          {scorer.members.map((m, i) => {
+            const text = m.handle ?? m.name;
+            const tappable =
+              i === 0 && !!onPressParticipant && !!scorer.userId;
+            return tappable ? (
+              <Pressable
+                key={m.id}
+                onPress={() =>
+                  scorer.userId && onPressParticipant?.(scorer.userId)
+                }
+                accessibilityRole="button"
+                accessibilityLabel={`View ${text}'s profile`}>
+                <Text style={styles.scorerHandle} numberOfLines={1}>
+                  {text}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text key={m.id} style={styles.scorerHandle} numberOfLines={1}>
+                {text}
+              </Text>
+            );
+          })}
         </View>
       </Cell>
       {visibleHoles.map((hole) => {
@@ -805,7 +796,7 @@ function makeStyles(colors: ThemeColors, fit = false) {
   const holeSize = fit
     ? ({ flexGrow: 1, flexBasis: 0, minWidth: 0 } as const)
     : ({ width: 26 } as const);
-  const labelW = fit ? 44 : 56;
+  const labelW = fit ? 78 : 104;
   const totW = fit ? 34 : 46;
   const totOutInW = fit ? 30 : 42;
   return StyleSheet.create({
@@ -986,12 +977,15 @@ function makeStyles(colors: ThemeColors, fit = false) {
       flexShrink: 0,
       marginLeft: 2,
     },
-    scorerLabelInner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
+    scorerHandleStack: {
       flex: 1,
       minWidth: 0,
+      gap: 2,
+    },
+    scorerHandle: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.textTitle,
     },
     scrollContent: {
       // Center the table when it fits the viewport (i.e. Front/Back

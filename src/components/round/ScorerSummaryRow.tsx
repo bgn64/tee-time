@@ -22,7 +22,7 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
+import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { teeSwatch } from '@/components/scoring/TeePickerSheet';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -120,7 +120,6 @@ export function ScorerSummaryRow({
       </Pressable>
     ) : (
       <View style={styles.teeNameBare}>
-        <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
         <Text style={styles.teeBareName} numberOfLines={1}>
           {tee.name}
         </Text>
@@ -161,7 +160,6 @@ export function ScorerSummaryRow({
     } else {
       teeChip = (
         <View style={styles.teeBare}>
-          <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
           <Text style={styles.teeBareName} numberOfLines={1}>
             {tee.name}
           </Text>
@@ -193,11 +191,21 @@ export function ScorerSummaryRow({
 
   return (
     <View style={styles.row}>
-      <TeamAvatarCluster members={members} size="lg" />
       <View style={styles.body}>
-        <Text style={styles.name} numberOfLines={1}>
-          {name}
-        </Text>
+        <View style={styles.idStack}>
+          {members.map((m) => (
+            <View key={m.id} style={styles.idLine}>
+              <View style={[styles.idAvatar, { backgroundColor: m.color }]}>
+                <Text style={styles.idAvatarText}>
+                  {(m.name?.[0] ?? '?').toUpperCase()}
+                </Text>
+              </View>
+              <Text style={styles.idHandle} numberOfLines={1}>
+                {m.handle ?? m.name}
+              </Text>
+            </View>
+          ))}
+        </View>
         {teeChip}
       </View>
       <View style={styles.scoreCol}>
@@ -226,7 +234,28 @@ function makeStyles(colors: ThemeColors) {
       flex: 1,
       minWidth: 0,
     },
-    name: {
+    idStack: {
+      gap: 3,
+    },
+    idLine: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+    },
+    idAvatar: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    idAvatarText: {
+      color: '#ffffff',
+      fontWeight: '800',
+      fontSize: 9.5,
+    },
+    idHandle: {
+      flexShrink: 1,
       fontSize: 14,
       fontWeight: '800',
       color: colors.textTitle,

@@ -56,6 +56,7 @@ export function useRoundScorers(round: Round): RoundScorer[] {
             id: pid,
             name: r?.displayName || 'Player',
             color: r?.avatarColor || colors.primary,
+            handle: r?.handle,
           };
         });
         // Team tee follows the first member's participant entry. The
@@ -85,7 +86,7 @@ export function useRoundScorers(round: Round): RoundScorer[] {
       return {
         id: pid,
         name,
-        members: [{ id: pid, name, color }],
+        members: [{ id: pid, name, color, handle: r?.handle }],
         tee: findTee(round.course, teeId),
         userId: r?.userId,
       };

@@ -22,6 +22,8 @@ export type AvatarMember = {
   name: string;
   /** Background color for the circle (resolved upstream from roster). */
   color: string;
+  /** Bare handle (no leading @) when the member is a registered user. */
+  handle?: string;
 };
 
 export type TeamAvatarClusterSize = 'sm' | 'md' | 'lg';
