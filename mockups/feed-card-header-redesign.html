@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Tee-Time · Feed card header redesign (current vs. new)</title>
+<!--
+  Feed-card HEADER redesign mockup (static HTML/CSS/JS, no build step).
+
+  Goal: compare the CURRENT feed-card header against a REDESIGNED, compact
+  social-app header.
+
+    CURRENT  (baseline) — the live <CourseBanner>: a 124px deterministic
+             course-art banner (gradient + motif + flag) titled
+             Instagram-style with the owner's @handle large, course ·
+             location beneath, a small-caps meta line, and a ⋯ in a dark
+             pill top-right.
+
+    REDESIGN — a plain card-bg row like Instagram / most social apps:
+             [avatar] @handle, with the course name on the line beneath,
+             and a ⋯ vertically centred on the right.
+               · avatar + @handle  → the owner's profile
+               · course name       → the course screen (the one reachable
+                                      from the Search tab)
+               · all of the above open WITHIN the Feed tab (pushed onto the
+                 home stack) — you never get bounced to another tab.
+               · course LOCATION is dropped.
+
+  Both cards share an identical body + footer so the header is the only
+  variable. Click any link in the redesign header to see its route intent.
+
+  Mirrors tokens/styles from:
+    src/library/theme/themes.ts            (colour tokens, light + dark)
+    src/components/round/CourseBanner.tsx  (current gradient header)
+    src/components/round/RoundActionBar.tsx
+    src/components/round/SummaryTabContent.tsx / ScorerSummaryRow.tsx
+    src/library/social/avatarColors.ts     (deterministic avatar colour)
+    src/library/golf/courseBanner.ts        (deterministic banner art)
+-->
+<style>
+  /* ---- Theme tokens (mirrored from src/library/theme/themes.ts) ---- */
+  :root,
+  [data-theme="light"] {
+    --bg: #f6f7f2;
+    --primary: #2f7d4b;
+    --primary-dark: #14543a;
+    --accent: #d94835;
+    --text-title: #123322;
+    --text-body: #39423d;
+    --text-muted: #718077;
+    --card-bg: #ffffff;
+    --chip-bg: #edf1e9;
+    --border: #dce2d8;
+    --hairline: #ebeee6;
+    --stat-good: #2f7d4b;
+    --stat-bad: #c0492f;
+    --tee-blue: #4b8fd1;
+    --tee-white: #8a8f81;
+    --tee-red: #c9442f;
+    --shadow-card: 0 10px 14px rgba(20, 84, 58, 0.10);
+    --live: #2f7d4b;
+    --live-soft: rgba(47, 125, 75, 0.40);
+    --page-text: #2b332e;
+  }
+  [data-theme="dark"] {
+    --bg: #0f1419;
+    --primary: #91d45f;
+    --primary-dark: #66b34e;
+    --accent: #f97066;
+    --text-title: #edf5e8;
+    --text-body: #cbd6cf;
+    --text-muted: #91a095;
+    --card-bg: #18222b;
+    --chip-bg: #24313a;
+    --border: #34424b;
+    --hairline: rgba(255, 255, 255, 0.06);
+    --stat-good: #8fce6a;
+    --stat-bad: #f3a59f;
+    --tee-blue: #6aa9e5;
+    --tee-white: #c2c8b8;
+    --tee-red: #f08e7e;
+    --shadow-card: 0 10px 16px rgba(0, 0, 0, 0.45);
+    --live: #91d45f;
+    --live-soft: rgba(145, 212, 95, 0.45);
+    --page-text: #cdd6cf;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--page-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    transition: background .2s ease, color .2s ease;
+    padding: 28px 16px 90px;
+  }
+
+  /* ---------- Page chrome (not part of the card design) ---------- */
+  .wrap { max-width: 880px; margin: 0 auto; }
+  .page-head h1 { font-size: 21px; margin: 0 0 6px; color: var(--text-title); letter-spacing: -0.3px; }
+  .page-head p  { font-size: 13px; line-height: 1.6; margin: 0; color: var(--text-muted); max-width: 660px; }
+
+  .toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0 0; }
+  .btn {
+    font: inherit; font-size: 12.5px; font-weight: 700;
+    border: 1px solid var(--border); background: var(--card-bg); color: var(--text-title);
+    padding: 8px 13px; border-radius: 9px; cursor: pointer; transition: all .15s;
+  }
+  .btn:hover { border-color: var(--primary); }
+  .btn[aria-pressed="true"] { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+  .legend {
+    margin: 16px 0 0; display: flex; flex-wrap: wrap; gap: 9px 18px;
+    font-size: 12px; color: var(--text-muted); align-items: center;
+  }
+  .legend .grp { display: flex; align-items: center; gap: 7px; }
+  .legend .sw { width: 13px; height: 13px; border-radius: 4px; flex: none; }
+  .legend code { font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: var(--text-title); }
+
+  .section-title {
+    margin: 34px 0 4px; font-size: 12px; font-weight: 800; letter-spacing: .8px;
+    text-transform: uppercase; color: var(--text-muted);
+  }
+  .section-sub { margin: 0 0 16px; font-size: 12.5px; color: var(--text-muted); max-width: 640px; line-height: 1.55; }
+
+  /* ---------- Phone / stage layout ---------- */
+  .stage { display: flex; flex-wrap: wrap; gap: 30px 26px; align-items: flex-start; }
+  .phone { flex: 1 1 360px; max-width: 392px; }
+  .phone-label { margin: 0 0 9px; font-size: 12px; font-weight: 700; color: var(--text-muted); display: flex; align-items: center; gap: 8px; }
+  .tag { font-size: 10px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+  .tag.old { background: var(--chip-bg); color: var(--text-muted); }
+  .tag.new { background: var(--primary); color: #fff; }
+
+  /* ---------- The card ---------- */
+  .card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+  }
+
+  /* =====================================================================
+     CURRENT header — <CourseBanner> (gradient + motif, handle-led)
+     ===================================================================== */
+  .banner { position: relative; height: 124px; overflow: hidden; }
+  .banner .bgrad { position: absolute; inset: 0; }
+  .banner .bcontour { position: absolute; inset: 0; opacity: .55; }
+  .banner .bcontour svg { width: 100%; height: 100%; display: block; }
+  .banner .bscrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.20) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,.58) 100%); }
+  .banner .bhead { position: absolute; inset: 0; padding: 13px 16px; display: flex; flex-direction: column; }
+  .banner .bmeta { display: flex; align-items: center; gap: 6px; }
+  .banner .bmeta .top-text { font-size: 11.5px; font-weight: 700; letter-spacing: .3px; color: rgba(255,255,255,.92); text-shadow: 0 1px 6px rgba(0,0,0,.45); }
+  .banner .bmeta .live-dot { width: 6px; height: 6px; border-radius: 50%; background: #fff; flex: none; }
+  .banner .btitle { margin-top: auto; }
+  .banner .bhandle { font-size: 20px; font-weight: 900; letter-spacing: -.3px; color: #fff; text-shadow: 0 1px 10px rgba(0,0,0,.45); }
+  .banner .bsub { margin-top: 5px; font-size: 12px; font-weight: 600; color: rgba(255,255,255,.92); text-shadow: 0 1px 8px rgba(0,0,0,.45); }
+  .banner-more {
+    position: absolute; top: 9px; right: 9px; width: 30px; height: 30px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+    background: rgba(0,0,0,.3); border: none; color: #fff;
+  }
+  .banner-more:hover { background: rgba(0,0,0,.45); }
+  .banner-more svg { width: 18px; height: 18px; fill: #fff; }
+
+  /* =====================================================================
+     REDESIGNED header — compact social-app row
+     ===================================================================== */
+  .fh {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 12px 11px 14px;
+  }
+  .fh-id { display: flex; flex: none; text-decoration: none; border-radius: 50%; }
+  .fh-avatar {
+    width: 44px; height: 44px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 800; font-size: 18px; flex: none;
+  }
+  .fh-text { flex: 1; min-width: 0; }
+  .fh-handle-row { display: flex; align-items: center; gap: 7px; }
+  .fh-handle {
+    font-size: 15px; font-weight: 800; color: var(--text-title);
+    text-decoration: none; letter-spacing: -.1px;
+  }
+  .fh-sub { margin-top: 2px; display: flex; align-items: baseline; gap: 0; min-width: 0; }
+  .fh-course {
+    font-size: 12.5px; font-weight: 600; color: var(--text-muted); text-decoration: none;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 0 1 auto; min-width: 0;
+  }
+  .fh-meta { font-size: 12.5px; font-weight: 600; color: var(--text-muted); flex: none; white-space: nowrap; }
+  .fh-meta.live { color: var(--primary-dark); font-weight: 800; }
+  [data-theme="dark"] .fh-meta.live { color: var(--primary); }
+
+  /* Tappable affordance — avatar + handle and course read as links */
+  .fh-id, .fh-handle, .fh-course { cursor: pointer; }
+  .fh-handle:hover, .fh-course:hover { text-decoration: underline; }
+  .fh-id:hover .fh-avatar { box-shadow: 0 0 0 2px var(--card-bg), 0 0 0 4px var(--primary); }
+
+  /* ---- Live indicator — the "last updated" time carries the live colour + a soft pulsing dot ---- */
+  @keyframes livePulse {
+    0%   { box-shadow: 0 0 0 0 var(--live-soft); }
+    70%  { box-shadow: 0 0 0 7px rgba(0, 0, 0, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
+  }
+  .pulse-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--live); flex: none;
+    animation: livePulse 1.8s ease-out infinite;
+  }
+  .fh-meta.livetime { color: var(--live); font-weight: 800; display: inline-flex; align-items: center; gap: 5px; align-self: center; }
+  .fh-more {
+    flex: none; width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: none; cursor: pointer; color: var(--text-muted);
+  }
+  .fh-more:hover { background: var(--chip-bg); color: var(--text-title); }
+  .fh-more svg { width: 20px; height: 20px; fill: currentColor; }
+
+  .fh-divider { height: 1px; background: var(--hairline); margin: 0; }
+
+  /* =====================================================================
+     BODY — SummaryTabContent / ScorerSummaryRow (shared by both cards)
+     ===================================================================== */
+  .summary { padding: 6px 18px 4px; }
+  .scorer-block { padding: 10px 0; }
+  .scorer-block + .scorer-block { border-top: 1px solid var(--hairline); }
+  .scorer-row { display: flex; align-items: center; gap: 12px; }
+  .avatar {
+    width: 30px; height: 30px; border-radius: 50%; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 800; font-size: 12px;
+  }
+  .scorer-body { flex: 1; min-width: 0; }
+  .scorer-name { font-size: 14px; font-weight: 800; color: var(--text-title); }
+  .tee-bare { margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .tee-dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .tee-name, .tee-yds { font-size: 11.5px; font-weight: 600; color: var(--text-muted); }
+  .tee-sep { font-size: 11.5px; color: var(--border); }
+  .score-col { display: flex; flex-direction: column; align-items: flex-end; flex: none; }
+  .score-text { font-size: 28px; font-weight: 800; line-height: 30px; color: var(--primary-dark); }
+  .score-text.even { color: var(--text-body); }
+  .score-text.over { color: var(--text-title); }
+  .score-sub { margin-top: 3px; font-size: 10px; font-weight: 700; letter-spacing: .4px; color: var(--text-muted); }
+  .stat-line { margin-top: 8px; font-size: 13px; line-height: 19px; color: var(--text-body); }
+  .stat-line .v { font-weight: 900; color: var(--text-title); }
+  .stat-line .good { font-weight: 900; color: var(--stat-good); }
+  .stat-line .bad { font-weight: 900; color: var(--stat-bad); }
+  .stat-line .lbl, .stat-line .sep { font-weight: 700; color: var(--text-muted); }
+  .stat-line .den { font-weight: 700; color: var(--text-muted); font-size: 11.5px; }
+
+  /* ---------- Footer — RoundActionBar (shared) ---------- */
+  .action-bar { display: flex; border-top: 1px solid var(--hairline); padding: 4px 0 6px; }
+  .action-bar .seg {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 3px; padding: 10px 0; cursor: pointer; background: none; border: none; font: inherit;
+  }
+  .seg .ico { width: 22px; height: 22px; stroke: var(--text-title); fill: none; stroke-width: 1.7; }
+  .seg .seg-label { font-size: 11px; font-weight: 700; color: var(--text-title); }
+  .seg.liked .ico { stroke: var(--accent); fill: var(--accent); }
+  .seg.liked .seg-label { color: var(--accent); }
+
+  /* ---------- Route toast ---------- */
+  .toast {
+    position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(16px);
+    background: var(--text-title); color: var(--card-bg);
+    font-size: 12.5px; font-weight: 700; padding: 10px 15px; border-radius: 10px;
+    box-shadow: 0 8px 22px rgba(0,0,0,.28); opacity: 0; pointer-events: none;
+    transition: opacity .18s ease, transform .18s ease; max-width: 86vw; text-align: center;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .footnote { margin: 30px 0 0; font-size: 12px; color: var(--text-muted); line-height: 1.6; max-width: 660px; }
+  .footnote code { font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace; font-size: 11px; color: var(--text-title); }
+</style>
+</head>
+<body data-theme="light">
+  <div class="wrap">
+    <header class="page-head">
+      <h1>Feed card header — current vs. redesign</h1>
+      <p>
+        Same card body and footer on both sides; only the header changes. The redesign drops
+        the deterministic course-art banner in favour of a compact social-app header: avatar,
+        @handle, course name beneath, and a ⋯ centred on the right. Course location is dropped.
+        Click the avatar, handle, or course in the redesign to see where each one routes.
+      </p>
+    </header>
+
+    <div class="toolbar">
+      <button class="btn" id="themeBtn" aria-pressed="false">🌙 Dark</button>
+    </div>
+
+    <div class="legend">
+      <span class="grp"><span class="sw" style="background:var(--primary)"></span> avatar + <code>@handle</code> → profile</span>
+      <span class="grp"><span class="sw" style="background:var(--text-muted)"></span> course → course screen</span>
+      <span class="grp"><span class="sw" style="background:var(--accent)"></span> ⋯ → round actions</span>
+      <span class="grp">↳ all open <strong>in the Feed tab</strong></span>
+    </div>
+
+    <!-- ============================ MAIN COMPARISON ============================ -->
+    <p class="section-title">Side by side</p>
+    <p class="section-sub">A completed round, 3 players. Left is what ships today; right is the redesign.</p>
+
+    <div class="stage">
+      <!-- CURRENT -->
+      <div class="phone">
+        <p class="phone-label"><span class="tag old">Current</span> course-art banner</p>
+        <article class="card">
+          <div class="banner"
+               data-banner='{"seed":"Pebble Beach Golf Links","handle":"bennyg","course":"Pebble Beach Golf Links","location":"Pebble Beach, CA","meta":"Completed · 2h ago"}'></div>
+          <div class="body-host"></div>
+        </article>
+      </div>
+
+      <!-- REDESIGN -->
+      <div class="phone">
+        <p class="phone-label"><span class="tag new">Redesign</span> compact social header</p>
+        <article class="card">
+          <div class="fh">
+            <a class="fh-id" href="#" data-route="profile" data-who="@bennyg">
+              <span class="fh-avatar" data-avatar-seed="bennyg">B</span>
+            </a>
+            <div class="fh-text">
+              <div class="fh-handle-row">
+                <a class="fh-handle" href="#" data-route="profile" data-who="@bennyg">@bennyg</a>
+              </div>
+              <div class="fh-sub">
+                <a class="fh-course" href="#" data-route="course" data-who="Pebble Beach Golf Links">Pebble Beach Golf Links</a>
+                <span class="fh-meta">&nbsp;· 2h ago</span>
+              </div>
+            </div>
+            <button class="fh-more" data-route="menu" data-who="round actions" aria-label="More options">
+              <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+            </button>
+          </div>
+          <div class="fh-divider"></div>
+          <div class="body-host"></div>
+        </article>
+      </div>
+    </div>
+
+    <!-- ============================ LIVE ROUND ============================ -->
+    <p class="section-title">Live round</p>
+    <p class="section-sub">
+      A live header matches the completed one with a single change: the time means “last updated”
+      (e.g. 3m ago) and is shown in the live colour with a soft pulsing dot. “Thru” stays out of the
+      header — the card body already shows each player’s progress.
+    </p>
+
+    <div class="stage">
+      <div class="phone">
+        <p class="phone-label"><span class="tag new">Redesign</span> live round · 2 players</p>
+        <article class="card">
+          <div class="fh">
+            <a class="fh-id" href="#" data-route="profile" data-who="@sammyr">
+              <span class="fh-avatar" data-avatar-seed="sammyr">S</span>
+            </a>
+            <div class="fh-text">
+              <div class="fh-handle-row">
+                <a class="fh-handle" href="#" data-route="profile" data-who="@sammyr">@sammyr</a>
+              </div>
+              <div class="fh-sub">
+                <a class="fh-course" href="#" data-route="course" data-who="Torrey Pines (South)">Torrey Pines (South)</a>
+                <span class="fh-meta livetime">&nbsp;· <span class="pulse-dot"></span> 3m ago</span>
+              </div>
+            </div>
+            <button class="fh-more" data-route="menu" data-who="round actions" aria-label="More options">
+              <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+            </button>
+          </div>
+          <div class="fh-divider"></div>
+          <div class="body-host" data-body="live"></div>
+        </article>
+      </div>
+    </div>
+
+    <p class="footnote">
+      Routing intent: avatar + <code>@handle</code> push <code>profile/[userId]</code> and course pushes
+      <code>course/[id]</code> — both onto the <code>(home)</code> stack, so the user stays in the Feed
+      tab (same per-tab convention the scorecard participant cells already use). The ⋯ opens the existing
+      anchored round-actions popover (View details; Edit when owner + completed).
+    </p>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  var body = document.body;
+
+  /* ----- Deterministic avatar colour (mirrors pickAvatarColor) ----- */
+  var AVATAR_COLORS = ["#7cb342","#42a5f5","#ab47bc","#ff8f00","#ec4899","#10b981",
+                       "#f59e0b","#8b5cf6","#ef4444","#06b6d4","#84cc16","#d946ef"];
+  function hashStr(s) {
+    var h = 0, str = String(s);
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    return h;
+  }
+  function pickAvatarColor(seed) { return AVATAR_COLORS[hashStr(seed) % AVATAR_COLORS.length]; }
+
+  document.querySelectorAll("[data-avatar-seed]").forEach(function (el) {
+    el.style.background = pickAvatarColor(el.dataset.avatarSeed);
+  });
+
+  /* ----- Deterministic course-art banner (mirrors courseBanner.ts) ----- */
+  function styleFor(seed) {
+    var h = hashStr(String(seed).toLowerCase().replace(/[^a-z0-9]/g, ""));
+    return {
+      hue: h % 360,
+      sat: 44 + (Math.floor(h / 360) % 16),
+      pattern: Math.floor(h / 23) % 4,
+      angle: 110 + (Math.floor(h / 7) % 70),
+      flagX: 18 + (Math.floor(h / 13) % 64)
+    };
+  }
+  function gradFor(s) {
+    var hue2 = (s.hue + 22) % 360;
+    return "linear-gradient(" + s.angle + "deg, hsl(" + s.hue + " " + s.sat + "% 23%), hsl(" + hue2 + " " + s.sat + "% 39%))";
+  }
+  function flagSVG(flagX, topY) {
+    var fx = Math.round(flagX / 100 * 404);
+    return '<g stroke="#fff" stroke-opacity=".85" stroke-width="2"><line x1="' + fx + '" y1="' + topY + '" x2="' + fx + '" y2="' + (topY + 40) + '"/></g>' +
+           '<path d="M' + fx + ' ' + topY + ' L' + (fx + 20) + ' ' + (topY + 6) + ' L' + fx + ' ' + (topY + 12) + ' Z" fill="#fff" fill-opacity=".9"/>';
+  }
+  function patternSVG(pattern, flagX) {
+    var open = '<svg viewBox="0 0 404 124" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">';
+    if (pattern === 0) {
+      return open + '<g fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.2">' +
+        '<path d="M-10 92 C 80 72,150 102,240 82 S 380 66,420 86"/>' +
+        '<path d="M-10 104 C 80 86,150 114,240 94 S 380 80,420 98"/>' +
+        '<path d="M-10 78 C 80 58,160 90,250 68 S 380 52,420 72"/></g>' + flagSVG(flagX, 34) + '</svg>';
+    }
+    if (pattern === 1) {
+      return open + '<g fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.2">' +
+        '<path d="M-10 98 C 60 58,140 112,210 80 S 360 48,420 96"/>' +
+        '<path d="M-10 84 C 70 50,150 100,230 70 S 370 40,420 82"/>' +
+        '<path d="M-10 110 C 60 78,150 120,220 96 S 360 70,420 108"/></g>' + flagSVG(flagX, 30) + '</svg>';
+    }
+    if (pattern === 2) {
+      return open + '<path d="M-10 124 L-10 92 C 90 74,180 106,280 88 S 420 72,420 98 L420 124 Z" fill="#fff" fill-opacity=".14"/>' +
+        '<g fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.1">' +
+        '<path d="M-10 80 C 90 64,180 92,280 76 S 420 62,420 86"/></g>' + flagSVG(flagX, 30) + '</svg>';
+    }
+    var cx = Math.round(flagX / 100 * 404);
+    return open + '<g fill="none" stroke="#fff" stroke-opacity=".42" stroke-width="1.2">' +
+      '<ellipse cx="' + cx + '" cy="82" rx="26" ry="13"/>' +
+      '<ellipse cx="' + cx + '" cy="82" rx="52" ry="26"/>' +
+      '<ellipse cx="' + cx + '" cy="82" rx="82" ry="40"/>' +
+      '<ellipse cx="' + cx + '" cy="82" rx="116" ry="56"/></g>' + flagSVG(flagX, 40) + '</svg>';
+  }
+  var MORE_SVG = '<button class="banner-more" data-route="menu" data-who="round actions" aria-label="More options">' +
+    '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg></button>';
+  function bannerHTML(o) {
+    var s = styleFor(o.seed || o.course);
+    var art = '<div class="bgrad" style="background:' + gradFor(s) + '"></div>' +
+              '<div class="bcontour">' + patternSVG(s.pattern, s.flagX) + '</div>' +
+              '<div class="bscrim"></div>';
+    var meta = o.meta
+      ? '<div class="bmeta">' + (o.live ? '<span class="live-dot"></span>' : '') + '<span class="top-text">' + o.meta + '</span></div>'
+      : '';
+    return art +
+      '<div class="bhead">' + meta +
+        '<div class="btitle">' +
+          '<div class="bhandle">@' + (o.handle || 'you') + '</div>' +
+          '<div class="bsub">' + o.course + (o.location ? ' · ' + o.location : '') + '</div>' +
+        '</div>' +
+      '</div>' + MORE_SVG;
+  }
+  document.querySelectorAll("[data-banner]").forEach(function (el) {
+    el.innerHTML = bannerHTML(JSON.parse(el.dataset.banner));
+  });
+
+  /* ----- Shared card body (SummaryTabContent) ----- */
+  function avatarSpan(seed, initial) {
+    return '<span class="avatar" style="background:' + pickAvatarColor(seed) + '">' + initial + '</span>';
+  }
+  function scorerBlock(s) {
+    return '<div class="scorer-block"><div class="scorer-row">' +
+      avatarSpan(s.seed, s.initial) +
+      '<div class="scorer-body"><div class="scorer-name">' + s.name + '</div>' +
+        '<div class="tee-bare"><span class="tee-dot" style="background:var(--tee-' + s.tee + ')"></span>' +
+        '<span class="tee-name">' + s.teeName + '</span><span class="tee-sep">·</span>' +
+        '<span class="tee-yds">' + s.yds + ' yds</span></div></div>' +
+      '<div class="score-col"><div class="score-text ' + s.tone + '">' + s.score + '</div>' +
+        '<div class="score-sub">' + s.sub + '</div></div>' +
+      '</div><div class="stat-line">' + s.stat + '</div></div>';
+  }
+  var COMPLETED = [
+    { seed: "Ben Nguyen", initial: "B", name: "Ben Nguyen", tee: "blue", teeName: "Blue", yds: "6,116",
+      score: "\u22122", tone: "", sub: "FINAL",
+      stat: '<span class="good">12</span><span class="den">/18</span> <span class="lbl">GIR</span> <span class="sep">·</span> <span class="v">30</span> <span class="lbl">putts</span> <span class="sep">·</span> <span class="v">0</span> <span class="lbl">OB</span>' },
+    { seed: "Mira Castellanos", initial: "M", name: "Mira Castellanos", tee: "red", teeName: "Red", yds: "5,197",
+      score: "+6", tone: "over", sub: "FINAL",
+      stat: '<span class="good">7</span><span class="den">/18</span> <span class="lbl">GIR</span> <span class="sep">·</span> <span class="v">33</span> <span class="lbl">putts</span> <span class="sep">·</span> <span class="bad">1</span> <span class="lbl">OB</span>' },
+    { seed: "Theo Park", initial: "T", name: "Theo Park", tee: "white", teeName: "White", yds: "5,710",
+      score: "+11", tone: "over", sub: "FINAL",
+      stat: '<span class="bad">5</span><span class="den">/18</span> <span class="lbl">GIR</span> <span class="sep">·</span> <span class="v">35</span> <span class="lbl">putts</span> <span class="sep">·</span> <span class="bad">2</span> <span class="lbl">OB</span>' }
+  ];
+  var LIVE = [
+    { seed: "Sam Rivera", initial: "S", name: "Sam Rivera", tee: "blue", teeName: "Blue", yds: "6,602",
+      score: "\u22121", tone: "", sub: "THRU 11",
+      stat: '<span class="good">8</span><span class="den">/11</span> <span class="lbl">GIR</span> <span class="sep">·</span> <span class="v">18</span> <span class="lbl">putts</span>' },
+    { seed: "Dana Okafor", initial: "D", name: "Dana Okafor", tee: "white", teeName: "White", yds: "6,012",
+      score: "+4", tone: "over", sub: "THRU 11",
+      stat: '<span class="v">6</span><span class="den">/11</span> <span class="lbl">GIR</span> <span class="sep">·</span> <span class="v">21</span> <span class="lbl">putts</span>' }
+  ];
+  var FOOTER =
+    '<footer class="action-bar">' +
+      '<button class="seg liked"><svg class="ico" viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg><span class="seg-label">5 liked</span></button>' +
+      '<button class="seg"><svg class="ico" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg><span class="seg-label">2 comments</span></button>' +
+    '</footer>';
+  document.querySelectorAll(".body-host").forEach(function (el) {
+    var data = el.dataset.body === "live" ? LIVE : COMPLETED;
+    el.innerHTML = '<div class="summary">' + data.map(scorerBlock).join("") + '</div>' + FOOTER;
+  });
+
+  /* ----- Route toast: demonstrate the link targets (in Feed tab) ----- */
+  var toast = document.getElementById("toast");
+  var toastTimer = null;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add("show");
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toast.classList.remove("show"); }, 2200);
+  }
+  var ROUTE_MSG = {
+    profile: function (who) { return "→ " + who + "’s profile · opens in the Feed tab"; },
+    course:  function (who) { return "→ " + who + " course screen · opens in the Feed tab"; },
+    menu:    function ()    { return "→ round actions menu (View details · Edit)"; }
+  };
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-route]");
+    if (!t) return;
+    e.preventDefault();
+    var fn = ROUTE_MSG[t.dataset.route];
+    if (fn) showToast(fn(t.dataset.who || ""));
+  });
+
+  /* ----- Theme toggle ----- */
+  var themeBtn = document.getElementById("themeBtn");
+  themeBtn.addEventListener("click", function () {
+    var dark = body.getAttribute("data-theme") === "dark";
+    body.setAttribute("data-theme", dark ? "light" : "dark");
+    themeBtn.setAttribute("aria-pressed", String(!dark));
+    themeBtn.textContent = dark ? "🌙 Dark" : "☀️ Light";
+  });
+})();
+</script>
+</body>
+</html>

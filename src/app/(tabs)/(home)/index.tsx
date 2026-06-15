@@ -132,6 +132,7 @@ export default function HomeFeedScreen() {
           key={round.id}
           round={round}
           detailRoutePrefix="/(tabs)/(home)/round"
+          profileRoutePrefix="/(tabs)/(home)/profile"
         />
       ))}
     </PullToRefreshScrollView>

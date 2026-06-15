@@ -43,11 +43,8 @@ import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import {
   formatRelativeTime,
-  getScorerProgress,
   holesInRange,
-  scorerIdForUser,
 } from '@/library/golf/scoring';
-import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useAccount } from '@/library/social/AccountContext';
@@ -65,9 +62,19 @@ type Props = {
    * details" overflow item pushes `${detailRoutePrefix}/${round.id}`.
    */
   detailRoutePrefix: string;
+  /**
+   * Route prefix for the owner's profile in this card's tab stack, e.g.
+   * `/(tabs)/(home)/profile`. Tapping the header avatar/@handle pushes
+   * `${profileRoutePrefix}/${ownerUserId}` so it stays in this tab.
+   */
+  profileRoutePrefix: string;
 };
 
-export function RoundListCard({ round, detailRoutePrefix }: Props) {
+export function RoundListCard({
+  round,
+  detailRoutePrefix,
+  profileRoutePrefix,
+}: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
@@ -88,12 +95,17 @@ export function RoundListCard({ round, detailRoutePrefix }: Props) {
     setHoleSheetOpen(true);
   }
 
-  const { topLineLeft, topLineRight } = useMemo(
-    () => deriveTopLine(round),
-    [round]
+  const isInProgress = !round.completedAt;
+  const timeText = formatRelativeTime(
+    isInProgress
+      ? round.lastScoreAt ?? round.startedAt
+      : round.completedAt ?? round.startedAt
   );
 
-  const isInProgress = !round.completedAt;
+  const ownerUserId = round.ownerUserId ?? '';
+  const onPressOwner = ownerUserId
+    ? () => router.push(`${profileRoutePrefix}/${ownerUserId}` as never)
+    : undefined;
   // Edit affordance is owner-only for completed rounds. In-progress
   // rounds resume editing via the scoring tab, not via the card.
   const isOwner =
@@ -215,12 +227,14 @@ export function RoundListCard({ round, detailRoutePrefix }: Props) {
   return (
     <View style={styles.card}>
       <CourseBanner
-        course={round.course}
         handle={ownerProfile?.handle}
         displayName={ownerProfile?.displayName}
-        metaLeft={topLineLeft}
-        metaRight={topLineRight}
+        avatarColor={ownerProfile?.avatarColor}
+        avatarSeed={round.ownerUserId}
+        courseName={round.course.name}
+        timeText={timeText}
         isLive={isInProgress}
+        onPressOwner={onPressOwner}
         overflowActions={overflowActions}
       />
       <SwipeableCardContent panes={panes} />
@@ -246,26 +260,6 @@ export function RoundListCard({ round, detailRoutePrefix }: Props) {
       />
     </View>
   );
-}
-
-function deriveTopLine(round: Round): {
-  topLineLeft: string;
-  topLineRight?: string;
-} {
-  const isInProgress = !round.completedAt;
-  const ownerUserId = round.ownerUserId ?? '';
-  const ownerScorerId =
-    scorerIdForUser(round, ownerUserId) ?? userParticipantKey(ownerUserId);
-
-  if (isInProgress) {
-    const { thruCount } = getScorerProgress(round, ownerScorerId);
-    const left =
-      thruCount > 0 ? `LIVE · THRU ${thruCount}` : 'LIVE · NOT STARTED';
-    const right = formatRelativeTime(round.lastScoreAt ?? round.startedAt);
-    return { topLineLeft: left, topLineRight: right };
-  }
-  const left = `Completed · ${formatRelativeTime(round.completedAt ?? round.startedAt)}`;
-  return { topLineLeft: left };
 }
 
 function makeStyles(colors: ThemeColors) {
