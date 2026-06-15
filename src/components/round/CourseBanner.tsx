@@ -75,7 +75,7 @@ export function CourseBanner({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const title = handle ? `@${handle}` : displayName || 'Someone';
+  const title = handle || displayName || 'Someone';
   const initial = (
     displayName?.trim()?.[0] ??
     handle?.trim()?.[0] ??
@@ -83,7 +83,7 @@ export function CourseBanner({
   ).toUpperCase();
   const avatarBg =
     avatarColor || pickAvatarColor(avatarSeed || handle || displayName || '?');
-  const profileLabel = handle ? `View @${handle}'s profile` : 'View profile';
+  const profileLabel = handle ? `View ${handle}'s profile` : 'View profile';
 
   return (
     <View style={styles.header}>
