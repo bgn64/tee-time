@@ -76,7 +76,7 @@ export function TeamBucket({
   const teePill =
     isDestination && tee ? (
       <View style={[styles.teePill, { backgroundColor: colors.chipBg }]}>
-        <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee) }]} />
+        <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} />
         <Text style={[styles.teeText, { color: colors.textTitle }]} numberOfLines={1}>
           {tee.name}
         </Text>
@@ -94,7 +94,7 @@ export function TeamBucket({
         accessibilityLabel={tee ? `Change tee from ${tee.name}` : 'Pick a tee'}>
         {tee ? (
           <>
-            <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee) }]} />
+            <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} />
             <Text style={[styles.teeText, { color: colors.textTitle }]} numberOfLines={1}>
               {tee.name}
             </Text>

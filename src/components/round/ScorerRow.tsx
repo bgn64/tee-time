@@ -144,7 +144,7 @@ export function ScorerRow({
         accessibilityLabel={interactiveLabel}>
         {tee ? (
           <>
-            <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee) }]} />
+            <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} />
             <Text style={styles.teeName} numberOfLines={1}>
               {tee.name}
             </Text>
@@ -161,7 +161,7 @@ export function ScorerRow({
   } else if (tee) {
     teePill = (
       <View style={styles.teePill}>
-        <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee) }]} />
+        <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} />
         <Text style={styles.teeName} numberOfLines={1}>
           {tee.name}
         </Text>

@@ -23,7 +23,6 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
-import { teeSwatch } from '@/components/scoring/TeePickerSheet';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Tee } from '@/types/golf';
@@ -85,7 +84,6 @@ export function ScorerSummaryRow({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const teeColor = tee ? teeSwatch(tee) : undefined;
   const teeLabel = tee
     ? tee.totalYardage
       ? `${tee.name} · ${tee.totalYardage.toLocaleString()}`
@@ -93,7 +91,7 @@ export function ScorerSummaryRow({
     : null;
 
   let teeChip: React.ReactNode = null;
-  if (holeContext && tee && teeColor) {
+  if (holeContext && tee) {
     // Per-hole meta line. The tee name is a filled pill (matching the
     // round-config tee pill); the per-hole yds · Par · Hcp follow as
     // plain text. On editing surfaces (onPressTee set) the pill is a button
@@ -137,7 +135,7 @@ export function ScorerSummaryRow({
         ))}
       </View>
     );
-  } else if (tee && teeColor && teeLabel) {
+  } else if (tee && teeLabel) {
     // Two visual styles for the total-yardage variant:
     //   - editing (onPressTee set):  pill button with chevron — looks
     //     tappable so the user discovers the picker.

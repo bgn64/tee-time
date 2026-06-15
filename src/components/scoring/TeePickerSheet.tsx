@@ -11,7 +11,9 @@
 import { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { teeColorToken } from '@/library/golf/teeColor';
 import { useTheme } from '@/library/theme/ThemeContext';
+import type { ThemeColors } from '@/library/theme/themes';
 import type { Tee } from '@/types/golf';
 
 type Props = {
@@ -23,57 +25,18 @@ type Props = {
   onPick: (teeId: string | undefined) => void;
 };
 
-const TEE_COLOR_HEX: Record<string, string> = {
-  black: '#1a1a1a',
-  blue: '#4a90e2',
-  white: '#ddd6c4',
-  gold: '#c9a64a',
-  yellow: '#f5d020',
-  red: '#d54848',
-  green: '#7cb342',
-  burgundy: '#722f37',
-  silver: '#c0c0c0',
-  orange: '#e8742c',
-  purple: '#8e44ad',
-};
-
-// Names tried longest-first so "burgundy" matches before "red"
-// would, etc. Used by the substring fallback below so tee names
-// like "Green Tees" / "Senior Gold" / "Forward Red" still pick
-// up the colour.
-const TEE_COLOR_KEYS_BY_LENGTH = Object.keys(TEE_COLOR_HEX).sort(
-  (a, b) => b.length - a.length
-);
-
 /**
- * Try to extract a known palette colour from a free-form string —
- * supports exact matches, contains-matches against
- * `TEE_COLOR_HEX`, and `#RRGGBB` literals. Returns null when
- * nothing matches so the caller can fall through.
+ * Resolve a tee to a display colour (hex). Honours an explicit
+ * `#RRGGBB` literal in `tee.color`, then the shared name→token mapping
+ * (`teeColorToken`) resolved through the active theme, then a neutral
+ * grey. Theme-aware so the picker matches the scorecard exactly.
  */
-function resolveTeeColorString(raw: string | undefined): string | null {
-  if (!raw) return null;
-  const lower = raw.trim().toLowerCase();
-  if (lower.length === 0) return null;
-  const exact = TEE_COLOR_HEX[lower];
-  if (exact) return exact;
-  if (lower.startsWith('#')) return lower;
-  for (const key of TEE_COLOR_KEYS_BY_LENGTH) {
-    if (lower.includes(key)) return TEE_COLOR_HEX[key];
-  }
-  return null;
-}
-
-function teeSwatch(tee: Tee): string {
-  // Try the explicit `color` field first (server-supplied), then
-  // the tee's display name (handles "Green Tees", "Senior Gold",
-  // etc.). Falls back to a neutral grey only when neither carries
-  // a recognisable palette term.
-  return (
-    resolveTeeColorString(tee.color) ??
-    resolveTeeColorString(tee.name) ??
-    '#888'
-  );
+function teeSwatch(tee: Tee, colors: ThemeColors): string {
+  const explicit = tee.color?.trim();
+  if (explicit && explicit.startsWith('#')) return explicit;
+  const token = teeColorToken(tee);
+  if (token) return colors[token];
+  return '#888';
 }
 
 export function TeePickerSheet({
@@ -111,7 +74,7 @@ export function TeePickerSheet({
                 key={t.id}
                 style={[styles.row, active && styles.rowActive]}
                 onPress={() => onPick(t.id)}>
-                <View style={[styles.dot, { backgroundColor: teeSwatch(t) }]} />
+                <View style={[styles.dot, { backgroundColor: teeSwatch(t, colors) }]} />
                 <Text style={styles.name}>{t.name}</Text>
                 <Text style={styles.stats}>
                   {t.totalYardage ? `${t.totalYardage.toLocaleString()} yd` : '—'}
