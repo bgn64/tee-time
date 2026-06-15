@@ -22,7 +22,7 @@
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
+import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Tee } from '@/types/golf';
@@ -187,21 +187,15 @@ export function ScorerSummaryRow({
 
   return (
     <View style={styles.row}>
+      <TeamAvatarCluster
+        members={members}
+        size="md"
+        ringColor={colors.cardBg}
+      />
       <View style={styles.body}>
-        <View style={styles.idStack}>
-          {members.map((m) => (
-            <View key={m.id} style={styles.idLine}>
-              <View style={[styles.idAvatar, { backgroundColor: m.color }]}>
-                <Text style={styles.idAvatarText}>
-                  {(m.name?.[0] ?? '?').toUpperCase()}
-                </Text>
-              </View>
-              <Text style={styles.idHandle} numberOfLines={1}>
-                {m.handle ?? m.name}
-              </Text>
-            </View>
-          ))}
-        </View>
+        <Text style={styles.handle} numberOfLines={2}>
+          {joinHandles(members)}
+        </Text>
         {teeChip}
       </View>
       <View style={styles.scoreCol}>
@@ -219,6 +213,13 @@ export function ScorerSummaryRow({
   );
 }
 
+function joinHandles(members: readonly AvatarMember[]): string {
+  const names = members.map((m) => m.handle ?? m.name);
+  if (names.length <= 1) return names[0] ?? '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     row: {
@@ -230,28 +231,7 @@ function makeStyles(colors: ThemeColors) {
       flex: 1,
       minWidth: 0,
     },
-    idStack: {
-      gap: 3,
-    },
-    idLine: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 7,
-    },
-    idAvatar: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    idAvatarText: {
-      color: '#ffffff',
-      fontWeight: '800',
-      fontSize: 9.5,
-    },
-    idHandle: {
-      flexShrink: 1,
+    handle: {
       fontSize: 14,
       fontWeight: '800',
       color: colors.textTitle,
