@@ -94,8 +94,8 @@ export function ScorerSummaryRow({
 
   let teeChip: React.ReactNode = null;
   if (holeContext && tee && teeColor) {
-    // Per-hole meta line. The swatch + tee name is a filled pill (matching
-    // the round-config tee pill); the per-hole yds · Par · Hcp follow as
+    // Per-hole meta line. The tee name is a filled pill (matching the
+    // round-config tee pill); the per-hole yds · Par · Hcp follow as
     // plain text. On editing surfaces (onPressTee set) the pill is a button
     // with a "▾" caret so the tee can be changed mid-round.
     const parts: string[] = [];
@@ -112,7 +112,6 @@ export function ScorerSummaryRow({
         style={styles.teePill}
         accessibilityRole="button"
         accessibilityLabel={`Change tee from ${tee.name}`}>
-        <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
         <Text style={styles.teePillText} numberOfLines={1}>
           {tee.name}
         </Text>
@@ -142,7 +141,7 @@ export function ScorerSummaryRow({
     // Two visual styles for the total-yardage variant:
     //   - editing (onPressTee set):  pill button with chevron — looks
     //     tappable so the user discovers the picker.
-    //   - read-only (no onPressTee): bare swatch + name · yardage.
+    //   - read-only (no onPressTee): bare name · yardage.
     if (onPressTee) {
       teeChip = (
         <Pressable
@@ -150,7 +149,6 @@ export function ScorerSummaryRow({
           style={styles.teeChip}
           accessibilityRole="button"
           accessibilityLabel={`Change tee from ${tee.name}`}>
-          <View style={[styles.teeDot, { backgroundColor: teeColor }]} />
           <Text style={styles.teeLabel} numberOfLines={1}>
             {teeLabel}
           </Text>

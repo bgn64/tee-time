@@ -15,7 +15,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
+import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import type { TeamContribution } from '@/library/golf/useRoundShotAttributions';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -72,7 +72,6 @@ export function TeamContributionRow({ contributions, members }: Props) {
     <View style={styles.wrap}>
       {mostShots ? (
         <View style={styles.row}>
-          <TeamAvatarCluster members={[mostShots.member]} size="sm" />
           <Text style={styles.text}>
             <Text style={styles.label}>
               {mostShots.member.name.split(' ')[0]} ·{' '}
@@ -84,7 +83,6 @@ export function TeamContributionRow({ contributions, members }: Props) {
       ) : null}
       {mostTeeShots ? (
         <View style={styles.row}>
-          <TeamAvatarCluster members={[mostTeeShots.member]} size="sm" />
           <Text style={styles.text}>
             <Text style={styles.label}>
               {mostTeeShots.member.name.split(' ')[0]} ·{' '}
