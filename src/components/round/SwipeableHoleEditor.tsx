@@ -15,7 +15,9 @@
  *
  * Like the feed pagers, the band locks to the tallest hole pane so the
  * height stays constant as you swipe and the card hugs its content
- * instead of stretching to fill the screen; shorter holes are centred.
+ * instead of stretching to fill the screen; shorter holes are top-aligned
+ * so the "Hole N" header + per-scorer rows stay put from hole to hole
+ * (no vertical jitter when, e.g., a par 3 drops the fairway field).
  * A tall hole (many stats / scramble) is handled by the parent
  * ScrollView, which scrolls the whole surface.
  *
@@ -309,7 +311,7 @@ function makeStyles(colors: ThemeColors) {
       flexDirection: 'row',
     },
     page: {
-      justifyContent: 'center',
+      justifyContent: 'flex-start',
     },
     arrow: {
       position: 'absolute',
