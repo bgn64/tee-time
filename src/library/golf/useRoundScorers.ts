@@ -23,7 +23,7 @@ import { useMemo } from 'react';
 
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { findTee } from '@/library/golf/courseHelpers';
-import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { useRoundParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Round, Tee } from '@/types/golf';
 
@@ -42,7 +42,7 @@ export type RoundScorer = {
 
 export function useRoundScorers(round: Round): RoundScorer[] {
   const { colors } = useTheme();
-  const resolver = useParticipantResolver(round.playerIds ?? []);
+  const resolver = useRoundParticipantResolver(round);
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;

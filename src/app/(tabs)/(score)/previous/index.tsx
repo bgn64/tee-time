@@ -53,7 +53,7 @@ import {
 import { SortDropdown, type SortOption } from '@/components/rounds/SortDropdown';
 import { RoundListCard } from '@/components/round/RoundListCard';
 import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
-import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { collectParticipantSnapshots, useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import {
   monthKey,
   scoreForRoundsList
@@ -143,22 +143,10 @@ export default function RoundsListScreen() {
   // available. (For own rounds the snapshot is also handy as a
   // tombstone for soft-deleted custom players, mirroring how
   // ReadOnlyScorecard wires it up per-round.)
-  const allParticipantSnapshots = React.useMemo(() => {
-    const m = new Map<string, { displayName?: string; avatarColor?: string }>();
-    for (const r of rounds) {
-      for (const p of r.participants ?? []) {
-        if (!p.localDisplayName && !p.localDisplayColor) continue;
-        // Last write wins — fine because the snapshot is a name +
-        // color for a given participantKey and any of them is
-        // representative.
-        m.set(p.participantKey, {
-          displayName: p.localDisplayName,
-          avatarColor: p.localDisplayColor
-        });
-      }
-    }
-    return m;
-  }, [rounds]);
+  const allParticipantSnapshots = React.useMemo(
+    () => collectParticipantSnapshots(rounds),
+    [rounds]
+  );
 
   const resolver = useParticipantResolver(allParticipantKeys, allParticipantSnapshots);
 
