@@ -41,6 +41,7 @@ import { useQuery } from '@tanstack/react-query';
 
 import { findSeedPlayer } from '@/data/players';
 import { supabase } from '@/library/supabase/client';
+import type { Round } from '@/types/golf';
 import {
   customParticipantKey,
   parseParticipantKey,
@@ -214,4 +215,46 @@ export function useParticipantResolver(
     }
     return out;
   }, [parsed, profileById, customById, participantSnapshots]);
+}
+
+/**
+ * Builds the Tier-2a snapshot map the resolver consults for `custom:`
+ * participants whose live `custom_players` row isn't visible — the
+ * friend-feed case, where the owner's `custom_players` rows don't sync
+ * via RLS. Reads each round's `participants` JSON snapshot
+ * (`localDisplayName` / `localDisplayColor`) captured at startRound
+ * time. Last write wins across rounds: the snapshot is just a
+ * name + color for a participantKey, so any one is representative.
+ */
+export function collectParticipantSnapshots(
+  rounds: readonly Round[]
+): Map<string, { displayName?: string; avatarColor?: string }> {
+  const m = new Map<string, { displayName?: string; avatarColor?: string }>();
+  for (const r of rounds) {
+    for (const p of r.participants ?? []) {
+      if (!p.localDisplayName && !p.localDisplayColor) continue;
+      m.set(p.participantKey, {
+        displayName: p.localDisplayName,
+        avatarColor: p.localDisplayColor
+      });
+    }
+  }
+  return m;
+}
+
+/**
+ * Resolver variant for callers that have a `Round` in hand. Threads
+ * the round's own custom-player snapshots into the resolver so a
+ * friend viewing the round (whose `custom_players` rows don't sync)
+ * sees the owner's nickname for each custom player instead of the
+ * "Removed player" placeholder.
+ */
+export function useRoundParticipantResolver(
+  round: Round
+): Map<string, ResolvedParticipant> {
+  const snapshots = React.useMemo(
+    () => collectParticipantSnapshots([round]),
+    [round]
+  );
+  return useParticipantResolver(round.playerIds ?? [], snapshots);
 }

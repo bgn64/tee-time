@@ -71,7 +71,6 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
-  const isCompleted = !!round.completedAt;
 
   const visibleHoles = useMemo(
     () => holesInRange(round.course.holes, round.holeRange),
@@ -104,12 +103,10 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
             : progress.rel < 0
               ? 'under'
               : 'even';
-        const thruText =
-          !isCompleted && hasScores
-            ? `THRU ${progress.thru}`
-            : isCompleted
-              ? 'FINAL'
-              : undefined;
+        // Always show "THRU N" (N = holes played) — completed rounds
+        // included — so the reader knows how many holes the score covers
+        // without needing the course length. No "FINAL" label.
+        const thruText = hasScores ? `THRU ${progress.thru}` : undefined;
 
         // Stat tiles are gated on (a) the scorer being in the
         // round's tracked set AND (b) actually having engaged with

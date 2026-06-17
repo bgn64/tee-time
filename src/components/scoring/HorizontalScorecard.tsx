@@ -41,7 +41,7 @@ import { ScoreMark } from './ScoreMark';
 import { holesInRange } from '@/library/golf/scoring';
 import { assignTeeColors } from '@/library/golf/teeColor';
 import { getHoleStats, groupTeesByParHcp } from '@/library/golf/teeGrouping';
-import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { useRoundParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Hole, HoleRange, Round, Tee } from '@/types/golf';
@@ -203,7 +203,7 @@ function ScorecardGrid({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors, fit), [colors, fit]);
 
-  const resolver = useParticipantResolver(round.playerIds ?? []);
+  const resolver = useRoundParticipantResolver(round);
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
 

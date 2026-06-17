@@ -50,7 +50,7 @@ type Props = {
   /** Hero score text (e.g. "−3", "E", "+5"). */
   scoreText: string;
   tone: ScoreTone;
-  /** Sub-label under the hero score (e.g. "THRU 11", "FINAL"). */
+  /** Sub-label under the hero score (e.g. "THRU 11"). */
   scoreSub?: string;
   /**
    * When set, the tee display becomes tappable (with a "▾" caret) so the
