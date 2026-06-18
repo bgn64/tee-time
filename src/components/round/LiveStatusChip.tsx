@@ -91,8 +91,8 @@ function makeStyles(colors: ThemeColors) {
       paddingVertical: 5,
       borderRadius: 999,
       borderWidth: 1,
-      borderColor: withAlpha(colors.primary, 0.3),
-      backgroundColor: withAlpha(colors.primary, 0.12),
+      borderColor: colors.lime,
+      backgroundColor: colors.glowLime,
     },
     dotWrap: {
       width: 8,
@@ -105,30 +105,20 @@ function makeStyles(colors: ThemeColors) {
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: withAlpha(colors.primary, 0.35),
+      backgroundColor: colors.glowLime,
     },
     dot: {
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: colors.primary,
+      backgroundColor: colors.lime,
     },
     label: {
-      color: colors.primaryDark,
+      color: colors.lime,
       fontSize: 10,
       fontWeight: '900',
       letterSpacing: 0.5,
       lineHeight: 12,
     },
   });
-}
-
-function withAlpha(hex: string, alpha: number): string {
-  const normalized = hex.replace('#', '');
-  if (normalized.length !== 6) return hex;
-
-  const r = Number.parseInt(normalized.slice(0, 2), 16);
-  const g = Number.parseInt(normalized.slice(2, 4), 16);
-  const b = Number.parseInt(normalized.slice(4, 6), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }

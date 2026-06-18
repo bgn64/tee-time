@@ -23,9 +23,8 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   Dimensions,
   Modal,
   Pressable,
@@ -34,11 +33,13 @@ import {
   View,
 } from 'react-native';
 
+import { Avatar } from '@/components/aurora';
 import { pickAvatarColor } from '@/library/social/avatarColors';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 
 import type { OverflowItem } from './HeaderOverflowMenu';
+import { LiveStatusChip } from './LiveStatusChip';
 
 type Props = {
   /** Round owner's @handle (without the leading @). */
@@ -51,6 +52,13 @@ type Props = {
   avatarSeed?: string | null;
   /** Course name (no location). */
   courseName: string;
+  /**
+   * Optional subline override. When set, this replaces the course name
+   * in the meta row (the feed card passes a round descriptor here and
+   * surfaces the course name in the card body instead). Other surfaces
+   * leave it undefined and the course name shows in the meta row.
+   */
+  subtitle?: string | null;
   /** Relative time, e.g. "2h ago" (completed) or last-updated (live). */
   timeText: string;
   /** Live rounds render the time in the live colour with a pulsing dot. */
@@ -67,6 +75,7 @@ export function CourseBanner({
   avatarColor,
   avatarSeed,
   courseName,
+  subtitle,
   timeText,
   isLive = false,
   onPressOwner,
@@ -75,7 +84,7 @@ export function CourseBanner({
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const title = handle || displayName || 'Someone';
+  const title = handle ? `@${handle}` : displayName || 'Someone';
   const initial = (
     displayName?.trim()?.[0] ??
     handle?.trim()?.[0] ??
@@ -93,9 +102,7 @@ export function CourseBanner({
         hitSlop={4}
         accessibilityRole="button"
         accessibilityLabel={profileLabel}>
-        <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-          <Text style={styles.avatarText}>{initial}</Text>
-        </View>
+        <Avatar initial={initial} color={avatarBg} circle size={44} />
       </Pressable>
 
       <View style={styles.textCol}>
@@ -112,63 +119,35 @@ export function CourseBanner({
         <View style={styles.subRow}>
           {/* TODO(course-screen): make the course name tappable
               (push course/[id]) once that route exists. */}
-          <Text style={styles.course} numberOfLines={1}>
-            {courseName}
-          </Text>
-          <Text style={styles.sep}> · </Text>
-          {isLive ? <PulseDot color={colors.primary} /> : null}
-          <Text
-            style={isLive ? styles.liveTime : styles.metaTime}
-            numberOfLines={1}>
-            {timeText}
-          </Text>
+          {subtitle ? (
+            <Text style={styles.course} numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : (
+            <>
+              <Text style={styles.course} numberOfLines={1}>
+                {courseName}
+              </Text>
+              <Text style={styles.sep}> · </Text>
+              <Text
+                style={isLive ? styles.liveTime : styles.metaTime}
+                numberOfLines={1}>
+                {timeText}
+              </Text>
+            </>
+          )}
         </View>
       </View>
 
-      {overflowActions && overflowActions.length > 0 ? (
-        <BannerOverflowMenu items={overflowActions} />
+      {isLive || (overflowActions && overflowActions.length > 0) ? (
+        <View style={styles.rightSlot}>
+          {isLive ? <LiveStatusChip /> : null}
+          {overflowActions && overflowActions.length > 0 ? (
+            <BannerOverflowMenu items={overflowActions} />
+          ) : null}
+        </View>
       ) : null}
     </View>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/* Pulsing live dot (Animated opacity loop; only mounts for live).     */
-/* ------------------------------------------------------------------ */
-
-function PulseDot({ color }: { color: string }) {
-  const [opacity] = useState(() => new Animated.Value(1));
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          toValue: 0.25,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 750,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [opacity]);
-
-  return (
-    <Animated.View
-      style={{
-        width: 7,
-        height: 7,
-        borderRadius: 3.5,
-        marginRight: 5,
-        backgroundColor: color,
-        opacity,
-      }}
-    />
   );
 }
 
@@ -217,7 +196,7 @@ function BannerOverflowMenu({ items }: { items: OverflowItem[] }) {
           <Ionicons
             name="ellipsis-horizontal"
             size={20}
-            color={colors.textMuted}
+            color={colors.textTitle}
           />
         </Pressable>
       </View>
@@ -247,7 +226,7 @@ function BannerOverflowMenu({ items }: { items: OverflowItem[] }) {
                 <Ionicons
                   name={item.icon}
                   size={18}
-                  color={item.destructive ? colors.accent : colors.textTitle}
+                  color={item.destructive ? colors.accent : colors.lime}
                 />
               ) : null}
               <Text
@@ -272,20 +251,9 @@ function makeStyles(colors: ThemeColors) {
       alignItems: 'center',
       gap: 11,
       paddingLeft: 14,
-      paddingRight: 6,
-      paddingVertical: 10,
-    },
-    avatar: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    avatarText: {
-      color: '#ffffff',
-      fontWeight: '800',
-      fontSize: 17,
+      paddingRight: 8,
+      paddingTop: 14,
+      paddingBottom: 10,
     },
     textCol: {
       flex: 1,
@@ -293,7 +261,7 @@ function makeStyles(colors: ThemeColors) {
     },
     handle: {
       fontSize: 15,
-      fontWeight: '800',
+      fontWeight: '900',
       color: colors.textTitle,
       letterSpacing: -0.1,
     },
@@ -306,7 +274,7 @@ function makeStyles(colors: ThemeColors) {
       flexShrink: 1,
       fontSize: 12.5,
       fontWeight: '600',
-      color: colors.textMuted,
+      color: colors.textBody,
     },
     sep: {
       fontSize: 12.5,
@@ -320,7 +288,12 @@ function makeStyles(colors: ThemeColors) {
     liveTime: {
       fontSize: 12.5,
       fontWeight: '800',
-      color: colors.primary,
+      color: colors.lime,
+    },
+    rightSlot: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
     },
     moreBtn: {
       width: 34,
@@ -328,6 +301,9 @@ function makeStyles(colors: ThemeColors) {
       borderRadius: 17,
       alignItems: 'center',
       justifyContent: 'center',
+      backgroundColor: colors.glassFill,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
     },
     backdrop: {
       position: 'absolute',
@@ -339,16 +315,16 @@ function makeStyles(colors: ThemeColors) {
     menu: {
       position: 'absolute',
       minWidth: 184,
-      backgroundColor: colors.cardBg,
-      borderRadius: 12,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      padding: 5,
-      shadowColor: '#000',
-      shadowOpacity: 0.2,
-      shadowOffset: { width: 0, height: 8 },
-      shadowRadius: 16,
-      elevation: 8,
+      backgroundColor: colors.glassFill2,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+      padding: 6,
+      shadowColor: colors.lime,
+      shadowOpacity: 0.18,
+      shadowOffset: { width: 0, height: 10 },
+      shadowRadius: 24,
+      elevation: 9,
     },
     menuItem: {
       flexDirection: 'row',
@@ -356,7 +332,7 @@ function makeStyles(colors: ThemeColors) {
       gap: 9,
       paddingHorizontal: 11,
       paddingVertical: 11,
-      borderRadius: 8,
+      borderRadius: 12,
     },
     menuLabel: {
       fontSize: 13.5,

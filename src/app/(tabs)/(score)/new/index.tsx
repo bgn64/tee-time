@@ -28,6 +28,7 @@ import {
   View,
 } from 'react-native';
 
+import { GlassCard, GlassSurface, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
 import { CourseRow } from '@/components/scoring/CourseRow';
 import { useCoursesSearch } from '@/library/golf/useCourses';
 import { useRound } from '@/library/golf/RoundContext';
@@ -50,8 +51,8 @@ export default function CourseSelectionScreen() {
 
   if (!roundHydrated) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.lime} />
       </View>
     );
   }
@@ -70,10 +71,13 @@ export default function CourseSelectionScreen() {
         contentContainerStyle={styles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.greeting}>{getGreeting()}</Text>
-        <Text style={styles.title}>Where are you teeing it up?</Text>
+        <View style={styles.hero}>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.title}>Choose your course</Text>
+          <Text style={styles.subtitle}>Search the catalog, then finish setup on one Aurora screen.</Text>
+        </View>
 
-        <View style={styles.searchRow}>
+        <GlassSurface strong glow style={styles.searchRow}>
           <Ionicons name="search" size={18} color={colors.textMuted} />
           <TextInput
             style={styles.searchInput}
@@ -85,8 +89,8 @@ export default function CourseSelectionScreen() {
             value={query}
             onChangeText={setQuery}
           />
-          {loading ? <ActivityIndicator color={colors.textMuted} /> : null}
-        </View>
+          {loading ? <ActivityIndicator color={colors.lime} /> : null}
+        </GlassSurface>
 
         {error ? (
           <Text style={styles.errorText}>{error}</Text>
@@ -104,20 +108,25 @@ export default function CourseSelectionScreen() {
           </Text>
         ) : null}
 
-        <View style={styles.list}>
-          {courses.map((c) => (
-            <CourseRow
-              key={c.id}
-              course={c}
-              onPress={() =>
-                router.push({
-                  pathname: '/(tabs)/(score)/players' as never,
-                  params: { courseId: c.id },
-                })
-              }
-            />
-          ))}
-        </View>
+        {courses.length > 0 ? (
+          <GlassCard strong style={styles.resultsCard}>
+            <SectionLabel style={styles.sectionLabel}>Matching courses</SectionLabel>
+            <View style={styles.list}>
+              {courses.map((c) => (
+                <CourseRow
+                  key={c.id}
+                  course={c}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(tabs)/(score)/players' as never,
+                      params: { courseId: c.id },
+                    })
+                  }
+                />
+              ))}
+            </View>
+          </GlassCard>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -127,7 +136,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: 'transparent',
     },
     centered: {
       flex: 1,
@@ -135,33 +144,44 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       justifyContent: 'center',
     },
     content: {
-      padding: 14,
-      paddingTop: 18,
-      paddingBottom: 32,
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
+      padding: 16,
+      paddingTop: 20,
+      paddingBottom: 36,
+    },
+    hero: {
+      marginBottom: 16,
     },
     greeting: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.textMuted,
-      letterSpacing: 0.3,
+      fontSize: 12,
+      fontWeight: '900',
+      color: colors.cyan,
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
     },
     title: {
-      fontSize: 22,
-      fontWeight: '800',
+      fontSize: 30,
+      fontWeight: '900',
       color: colors.textTitle,
       marginTop: 4,
-      marginBottom: 16,
+      letterSpacing: -0.5,
+    },
+    subtitle: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontWeight: '600',
+      lineHeight: 19,
+      marginTop: 6,
     },
     searchRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
       paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 12,
-      backgroundColor: colors.cardBg,
+      paddingVertical: 12,
+      borderRadius: 18,
       marginBottom: 14,
     },
     searchInput: {
@@ -173,15 +193,21 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     list: {
       gap: 10,
     },
+    resultsCard: {
+      marginTop: 8,
+    },
+    sectionLabel: {
+      marginTop: 0,
+    },
     helperText: {
       fontSize: 13,
-      fontWeight: '500',
+      fontWeight: '700',
       color: colors.textMuted,
       paddingVertical: 8,
     },
     errorText: {
       fontSize: 13,
-      fontWeight: '600',
+      fontWeight: '800',
       color: colors.accent,
       paddingVertical: 8,
     },

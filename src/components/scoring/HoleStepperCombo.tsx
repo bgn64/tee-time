@@ -22,6 +22,7 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { HoleJumpSheet } from './HoleJumpSheet';
+import { NumericText } from '@/components/aurora';
 import { holesInRange } from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -102,7 +103,7 @@ export function HoleStepperCombo({
           onPress={() => setSheetOpen(true)}
           accessibilityRole="button"
           accessibilityLabel={`Hole ${current}. Tap to jump to a different hole.`}>
-          <Text style={styles.coreText}>Hole {current}</Text>
+          <NumericText style={styles.coreText}>Hole {current}</NumericText>
           <Text style={styles.caret}>▾</Text>
         </Pressable>
         <Pressable
@@ -138,9 +139,15 @@ function makeStyles(colors: ThemeColors) {
       alignSelf: 'center',
       flexDirection: 'row',
       alignItems: 'stretch',
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.night,
       borderRadius: 999,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
       overflow: 'hidden',
+      shadowColor: colors.cyan,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.12,
+      shadowRadius: 14,
     },
     step: {
       width: 36,
@@ -153,7 +160,7 @@ function makeStyles(colors: ThemeColors) {
     stepText: {
       fontSize: 17,
       fontWeight: '900',
-      color: colors.textTitle,
+      color: colors.lime,
     },
     stepTextDim: {
       color: colors.textMuted,

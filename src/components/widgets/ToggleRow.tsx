@@ -87,9 +87,13 @@ function makeStyles(colors: ThemeColors) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      paddingVertical: 12,
-      paddingHorizontal: 4,
-      minHeight: 50,
+      paddingVertical: 13,
+      paddingHorizontal: 14,
+      minHeight: 54,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+      backgroundColor: colors.glassFill,
     },
     rowDisabled: {
       opacity: 0.45,
@@ -119,15 +123,19 @@ function makeStyles(colors: ThemeColors) {
       padding: 2,
       justifyContent: 'center',
       flexShrink: 0,
+      borderWidth: 1,
     },
     trackOn: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.glowLime,
+      borderColor: colors.lime,
+      shadowColor: colors.lime,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.35,
+      shadowRadius: 12,
     },
     trackOff: {
-      // Chip bg sits between cardBg and border on the lightness
-      // scale — gives the off-state a clear "well" look without
-      // looking disabled.
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill2,
+      borderColor: colors.glassStroke,
     },
     knob: {
       width: 22,
@@ -135,11 +143,11 @@ function makeStyles(colors: ThemeColors) {
       borderRadius: 11,
     },
     knobOn: {
-      backgroundColor: '#ffffff',
+      backgroundColor: colors.lime,
       transform: [{ translateX: 18 }],
     },
     knobOff: {
-      backgroundColor: '#d8e0d4',
+      backgroundColor: colors.textMuted,
     },
   });
 }

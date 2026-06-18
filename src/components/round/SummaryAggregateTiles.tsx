@@ -30,8 +30,9 @@
  */
 
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { StatChip } from '@/components/aurora';
 import type { StatTone } from '@/library/golf/builtInStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -66,18 +67,13 @@ export function SummaryAggregateTiles({ tiles }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.line}>
-        {tiles.map((tile, i) => (
-          <Text key={tile.label}>
-            {i > 0 ? <Text style={styles.sep}> · </Text> : null}
-            {tile.kind === 'binary' ? (
-              <BinaryToken tile={tile} styles={styles} />
-            ) : (
-              <IntegerToken tile={tile} styles={styles} />
-            )}
-          </Text>
-        ))}
-      </Text>
+      {tiles.map((tile) =>
+        tile.kind === 'binary' ? (
+          <BinaryToken key={tile.label} tile={tile} styles={styles} />
+        ) : (
+          <IntegerToken key={tile.label} tile={tile} styles={styles} />
+        )
+      )}
     </View>
   );
 }
@@ -92,44 +88,19 @@ function BinaryToken({
   styles: StylesShape;
 }) {
   const label = displayStatLabel(tile.label);
-  const valueStyle =
-    tile.num > 0 && tile.tone === 'good'
-      ? styles.valueGood
-      : tile.num > 0 && tile.tone === 'bad'
-        ? styles.valueBad
-        : styles.value;
-
-  // Three display states:
-  //   1. No applicable holes for the round              → "—  GIR"
-  //   2. Applicable holes exist but none tagged yet     → "—/M GIR"
-  //   3. Tagged                                         → "N/M GIR"
-  // Partial "(thru K)" suffix is intentionally omitted — the
-  // per-scorer score block already shows "THRU K" above this line.
-  if (tile.totalApplicable === 0) {
-    return (
-      <Text>
-        <Text style={styles.unset}>—</Text>
-        <Text style={styles.label}> {label}</Text>
-      </Text>
-    );
-  }
-  if (tile.denom === 0) {
-    return (
-      <Text>
-        <Text style={styles.value}>
-          <Text style={styles.unset}>—</Text>
-          <Text style={styles.denom}>/{tile.totalApplicable}</Text>
-        </Text>
-        <Text style={styles.label}> {label}</Text>
-      </Text>
-    );
-  }
+  const value =
+    tile.totalApplicable === 0
+      ? '—'
+      : tile.denom === 0
+        ? `—/${tile.totalApplicable}`
+        : `${tile.num}/${tile.denom}`;
   return (
-    <Text>
-      <Text style={valueStyle}>{tile.num}</Text>
-      <Text style={styles.denom}>/{tile.denom}</Text>
-      <Text style={styles.label}> {label}</Text>
-    </Text>
+    <StatChip
+      label={label}
+      value={value}
+      state={chipState(tile.num, tile.tone)}
+      style={styles.chip}
+    />
   );
 }
 
@@ -141,69 +112,33 @@ function IntegerToken({
   styles: StylesShape;
 }) {
   const label = displayStatLabel(tile.label);
-  const valueStyle =
-    tile.sum > 0 && tile.tone === 'bad'
-      ? styles.valueBad
-      : tile.sum > 0 && tile.tone === 'good'
-        ? styles.valueGood
-        : styles.value;
-
-  if (tile.totalApplicable === 0) {
-    return (
-      <Text>
-        <Text style={styles.unset}>—</Text>
-        <Text style={styles.label}> {label}</Text>
-      </Text>
-    );
-  }
-  // "(thru K)" suffix intentionally omitted; the per-scorer
-  // "THRU K" label above this line already covers partial rounds.
   return (
-    <Text>
-      <Text style={valueStyle}>{tile.sum}</Text>
-      <Text style={styles.label}> {label}</Text>
-    </Text>
+    <StatChip
+      label={label}
+      value={tile.totalApplicable === 0 ? '—' : tile.sum}
+      state={chipState(tile.sum, tile.tone)}
+      style={styles.chip}
+    />
   );
+}
+
+function chipState(value: number, tone: StatTone): 'on' | 'no' | 'neutral' {
+  if (value <= 0 || tone === 'neutral') return 'neutral';
+  return tone === 'good' ? 'on' : 'no';
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
-      marginTop: 8,
+      marginTop: 10,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 7,
     },
-    line: {
-      fontSize: 13,
-      lineHeight: 19,
-      color: colors.textBody,
-    },
-    value: {
-      color: colors.textTitle,
-      fontWeight: '900',
-    },
-    valueGood: {
-      color: '#b6dd92',
-      fontWeight: '900',
-    },
-    valueBad: {
-      color: '#f3a59f',
-      fontWeight: '900',
-    },
-    denom: {
-      color: colors.textMuted,
-      fontWeight: '700',
-      fontSize: 11.5,
-    },
-    label: {
-      color: colors.textMuted,
-      fontWeight: '700',
-    },
-    unset: {
-      color: colors.textMuted,
-      fontWeight: '700',
-    },
-    sep: {
-      color: colors.textMuted,
-      fontWeight: '700',
+    chip: {
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
     },
   });
 }

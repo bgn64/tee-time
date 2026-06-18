@@ -24,20 +24,29 @@ import React from 'react';
 import { useRouter } from 'expo-router';
 import {
   ActivityIndicator,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View
 } from 'react-native';
 
+import { GlassCard, NeonButton, PHONE_MAX_WIDTH, SectionLabel, SegmentedToggle } from '@/components/aurora';
+import { CompletedRoundRow } from '@/components/round/CompletedRoundRow';
 import { RoundListCard } from '@/components/round/RoundListCard';
 import { IncomingRequestsBanner } from '@/components/social/IncomingRequestsBanner';
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
 import { useRefresh } from '@/library/data/useRefresh';
 import { useFeedRounds } from '@/library/golf/useFeedRounds';
+import { useAccount } from '@/library/social/AccountContext';
 import { useFriends } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
+
+type FeedSegment = 'feed' | 'live' | 'friends';
+
+const SEGMENTS: { key: FeedSegment; label: string }[] = [
+  { key: 'feed', label: 'Feed' },
+  { key: 'live', label: 'Live' },
+  { key: 'friends', label: 'Friends' },
+];
 
 export default function HomeFeedScreen() {
   const { colors } = useTheme();
@@ -45,12 +54,34 @@ export default function HomeFeedScreen() {
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const refresh = useRefresh();
 
+  const { account } = useAccount();
   const { friends, hydrated: friendsHydrated } = useFriends();
   const { liveRounds, completedRounds, isLoading: feedLoading } = useFeedRounds();
+  const [segment, setSegment] = React.useState<FeedSegment>('feed');
 
   const feedRounds = React.useMemo(
     () => [...liveRounds, ...completedRounds],
     [liveRounds, completedRounds]
+  );
+
+  // Segment filters the two sections. "Live" hides completed; "Friends"
+  // drops the viewer's own rounds (the social slice). "Feed" shows all.
+  const myId = account?.userId;
+  const liveForSegment = React.useMemo(
+    () =>
+      segment === 'friends'
+        ? liveRounds.filter((r) => r.ownerUserId !== myId)
+        : liveRounds,
+    [segment, liveRounds, myId]
+  );
+  const completedForSegment = React.useMemo(
+    () =>
+      segment === 'live'
+        ? []
+        : segment === 'friends'
+          ? completedRounds.filter((r) => r.ownerUserId !== myId)
+          : completedRounds,
+    [segment, completedRounds, myId]
   );
 
   // Don't decide between empty/populated states until BOTH the friend
@@ -64,9 +95,9 @@ export default function HomeFeedScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.contentEmpty}>
         <IncomingRequestsBanner style={styles.banner} />
-        <View style={styles.empty}>
+        <GlassCard strong glow style={styles.empty}>
           <ActivityIndicator color={colors.primary} />
-        </View>
+        </GlassCard>
       </ScrollView>
     );
   }
@@ -82,7 +113,7 @@ export default function HomeFeedScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.contentEmpty}>
         <IncomingRequestsBanner style={styles.banner} />
-        <View style={styles.empty}>
+        <GlassCard strong glow style={styles.empty}>
           <Text style={styles.emptyIcon}>👥</Text>
           <Text style={styles.emptyTitle}>Find friends to see their rounds</Text>
           <Text style={styles.emptyBody}>
@@ -90,12 +121,13 @@ export default function HomeFeedScreen() {
             them. Their rounds — and your own completed rounds —
             will show up here.
           </Text>
-          <Pressable
+          <NeonButton
+            label="+  Find friends"
+            size="sm"
             style={styles.primaryCta}
-            onPress={() => router.push('/(tabs)/(search)' as never)}>
-            <Text style={styles.primaryCtaText}>+  Find friends</Text>
-          </Pressable>
-        </View>
+            onPress={() => router.push('/(tabs)/(search)' as never)}
+          />
+        </GlassCard>
       </PullToRefreshScrollView>
     );
   }
@@ -107,7 +139,7 @@ export default function HomeFeedScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.contentEmpty}>
         <IncomingRequestsBanner style={styles.banner} />
-        <View style={styles.empty}>
+        <GlassCard strong glow style={styles.empty}>
           <Text style={styles.emptyIcon}>⛳</Text>
           <Text style={styles.emptyTitle}>No rounds yet</Text>
           <Text style={styles.emptyBody}>
@@ -116,10 +148,13 @@ export default function HomeFeedScreen() {
             <Text style={styles.emptyBodyEm}>Score</Text> tab; finished
             rounds will show up here.
           </Text>
-        </View>
+        </GlassCard>
       </PullToRefreshScrollView>
     );
   }
+
+  const nothingInSegment =
+    liveForSegment.length === 0 && completedForSegment.length === 0;
 
   return (
     <PullToRefreshScrollView
@@ -127,14 +162,50 @@ export default function HomeFeedScreen() {
       style={styles.scroll}
       contentContainerStyle={styles.content}>
       <IncomingRequestsBanner style={styles.banner} />
-      {feedRounds.map((round) => (
-        <RoundListCard
-          key={round.id}
-          round={round}
-          detailRoutePrefix="/(tabs)/(home)/round"
-          profileRoutePrefix="/(tabs)/(home)/profile"
-        />
-      ))}
+      <SegmentedToggle
+        options={SEGMENTS}
+        value={segment}
+        onChange={setSegment}
+        style={styles.seg}
+      />
+
+      {liveForSegment.length > 0 ? (
+        <>
+          {liveForSegment.map((round) => (
+            <RoundListCard
+              key={round.id}
+              round={round}
+              detailRoutePrefix="/(tabs)/(home)/round"
+              profileRoutePrefix="/(tabs)/(home)/profile"
+            />
+          ))}
+        </>
+      ) : null}
+
+      {completedForSegment.length > 0 ? (
+        <>
+          <SectionLabel>Completed</SectionLabel>
+          {completedForSegment.map((round) => (
+            <CompletedRoundRow
+              key={round.id}
+              round={round}
+              onPress={() =>
+                router.push(`/(tabs)/(home)/round/${round.id}` as never)
+              }
+            />
+          ))}
+        </>
+      ) : null}
+
+      {nothingInSegment ? (
+        <GlassCard strong style={styles.segmentEmpty}>
+          <Text style={styles.segmentEmptyText}>
+            {segment === 'live'
+              ? 'No live rounds right now.'
+              : 'Nothing from friends yet.'}
+          </Text>
+        </GlassCard>
+      ) : null}
     </PullToRefreshScrollView>
   );
 }
@@ -143,13 +214,20 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     scroll: {
       flex: 1,
-      backgroundColor: colors.background
+      backgroundColor: 'transparent'
     },
     content: {
-      padding: 14,
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
+      paddingHorizontal: 14,
+      paddingTop: 12,
       paddingBottom: 40
     },
     contentEmpty: {
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
       padding: 20,
       paddingBottom: 40,
       flexGrow: 1
@@ -157,11 +235,27 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     banner: {
       marginBottom: 14
     },
+    seg: {
+      marginBottom: 6,
+    },
+    segmentEmpty: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 28,
+      marginTop: 12,
+    },
+    segmentEmptyText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
     empty: {
       alignItems: 'center',
-      paddingTop: 40,
-      paddingHorizontal: 16,
-      gap: 10
+      justifyContent: 'center',
+      paddingVertical: 28,
+      paddingHorizontal: 18,
+      gap: 10,
+      marginTop: 24
     },
     emptyIcon: {
       fontSize: 38,
@@ -170,7 +264,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     emptyTitle: {
       fontSize: 14.5,
       fontWeight: '800',
-      color: colors.textTitle,
+      color: colors.lime,
       textAlign: 'center'
     },
     emptyBody: {
@@ -187,19 +281,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     codeChip: {
       fontFamily: 'SpaceMono',
       fontSize: 11,
-      color: colors.primary
+      color: colors.cyan
     },
     primaryCta: {
       marginTop: 10,
-      paddingHorizontal: 18,
-      paddingVertical: 10,
-      borderRadius: 10,
-      backgroundColor: colors.primary
-    },
-    primaryCtaText: {
-      color: '#ffffff',
-      fontWeight: '800',
-      fontSize: 13
+      alignSelf: 'center'
     }
   });
 }

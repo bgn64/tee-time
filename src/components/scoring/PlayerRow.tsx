@@ -8,9 +8,10 @@
  */
 
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { Avatar } from '@/components/aurora';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Player } from '@/types/golf';
 
@@ -30,11 +31,7 @@ export function PlayerRow({ player, selected, locked, onToggle }: Props) {
       style={[styles.row, selected && styles.rowSelected]}
       onPress={locked ? undefined : onToggle}
       disabled={locked}>
-      <View style={[styles.avatar, { backgroundColor: player.color ?? colors.primary }]}>
-        <Text style={styles.avatarLetter}>
-          {(player.nickname[0] ?? '?').toUpperCase()}
-        </Text>
-      </View>
+      <Avatar initial={player.nickname} color={player.color ?? colors.cyan} size={34} circle />
       <Text style={styles.name} numberOfLines={1}>
         {player.nickname}
       </Text>
@@ -58,25 +55,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       gap: 12,
       paddingVertical: 10,
       paddingHorizontal: 12,
-      backgroundColor: colors.cardBg,
-      borderRadius: 12,
+      backgroundColor: colors.glassFill,
+      borderRadius: 18,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.glassStroke,
     },
     rowSelected: {
-      borderColor: colors.primary,
-    },
-    avatar: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    avatarLetter: {
-      color: '#fff',
-      fontWeight: '800',
-      fontSize: 13,
+      backgroundColor: colors.glowLime,
+      borderColor: colors.lime,
     },
     name: {
       flex: 1,

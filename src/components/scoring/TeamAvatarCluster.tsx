@@ -15,6 +15,10 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 
+import { auroraAvatarColor } from '@/library/social/avatarColors';
+import { useTheme } from '@/library/theme/ThemeContext';
+import type { ThemeColors } from '@/library/theme/themes';
+
 export type AvatarMember = {
   /** Stable React key. Typically the participantKey. */
   id: string;
@@ -48,12 +52,16 @@ const SIZE_MAP: Record<
 export function TeamAvatarCluster({
   members,
   size = 'md',
-  ringColor = '#ffffff',
+  ringColor,
   style,
   max = 4,
 }: Props) {
+  const { colors } = useTheme();
   const dims = SIZE_MAP[size];
-  const styles = useMemo(() => makeStyles(dims, ringColor), [dims, ringColor]);
+  const styles = useMemo(
+    () => makeStyles(dims, ringColor ?? colors.night, colors),
+    [dims, ringColor, colors]
+  );
 
   const visible = members.slice(0, max);
   const hidden = members.length - visible.length;
@@ -69,7 +77,7 @@ export function TeamAvatarCluster({
           key={m.id}
           style={[
             styles.avatar,
-            { backgroundColor: m.color },
+            { backgroundColor: auroraAvatarColor(m.color) },
             i === 0 ? null : styles.avatarOverlap,
             { zIndex: i + 1 },
           ]}>
@@ -91,7 +99,8 @@ export function TeamAvatarCluster({
 
 function makeStyles(
   dims: { avatar: number; font: number; overlap: number; border: number },
-  ringColor: string
+  ringColor: string,
+  colors: ThemeColors
 ) {
   return StyleSheet.create({
     cluster: {
@@ -123,7 +132,7 @@ function makeStyles(
       justifyContent: 'center',
       borderWidth: dims.border,
       borderColor: ringColor,
-      backgroundColor: '#a8a397',
+      backgroundColor: colors.glassFill2,
       marginLeft: -dims.overlap,
     },
     overflowText: {

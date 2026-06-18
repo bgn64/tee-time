@@ -32,8 +32,9 @@
  */
 
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
+import { StatChip, Stepper } from '@/components/aurora';
 import type {
   IntegerStatDefinition,
   StatDefinition,
@@ -141,31 +142,13 @@ function RadioOption({
   onPress: () => void;
   styles: StylesShape;
 }) {
-  const ringStyle = [
-    styles.radioRing,
-    selected && (fill === 'good' ? styles.radioRingGood : styles.radioRingBad),
-  ];
-  const dotStyle = [
-    styles.radioDot,
-    fill === 'good' ? styles.radioDotGood : styles.radioDotBad,
-  ];
   return (
-    <Pressable
+    <StatChip
+      label={label}
+      state={selected ? (fill === 'good' ? 'on' : 'no') : 'neutral'}
       onPress={onPress}
-      accessibilityRole="radio"
-      accessibilityState={{ selected }}
-      style={styles.radioOption}>
-      <View style={ringStyle}>
-        {selected ? <View style={dotStyle} /> : null}
-      </View>
-      <Text
-        style={[
-          styles.radioLabel,
-          selected && styles.radioLabelSelected,
-        ]}>
-        {label}
-      </Text>
-    </Pressable>
+      style={styles.statChip}
+    />
   );
 }
 
@@ -189,35 +172,15 @@ function IntegerStepper({
   const canDecrement = display > stat.min;
 
   return (
-    <View style={styles.stepper}>
-      <Pressable
-        onPress={() => {
-          if (!canDecrement) return;
-          onChange(display - 1);
-        }}
-        disabled={!canDecrement}
-        accessibilityRole="button"
-        accessibilityLabel={`Decrease ${stat.label}`}
-        style={[styles.stepBtn, !canDecrement && styles.stepBtnDisabled]}>
-        <Text
-          style={[
-            styles.stepBtnText,
-            !canDecrement && styles.stepBtnTextDisabled,
-          ]}>
-          −
-        </Text>
-      </Pressable>
-      <View style={styles.stepValueWrap}>
-        <Text style={styles.stepValue}>{display}</Text>
-      </View>
-      <Pressable
-        onPress={() => onChange(display + 1)}
-        accessibilityRole="button"
-        accessibilityLabel={`Increase ${stat.label}`}
-        style={styles.stepBtn}>
-        <Text style={styles.stepBtnText}>+</Text>
-      </Pressable>
-    </View>
+    <Stepper
+      value={display}
+      min={stat.min}
+      onDecrement={() => {
+        if (!canDecrement) return;
+        onChange(display - 1);
+      }}
+      onIncrement={() => onChange(display + 1)}
+    />
   );
 }
 
@@ -233,7 +196,7 @@ function makeStyles(colors: ThemeColors) {
       flex: 1,
       fontSize: 13,
       fontWeight: '700',
-      color: colors.textBody,
+      color: colors.textTitle,
     },
     controls: {
       flexDirection: 'row',
@@ -242,7 +205,10 @@ function makeStyles(colors: ThemeColors) {
     // Binary radio group
     radioGroup: {
       flexDirection: 'row',
-      gap: 16,
+      gap: 8,
+    },
+    statChip: {
+      alignSelf: 'center',
     },
     radioOption: {
       flexDirection: 'row',
@@ -280,7 +246,7 @@ function makeStyles(colors: ThemeColors) {
     radioLabel: {
       fontSize: 13,
       fontWeight: '700',
-      color: colors.textBody,
+      color: colors.textTitle,
     },
     radioLabelSelected: {
       color: colors.textTitle,

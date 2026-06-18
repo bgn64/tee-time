@@ -115,23 +115,27 @@ function makeStyles(colors: ThemeColors) {
       minWidth: 40,
       paddingHorizontal: 6,
       borderRadius: 9,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
       alignItems: 'center',
       justifyContent: 'center',
     },
     chipActive: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.glowLime,
+      borderColor: colors.lime,
     },
     chipActiveOver: {
-      backgroundColor: colors.accent,
+      backgroundColor: colors.glassFill2,
+      borderColor: colors.pipBogeyRing,
     },
     chipText: {
       fontSize: 12,
       fontWeight: '800',
-      color: colors.primaryDark,
+      color: colors.textMuted,
     },
     chipTextActive: {
-      color: '#fff',
+      color: colors.lime,
     },
   });
 }

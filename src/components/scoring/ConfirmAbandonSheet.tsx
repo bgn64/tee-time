@@ -8,6 +8,7 @@
 import { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { GlassCard, NeonButton } from '@/components/aurora';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 type Props = {
@@ -24,18 +25,14 @@ export function ConfirmAbandonSheet({ visible, onCancel, onConfirm }: Props) {
     <Modal visible={visible} animationType="fade" transparent onRequestClose={onCancel}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onCancel} />
-        <View style={styles.card}>
+        <GlassCard strong glow style={styles.card}>
           <Text style={styles.title}>Discard this round?</Text>
           <Text style={styles.body}>Scores will be lost. This can&apos;t be undone.</Text>
           <View style={styles.buttonRow}>
-            <Pressable style={[styles.button, styles.cancelButton]} onPress={onCancel}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable style={[styles.button, styles.confirmButton]} onPress={onConfirm}>
-              <Text style={styles.confirmText}>Discard round</Text>
-            </Pressable>
+            <NeonButton label="Cancel" variant="ghost" onPress={onCancel} style={styles.button} />
+            <NeonButton label="Discard" onPress={onConfirm} style={styles.button} />
           </View>
-        </View>
+        </GlassCard>
       </View>
     </Modal>
   );
@@ -56,9 +53,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     card: {
       width: '100%',
       maxWidth: 360,
-      backgroundColor: colors.cardBg,
-      borderRadius: 16,
-      padding: 20,
     },
     title: {
       fontSize: 17,
@@ -80,25 +74,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     button: {
       flex: 1,
-      borderRadius: 12,
-      paddingVertical: 12,
-      alignItems: 'center',
-    },
-    cancelButton: {
-      backgroundColor: colors.chipBg,
-    },
-    cancelText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: colors.textTitle,
-    },
-    confirmButton: {
-      backgroundColor: '#d32f2f',
-    },
-    confirmText: {
-      fontSize: 14,
-      fontWeight: '800',
-      color: '#ffffff',
     },
   });
 }

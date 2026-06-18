@@ -301,7 +301,7 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
+      borderTopColor: colors.glassStroke,
     },
     viewport: {
       position: 'relative',
@@ -322,9 +322,9 @@ function makeStyles(colors: ThemeColors) {
       borderRadius: 15,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill2,
       borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
+      borderColor: colors.glassStroke,
       shadowColor: '#000',
       shadowOpacity: 0.1,
       shadowOffset: { width: 0, height: 2 },
@@ -350,17 +350,17 @@ function makeStyles(colors: ThemeColors) {
       paddingBottom: 3,
       paddingHorizontal: 18,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
+      borderTopColor: colors.glassStroke,
     },
     dot: {
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: colors.border,
+      backgroundColor: colors.glassStroke,
     },
     dotActive: {
       width: 18,
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.lime,
     },
   });
 }

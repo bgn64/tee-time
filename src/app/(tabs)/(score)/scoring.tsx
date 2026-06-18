@@ -35,6 +35,7 @@ import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
 
 import { ConfirmAbandonSheet } from '@/components/scoring/ConfirmAbandonSheet';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
+import { PhoneFrame } from '@/components/aurora';
 import { HeaderOverflowMenu } from '@/components/round/HeaderOverflowMenu';
 import { ScoringRoundView } from '@/components/round/ScoringRoundView';
 import { useRound } from '@/library/golf/RoundContext';
@@ -152,7 +153,7 @@ export default function ScoringScreen() {
 
   if (!roundHydrated || !currentHoleHydrated) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <View style={styles.centered}>
         <ActivityIndicator color={colors.primary} />
       </View>
     );
@@ -200,16 +201,18 @@ export default function ScoringScreen() {
         }}
       />
 
-      <ScoringRoundView
-        round={round}
-        profileRoutePrefix="/(tabs)/(score)/profile"
-        currentHoleNumber={currentHole.number}
-        onChangeCurrentHole={(n) => void setCurrentHole(n)}
-        onChangeScore={handleChangeScore}
-        onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
-        primaryLabel="Finish round"
-        onPrimary={() => void handleFinish()}
-      />
+      <PhoneFrame>
+        <ScoringRoundView
+          round={round}
+          profileRoutePrefix="/(tabs)/(score)/profile"
+          currentHoleNumber={currentHole.number}
+          onChangeCurrentHole={(n) => void setCurrentHole(n)}
+          onChangeScore={handleChangeScore}
+          onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
+          primaryLabel="Finish round"
+          onPrimary={() => void handleFinish()}
+        />
+      </PhoneFrame>
 
       <ConfirmAbandonSheet
         visible={abandonConfirmVisible}
@@ -284,7 +287,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: 'transparent',
     },
     centered: {
       flex: 1,

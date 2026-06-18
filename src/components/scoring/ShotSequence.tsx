@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
+import { Avatar, NumericText } from '@/components/aurora';
 import { type AvatarMember } from './TeamAvatarCluster';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -40,13 +41,8 @@ export function ShotSequence({ contributorIds, members }: Props) {
         <View key={`stop-${i}`} style={styles.stopWrap}>
           {i > 0 ? <View style={styles.connector} /> : null}
           <View style={styles.stop}>
-            <Text style={styles.n}>SHOT {i + 1}</Text>
-            <View
-              style={[styles.avatar, { backgroundColor: m.color }]}>
-              <Text style={styles.avatarText}>
-                {m.name.charAt(0).toUpperCase()}
-              </Text>
-            </View>
+            <NumericText style={styles.n}>SHOT {i + 1}</NumericText>
+            <Avatar initial={m.name} color={m.color} size={28} circle />
             <Text style={styles.label} numberOfLines={1}>
               {m.name.split(' ')[0]}
             </Text>
@@ -72,7 +68,7 @@ function makeStyles(colors: ThemeColors) {
     connector: {
       width: 14,
       height: 2,
-      backgroundColor: colors.border,
+      backgroundColor: colors.glassStroke,
       borderRadius: 1,
       marginHorizontal: 0,
     },
@@ -89,18 +85,6 @@ function makeStyles(colors: ThemeColors) {
       fontWeight: '900',
       color: colors.textMuted,
       letterSpacing: 0.4,
-    },
-    avatar: {
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    avatarText: {
-      color: '#fff',
-      fontSize: 11,
-      fontWeight: '900',
     },
     label: {
       fontSize: 10.5,

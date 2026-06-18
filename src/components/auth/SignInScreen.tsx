@@ -31,7 +31,6 @@
 
 import React from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -46,6 +45,7 @@ import { useAccount } from '@/library/social/AccountContext';
 import { sendMagicCode, verifyMagicCode } from '@/library/supabase/auth';
 import { useTheme } from '@/library/theme/ThemeContext';
 import { showAlert } from '@/library/utils/alert';
+import { GlassCard, GlassSurface, NeonButton, SectionLabel } from '@/components/aurora';
 import { HandleStep } from '@/components/social/HandleStep';
 import { Logo } from '@/components/Logo';
 import { OtpInput } from './OtpInput';
@@ -163,14 +163,14 @@ export function SignInScreen({ initialStep = 'email' }: Props) {
           <Logo size={72} variant="disc" />
         </View>
         {currentStep === 'email' ? (
-          <>
+          <GlassCard strong glow style={styles.card}>
             <Text style={styles.title}>Sign in</Text>
             <Text style={styles.subtitle}>
               Enter the email your invite was sent to. We&apos;ll send you a one-time code.
             </Text>
 
-            <Text style={styles.fieldLabel}>Email</Text>
-            <View style={[styles.field, emailValid && styles.fieldValid]}>
+            <SectionLabel style={styles.fieldLabel}>Email</SectionLabel>
+            <GlassSurface strong style={[styles.field, emailValid && styles.fieldValid]}>
               <TextInput
                 style={styles.fieldInput}
                 value={emailDraft}
@@ -186,28 +186,21 @@ export function SignInScreen({ initialStep = 'email' }: Props) {
                 onSubmitEditing={onSendCode}
                 returnKeyType="send"
               />
-            </View>
+            </GlassSurface>
 
-            <Pressable
-              style={[
-                styles.primaryButton,
-                (!emailValid || submitting) && styles.primaryButtonDisabled
-              ]}
+            <NeonButton
+              label={submitting ? 'Sending…' : 'Send code'}
               onPress={onSendCode}
-              disabled={!emailValid || submitting}>
-              {submitting ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Send code</Text>
-              )}
-            </Pressable>
+              disabled={!emailValid || submitting}
+              style={styles.primaryButton}
+            />
 
             <Text style={styles.caption}>
               This app is invite only. If your email isn&apos;t recognized, ask the admin to invite you.
             </Text>
-          </>
+          </GlassCard>
         ) : currentStep === 'code' ? (
-          <>
+          <GlassCard strong glow style={styles.card}>
             <Text style={styles.title}>Check your email</Text>
             <Text style={styles.subtitle}>
               We sent a 6-digit code to{' '}
@@ -224,19 +217,12 @@ export function SignInScreen({ initialStep = 'email' }: Props) {
               />
             </View>
 
-            <Pressable
-              style={[
-                styles.primaryButton,
-                (!codeValid || submitting) && styles.primaryButtonDisabled
-              ]}
+            <NeonButton
+              label={submitting ? 'Verifying…' : 'Verify'}
               onPress={onVerifyCode}
-              disabled={!codeValid || submitting}>
-              {submitting ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Verify</Text>
-              )}
-            </Pressable>
+              disabled={!codeValid || submitting}
+              style={styles.primaryButton}
+            />
 
             <Pressable style={styles.linkButton} onPress={onResend} disabled={submitting}>
               <Text style={styles.linkButtonText}>Resend code</Text>
@@ -245,7 +231,7 @@ export function SignInScreen({ initialStep = 'email' }: Props) {
             <Pressable style={styles.linkButton} onPress={onBackToEmail} disabled={submitting}>
               <Text style={styles.linkButtonTextMuted}>Use a different email</Text>
             </Pressable>
-          </>
+          </GlassCard>
         ) : (
           // currentStep === 'handle' — session present (from a just-verified
           // OTP or from AuthGate's re-entry), profile row missing.
@@ -269,7 +255,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background
+      backgroundColor: 'transparent'
     },
     body: {
       flexGrow: 1,
@@ -277,14 +263,18 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingTop: 48,
       maxWidth: 480,
       width: '100%',
-      alignSelf: 'center'
+      alignSelf: 'center',
+      justifyContent: 'center'
     },
     brand: {
       alignItems: 'center',
-      marginBottom: 24,
+      marginBottom: 22,
+    },
+    card: {
+      width: '100%',
     },
     title: {
-      fontSize: 26,
+      fontSize: 28,
       fontWeight: '800',
       color: colors.textTitle,
       marginBottom: 10
@@ -293,33 +283,27 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 14,
       color: colors.textBody,
       lineHeight: 20,
-      marginBottom: 28
+      marginBottom: 20
     },
     subtitleEm: {
       fontWeight: '800',
-      color: colors.textTitle
+      color: colors.cyan
     },
     fieldLabel: {
-      fontSize: 10,
-      fontWeight: '800',
-      letterSpacing: 0.6,
-      textTransform: 'uppercase',
-      color: colors.textMuted,
-      marginBottom: 6
+      marginTop: 0,
+      marginBottom: 8,
+      marginHorizontal: 0
     },
     field: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.cardBg,
-      borderRadius: 12,
-      borderWidth: 2,
-      borderColor: colors.border,
+      borderRadius: 16,
       paddingHorizontal: 14,
       paddingVertical: 12,
-      marginBottom: 8
+      marginBottom: 10
     },
     fieldValid: {
-      borderColor: colors.primary
+      borderColor: colors.cyan
     },
     fieldInput: {
       flex: 1,
@@ -329,27 +313,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       padding: 0
     },
     primaryButton: {
-      backgroundColor: colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
-      alignItems: 'center',
       marginTop: 18
-    },
-    primaryButtonDisabled: {
-      opacity: 0.4
-    },
-    primaryButtonText: {
-      color: '#ffffff',
-      fontSize: 15,
-      fontWeight: '800',
-      letterSpacing: 0.3
     },
     linkButton: {
       paddingVertical: 10,
       alignItems: 'center'
     },
     linkButtonText: {
-      color: colors.primaryDark,
+      color: colors.cyan,
       fontSize: 13,
       fontWeight: '700'
     },

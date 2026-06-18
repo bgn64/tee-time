@@ -20,8 +20,9 @@
  */
 
 import { useMemo } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
+import { StatChip } from '@/components/aurora';
 import {
   type StatDefinition,
   type StatValueMap,
@@ -43,14 +44,14 @@ export function HoleStatsLine({ stats, values }: Props) {
 
   return (
     <View style={styles.wrap}>
-      <Text style={styles.line}>
-        {stats.map((stat, i) => (
-          <Text key={stat.key}>
-            {i > 0 ? <Text style={styles.sep}> · </Text> : null}
-            <StatToken stat={stat} value={values[stat.key]} styles={styles} />
-          </Text>
-        ))}
-      </Text>
+      {stats.map((stat) => (
+        <StatToken
+          key={stat.key}
+          stat={stat}
+          value={values[stat.key]}
+          styles={styles}
+        />
+      ))}
     </View>
   );
 }
@@ -71,10 +72,7 @@ function StatToken({
   if (stat.type === 'binary') {
     if (typeof value !== 'boolean') {
       return (
-        <Text>
-          <Text style={styles.unset}>—</Text>
-          <Text style={styles.label}> {label}</Text>
-        </Text>
+        <StatChip label={label} value="—" state="neutral" style={styles.chip} />
       );
     }
     // yesTone='good': Yes good, No bad
@@ -82,17 +80,13 @@ function StatToken({
     // yesTone='neutral': both neutral
     const positive =
       stat.yesTone === 'good' ? value : stat.yesTone === 'bad' ? !value : null;
-    const valueStyle =
-      positive === true
-        ? styles.valueGood
-        : positive === false
-          ? styles.valueBad
-          : styles.value;
     return (
-      <Text>
-        <Text style={valueStyle}>{value ? 'Yes' : 'No'}</Text>
-        <Text style={styles.label}> {label}</Text>
-      </Text>
+      <StatChip
+        label={label}
+        value={value ? 'Yes' : 'No'}
+        state={positive === true ? 'on' : positive === false ? 'no' : 'neutral'}
+        style={styles.chip}
+      />
     );
   }
 
@@ -100,17 +94,19 @@ function StatToken({
   const display = typeof value === 'number' ? value : stat.defaultValue;
   // Colour only when value > 0 AND tone is non-neutral. "0 OB" stays
   // neutral because zero of a bad-tone stat is the positive outcome.
-  const valueStyle =
-    display > 0 && stat.aggregateTone === 'bad'
-      ? styles.valueBad
-      : display > 0 && stat.aggregateTone === 'good'
-        ? styles.valueGood
-        : styles.value;
   return (
-    <Text>
-      <Text style={valueStyle}>{display}</Text>
-      <Text style={styles.label}> {label}</Text>
-    </Text>
+    <StatChip
+      label={label}
+      value={display}
+      state={
+        display > 0 && stat.aggregateTone === 'good'
+          ? 'on'
+          : display > 0 && stat.aggregateTone === 'bad'
+            ? 'no'
+            : 'neutral'
+      }
+      style={styles.chip}
+    />
   );
 }
 
@@ -118,35 +114,14 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
       marginTop: 8,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 7,
     },
-    line: {
-      fontSize: 13,
-      lineHeight: 19,
-      color: colors.textBody,
-    },
-    label: {
-      color: colors.textMuted,
-      fontWeight: '700',
-    },
-    value: {
-      color: colors.textTitle,
-      fontWeight: '900',
-    },
-    valueGood: {
-      color: '#b6dd92',
-      fontWeight: '900',
-    },
-    valueBad: {
-      color: '#f3a59f',
-      fontWeight: '900',
-    },
-    unset: {
-      color: colors.textMuted,
-      fontWeight: '700',
-    },
-    sep: {
-      color: colors.textMuted,
-      fontWeight: '700',
+    chip: {
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
     },
   });
 }

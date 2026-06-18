@@ -40,6 +40,7 @@ import {
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
 import { newTeamId } from '@/library/golf/ids';
 import { buildTeamsFromGroups } from '@/library/golf/teams';
+import { auroraAvatarColor } from '@/library/social/avatarColors';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ResolvedParticipant } from '@/library/golf/useParticipantResolver';
 import type { Tee, Team } from '@/types/golf';
@@ -95,7 +96,7 @@ export function ScrambleBody({
       groups,
       (id) => {
         const r = resolver.get(id);
-        return r ? { displayName: r.displayName, avatarColor: r.avatarColor } : undefined;
+        return r ? { displayName: r.displayName, avatarColor: r.avatarColor ? auroraAvatarColor(r.avatarColor) : r.avatarColor } : undefined;
       },
       selfParticipantKey ?? null,
       teamIds,

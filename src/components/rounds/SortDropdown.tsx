@@ -71,7 +71,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.18)'
+      backgroundColor: 'rgba(0,0,0,0.36)'
     },
     menuWrap: {
       // Anchored to where the Sort pill lives in the Rounds toolbar
@@ -83,10 +83,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginRight: 20
     },
     menu: {
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill2,
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.glassStroke,
       minWidth: 180,
       overflow: 'hidden',
       shadowColor: '#000',
@@ -107,7 +107,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderTopColor: colors.border
     },
     itemActive: {
-      backgroundColor: 'rgba(182,160,99,0.10)'
+      backgroundColor: colors.glowLime
     },
     label: {
       flex: 1,
@@ -116,13 +116,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textTitle
     },
     labelActive: {
-      color: colors.primary,
+      color: colors.lime,
       fontWeight: '800'
     },
     check: {
       fontSize: 13,
       fontWeight: '800',
-      color: colors.primary
+      color: colors.lime
     }
   });
 }

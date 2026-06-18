@@ -27,6 +27,8 @@ type Props = {
   commentCount?: number;
   onToggleLike?: () => void;
   onOpenComments?: () => void;
+  /** When set, an "Open round →" affordance is shown at the trailing edge. */
+  onOpenRound?: () => void;
 };
 
 export function RoundActionBar({
@@ -35,18 +37,17 @@ export function RoundActionBar({
   commentCount = 0,
   onToggleLike,
   onOpenComments,
+  onOpenRound,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
-  const likeColor = liked ? colors.accent : colors.textTitle;
-  const likeLabel = formatLikeLabel(liked, likeCount);
-  const commentLabel = formatCommentLabel(commentCount);
+  const likeColor = liked ? colors.lime : colors.textMuted;
 
   return (
     <View style={styles.bar}>
       <Pressable
-        style={styles.seg}
+        style={[styles.react, liked ? styles.reactLiked : null]}
         onPress={onToggleLike}
         disabled={!onToggleLike}
         accessibilityRole="button"
@@ -54,13 +55,15 @@ export function RoundActionBar({
         accessibilityState={{ selected: liked }}>
         <Ionicons
           name={liked ? 'heart' : 'heart-outline'}
-          size={22}
+          size={18}
           color={likeColor}
         />
-        <Text style={[styles.segLabel, { color: likeColor }]}>{likeLabel}</Text>
+        {likeCount > 0 ? (
+          <Text style={[styles.count, { color: likeColor }]}>{likeCount}</Text>
+        ) : null}
       </Pressable>
       <Pressable
-        style={styles.seg}
+        style={styles.react}
         onPress={onOpenComments}
         disabled={!onOpenComments}
         accessibilityRole="button"
@@ -69,48 +72,67 @@ export function RoundActionBar({
         }>
         <Ionicons
           name="chatbubble-outline"
-          size={22}
-          color={colors.textTitle}
+          size={17}
+          color={colors.textMuted}
         />
-        <Text style={styles.segLabel}>{commentLabel}</Text>
+        {commentCount > 0 ? (
+          <Text style={styles.count}>{commentCount}</Text>
+        ) : null}
       </Pressable>
+      {onOpenRound ? (
+        <Pressable
+          style={styles.openBtn}
+          onPress={onOpenRound}
+          accessibilityRole="button"
+          accessibilityLabel="Open round detail">
+          <Text style={styles.openText}>Open round →</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
-}
-
-function formatLikeLabel(liked: boolean, count: number): string {
-  if (count <= 0) return liked ? 'Liked' : 'Like';
-  const word = count === 1 ? (liked ? 'liked' : 'like') : liked ? 'liked' : 'likes';
-  return `${count} ${word}`;
-}
-
-function formatCommentLabel(count: number): string {
-  if (count <= 0) return 'Comments';
-  const word = count === 1 ? 'comment' : 'comments';
-  return `${count} ${word}`;
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     bar: {
       flexDirection: 'row',
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
-      paddingTop: 4,
-      paddingBottom: 6,
-    },
-    seg: {
-      flex: 1,
-      flexDirection: 'column',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: 3,
-      paddingVertical: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.glassStroke,
+      paddingTop: 10,
+      paddingBottom: 12,
+      paddingHorizontal: 16,
+      gap: 8,
     },
-    segLabel: {
-      color: colors.textTitle,
-      fontSize: 11,
-      fontWeight: '700',
+    react: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 11,
+      paddingVertical: 7,
+      borderRadius: 999,
+      backgroundColor: colors.glassFill2,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+    },
+    reactLiked: {
+      borderColor: colors.lime,
+      backgroundColor: colors.glowLime,
+    },
+    count: {
+      color: colors.textMuted,
+      fontSize: 12.5,
+      fontWeight: '800',
+    },
+    openBtn: {
+      marginLeft: 'auto',
+      paddingVertical: 7,
+      paddingHorizontal: 4,
+    },
+    openText: {
+      color: colors.cyan,
+      fontSize: 13,
+      fontWeight: '800',
     },
   });
 }

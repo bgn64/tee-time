@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "teetime",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "ios": {},
     "android": {
       "adaptiveIcon": {
@@ -35,7 +35,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#f6f7f2",
+          "backgroundColor": "#05070c",
           "android": {
             "image": "./assets/images/splash-icon.png",
             "imageWidth": 200

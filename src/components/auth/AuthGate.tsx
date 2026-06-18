@@ -32,9 +32,10 @@
  */
 
 import React from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import type { Session } from '@supabase/supabase-js';
 
+import { GlassCard, NeonButton } from '@/components/aurora';
 import { signOut } from '@/library/supabase/auth';
 import { supabase } from '@/library/supabase/client';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -47,6 +48,7 @@ interface AuthGateProps {
 
 export function AuthGate({ children }: AuthGateProps) {
   const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const [session, setSession] = React.useState<Session | null>(null);
   const [checking, setChecking] = React.useState(true);
 
@@ -77,8 +79,8 @@ export function AuthGate({ children }: AuthGateProps) {
 
   if (checking) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.lime} />
       </View>
     );
   }
@@ -101,12 +103,13 @@ export function AuthGate({ children }: AuthGateProps) {
  */
 function ProfileStage({ children }: { children: React.ReactNode }) {
   const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const { status, refresh } = useAccount();
 
   if (status === 'booting') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.lime} />
       </View>
     );
   }
@@ -117,29 +120,30 @@ function ProfileStage({ children }: { children: React.ReactNode }) {
 
   if (status === 'error') {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <Text style={[styles.errorTitle, { color: colors.textTitle }]}>
-          Couldn&apos;t load your profile
-        </Text>
-        <Text style={[styles.errorBody, { color: colors.textBody }]}>
-          Check your connection and try again. If the problem persists, sign out and back in.
-        </Text>
-        <Pressable
-          style={[styles.retryButton, { backgroundColor: colors.primary }]}
-          onPress={() => {
-            void refresh();
-          }}>
-          <Text style={styles.retryButtonText}>Try again</Text>
-        </Pressable>
-        <Pressable
-          style={styles.signOutButton}
-          onPress={() => {
-            void signOut();
-          }}>
-          <Text style={[styles.signOutButtonText, { color: colors.textMuted }]}>
-            Sign out
+      <View style={styles.centered}>
+        <GlassCard strong glow style={styles.errorCard}>
+          <Text style={styles.errorTitle}>
+            Couldn&apos;t load your profile
           </Text>
-        </Pressable>
+          <Text style={styles.errorBody}>
+            Check your connection and try again. If the problem persists, sign out and back in.
+          </Text>
+          <NeonButton
+            label="Try again"
+            onPress={() => {
+              void refresh();
+            }}
+            style={styles.retryButton}
+          />
+          <NeonButton
+            label="Sign out"
+            variant="ghost"
+            onPress={() => {
+              void signOut();
+            }}
+            style={styles.signOutButton}
+          />
+        </GlassCard>
       </View>
     );
   }
@@ -147,42 +151,40 @@ function ProfileStage({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-const styles = StyleSheet.create({
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32
-  },
-  errorTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 8,
-    textAlign: 'center'
-  },
-  errorBody: {
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20
-  },
-  retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 10
-  },
-  retryButtonText: {
-    color: '#ffffff',
-    fontWeight: '700',
-    fontSize: 14
-  },
-  signOutButton: {
-    marginTop: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8
-  },
-  signOutButtonText: {
-    fontSize: 13,
-    fontWeight: '600'
-  }
-});
+function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+  return StyleSheet.create({
+    centered: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 32,
+      backgroundColor: 'transparent',
+    },
+    errorCard: {
+      width: '100%',
+      maxWidth: 420,
+      alignItems: 'stretch',
+    },
+    errorTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      marginBottom: 8,
+      textAlign: 'center',
+      color: colors.textTitle,
+    },
+    errorBody: {
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 20,
+      marginBottom: 20,
+      color: colors.textBody,
+    },
+    retryButton: {
+      width: '100%',
+    },
+    signOutButton: {
+      width: '100%',
+      marginTop: 10,
+    },
+  });
+}

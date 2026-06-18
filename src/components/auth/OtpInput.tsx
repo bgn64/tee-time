@@ -17,6 +17,7 @@ import React from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { useTheme } from '@/library/theme/ThemeContext';
+import { numericFontVariant } from '@/library/theme/themes';
 
 type Props = {
   value: string;
@@ -90,27 +91,36 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     row: {
       flexDirection: 'row',
       alignSelf: 'center',
-      gap: 8,
+      gap: 9,
       position: 'relative'
     },
     cell: {
-      width: 44,
-      height: 52,
+      width: 46,
+      height: 56,
       alignItems: 'center',
       justifyContent: 'center',
       borderWidth: 1,
-      borderRadius: 8,
-      borderColor: colors.border,
-      backgroundColor: colors.cardBg
+      borderRadius: 14,
+      borderColor: colors.glassStroke,
+      backgroundColor: colors.glassFill2,
+      shadowColor: colors.night,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.25,
+      shadowRadius: 18,
+      elevation: 2
     },
     cellActive: {
-      borderColor: colors.primary,
-      borderWidth: 2
+      borderColor: colors.cyan,
+      shadowColor: colors.cyan,
+      shadowOpacity: 0.28,
+      shadowRadius: 16,
+      elevation: 4
     },
     cellText: {
       fontSize: 22,
-      fontWeight: '700',
-      color: colors.textTitle
+      fontWeight: '800',
+      color: colors.lime,
+      fontVariant: [...numericFontVariant]
     },
     hiddenInput: {
       position: 'absolute',

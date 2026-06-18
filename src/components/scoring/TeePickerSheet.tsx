@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { GlassSurface, NumericText } from '@/components/aurora';
 import { teeColorToken } from '@/library/golf/teeColor';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -36,7 +37,7 @@ function teeSwatch(tee: Tee, colors: ThemeColors): string {
   if (explicit && explicit.startsWith('#')) return explicit;
   const token = teeColorToken(tee);
   if (token) return colors[token];
-  return '#888';
+  return colors.textMuted;
 }
 
 export function TeePickerSheet({
@@ -62,7 +63,7 @@ export function TeePickerSheet({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onCancel}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onCancel} />
-        <View style={styles.sheet}>
+        <GlassSurface strong glow style={styles.sheet}>
           <View style={styles.grab} />
           <Text style={styles.title}>Tee for {scorerName}</Text>
           <Text style={styles.subtitle}>Pick the tee they&apos;re playing from.</Text>
@@ -76,10 +77,10 @@ export function TeePickerSheet({
                 onPress={() => onPick(t.id)}>
                 <View style={[styles.dot, { backgroundColor: teeSwatch(t, colors) }]} />
                 <Text style={styles.name}>{t.name}</Text>
-                <Text style={styles.stats}>
+                <NumericText style={styles.stats}>
                   {t.totalYardage ? `${t.totalYardage.toLocaleString()} yd` : '—'}
                   {t.slope ? `  ·  ${t.slope}` : ''}
-                </Text>
+                </NumericText>
                 {active ? <Text style={styles.check}>✓</Text> : null}
               </Pressable>
             );
@@ -94,7 +95,7 @@ export function TeePickerSheet({
             </Text>
             {!selectedTeeId ? <Text style={styles.check}>✓</Text> : null}
           </Pressable>
-        </View>
+        </GlassSurface>
       </View>
     </Modal>
   );
@@ -108,9 +109,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       backgroundColor: 'rgba(0,0,0,0.35)',
     },
     sheet: {
-      backgroundColor: colors.cardBg,
-      borderTopLeftRadius: 18,
-      borderTopRightRadius: 18,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
       paddingHorizontal: 14,
       paddingTop: 8,
       paddingBottom: 24,
@@ -138,9 +140,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 6,
       paddingVertical: 10,
       borderRadius: 8,
+      borderWidth: 1,
+      borderColor: 'transparent',
     },
     rowActive: {
-      backgroundColor: 'rgba(124,179,66,0.10)',
+      backgroundColor: colors.glowLime,
+      borderColor: colors.lime,
     },
     dot: { width: 14, height: 14, borderRadius: 7 },
     dotDashed: {

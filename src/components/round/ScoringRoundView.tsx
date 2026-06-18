@@ -27,7 +27,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CommentsSheet } from './CommentsSheet';
@@ -35,8 +35,9 @@ import { CourseBanner } from './CourseBanner';
 import { RoundActionBar } from './RoundActionBar';
 import { ScorecardSheet } from './ScorecardSheet';
 import { SwipeableHoleEditor } from './SwipeableHoleEditor';
+import { GlassCard, NeonButton, NumericText, StatChip } from '@/components/aurora';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
-import { formatRelativeTime } from '@/library/golf/scoring';
+import { formatRelativeTime, formatScore, getScorerProgress } from '@/library/golf/scoring';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -84,6 +85,12 @@ export function ScoringRoundView({
   const [commentsOpen, setCommentsOpen] = useState(false);
 
   const isInProgress = !round.completedAt;
+  const currentHole = round.course.holes.find((h) => h.number === currentHoleNumber);
+  const primaryScorerId =
+    round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0
+      ? round.teams?.[0]?.id
+      : round.playerIds[0];
+  const progress = getScorerProgress(round, primaryScorerId);
   const timeText = formatRelativeTime(
     isInProgress
       ? round.lastScoreAt ?? round.startedAt
@@ -105,16 +112,49 @@ export function ScoringRoundView({
         ]}
         showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
-          <CourseBanner
-            handle={ownerProfile?.handle}
-            displayName={ownerProfile?.displayName}
-            avatarColor={ownerProfile?.avatarColor}
-            avatarSeed={round.ownerUserId}
-            courseName={round.course.name}
-            timeText={timeText}
-            isLive={isInProgress}
-            onPressOwner={onPressOwner}
-          />
+          <GlassCard strong glow style={styles.headerCard}>
+            <CourseBanner
+              handle={ownerProfile?.handle}
+              displayName={ownerProfile?.displayName}
+              avatarColor={ownerProfile?.avatarColor}
+              avatarSeed={round.ownerUserId}
+              courseName={round.course.name}
+              timeText={timeText}
+              isLive={isInProgress}
+              onPressOwner={onPressOwner}
+            />
+            {currentHole ? (
+              <View style={styles.hero}>
+                <View style={styles.heroNumberWrap}>
+                  <Text style={styles.heroEyebrow}>HOLE</Text>
+                  <NumericText style={styles.heroNumber}>
+                    {currentHole.number}
+                  </NumericText>
+                </View>
+                <View style={styles.heroMeta}>
+                  <Text style={styles.heroCourse} numberOfLines={1}>
+                    {round.course.name}
+                  </Text>
+                  <View style={styles.heroStats}>
+                    <StatChip label="Par" value={currentHole.par} state="neutral" />
+                    {currentHole.yardage ? (
+                      <StatChip label="Yards" value={currentHole.yardage} state="neutral" />
+                    ) : null}
+                    {currentHole.handicapIndex ? (
+                      <StatChip label="Hcp" value={currentHole.handicapIndex} state="neutral" />
+                    ) : null}
+                  </View>
+                </View>
+                <View style={styles.toParChip}>
+                  <Text style={styles.toParLabel}>TO PAR</Text>
+                  <NumericText style={styles.toParValue}>
+                    {formatScore(progress.relativeScore)}
+                  </NumericText>
+                  <Text style={styles.toParThru}>THRU {progress.thruCount}</Text>
+                </View>
+              </View>
+            ) : null}
+          </GlassCard>
 
           <SwipeableHoleEditor
             round={round}
@@ -125,23 +165,18 @@ export function ScoringRoundView({
           />
 
           <View style={styles.footer}>
-            <Pressable
-              style={styles.scorecardBtn}
+            <NeonButton
+              label="Scorecard"
+              variant="ghost"
               onPress={() => setScorecardOpen(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Open scorecard">
-              <Ionicons name="grid-outline" size={17} color={colors.primaryDark} />
-              <Text style={styles.scorecardBtnText}>Scorecard</Text>
-            </Pressable>
+              iconLeft={<Ionicons name="grid-outline" size={17} color={colors.cyan} />}
+            />
 
             {onPrimary ? (
-              <Pressable
-                style={styles.primaryBtn}
+              <NeonButton
+                label={primaryLabel ?? 'Continue'}
                 onPress={onPrimary}
-                accessibilityRole="button"
-                accessibilityLabel={primaryLabel}>
-                <Text style={styles.primaryBtnText}>{primaryLabel}</Text>
-              </Pressable>
+              />
             ) : null}
 
             <View style={styles.actionBarWrap}>
@@ -178,7 +213,7 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     root: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: 'transparent',
     },
     scroll: {
       flex: 1,
@@ -188,46 +223,90 @@ function makeStyles(colors: ThemeColors) {
       paddingTop: 14,
     },
     card: {
-      // Match the feed card (RoundListCard): square corners, no border
-      // line, soft drop shadow only. Sizes to its content (the pager
-      // locks to the tallest hole) so a one-scorer round stays compact.
-      backgroundColor: colors.cardBg,
-      ...colors.shadowCard,
+      gap: 12,
     },
-    footer: {
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
-      paddingHorizontal: 16,
-      paddingTop: 10,
-      gap: 8,
+    headerCard: {
+      gap: 16,
     },
-    scorecardBtn: {
+    hero: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      backgroundColor: colors.chipBg,
-      borderRadius: 12,
-      paddingVertical: 13,
+      gap: 14,
+      paddingTop: 14,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.glassStroke,
     },
-    scorecardBtnText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: colors.primaryDark,
-    },
-    primaryBtn: {
-      backgroundColor: colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
+    heroNumberWrap: {
       alignItems: 'center',
+      justifyContent: 'center',
+      width: 78,
+      height: 82,
+      borderRadius: 22,
+      backgroundColor: colors.night,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
     },
-    primaryBtnText: {
-      color: '#fff',
-      fontSize: 15,
+    heroEyebrow: {
+      color: colors.cyan,
+      fontSize: 10,
+      fontWeight: '900',
+      letterSpacing: 1,
+    },
+    heroNumber: {
+      color: colors.lime,
+      fontSize: 42,
+      fontWeight: '900',
+      lineHeight: 46,
+    },
+    heroMeta: {
+      flex: 1,
+      minWidth: 0,
+      gap: 9,
+    },
+    heroCourse: {
+      color: colors.textTitle,
+      fontSize: 16,
+      fontWeight: '900',
+      letterSpacing: -0.3,
+    },
+    heroStats: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 7,
+    },
+    toParChip: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      minWidth: 72,
+      minHeight: 72,
+      borderRadius: 20,
+      backgroundColor: colors.glowLime,
+      borderWidth: 1,
+      borderColor: colors.lime,
+    },
+    toParLabel: {
+      color: colors.textMuted,
+      fontSize: 9,
+      fontWeight: '900',
+      letterSpacing: 0.8,
+    },
+    toParValue: {
+      color: colors.lime,
+      fontSize: 25,
+      fontWeight: '900',
+      lineHeight: 29,
+    },
+    toParThru: {
+      color: colors.textMuted,
+      fontSize: 9,
       fontWeight: '800',
+      letterSpacing: 0.5,
+    },
+    footer: {
+      paddingTop: 2,
+      gap: 8,
     },
     actionBarWrap: {
-      marginHorizontal: -16,
       marginTop: 2,
     },
   });

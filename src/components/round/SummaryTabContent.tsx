@@ -15,9 +15,10 @@
  */
 
 import { useMemo } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { ScorerSummaryRow } from './ScorerSummaryRow';
+import { ProgressDial } from '@/components/aurora';
+import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import {
   SummaryAggregateTiles,
   type AggregateTile,
@@ -50,17 +51,17 @@ import type { Round } from '@/types/golf';
 type Props = {
   round: Round;
   /**
-   * When set, the tee chip below each scorer's name becomes a
-   * Pressable that calls back with the scorer's id. Used by the
-   * scoring/editing surface so the user can change tees from
-   * Summary mid-round. Read-only surfaces (feed cards,
-   * completed-round detail) leave it undefined and the chip
-   * renders bare.
+   * When set, the summary leads with a big course-name title + context
+   * line (the feed card passes this so the course is the body hero,
+   * mirroring the mockup). Detail surfaces leave it undefined — their
+   * header already shows the course.
    */
-  onPressTeeForScorer?: (scorerId: string) => void;
+  leadCourseName?: string | null;
+  /** Secondary line under the lead course title (e.g. "18 holes"). */
+  leadContext?: string | null;
 };
 
-export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
+export function SummaryTabContent({ round, leadCourseName, leadContext }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
@@ -90,8 +91,20 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
     [round.trackedScorerIds]
   );
 
+  const single = scorers.length === 1;
+
   return (
     <View style={styles.list}>
+      {leadCourseName ? (
+        <View style={styles.lead}>
+          <Text style={styles.leadTitle} numberOfLines={2}>
+            {leadCourseName}
+          </Text>
+          {leadContext ? (
+            <Text style={styles.leadContext}>{leadContext}</Text>
+          ) : null}
+        </View>
+      ) : null}
       {scorers.map((s, i) => {
         const progress = playerProgress(round, s.id);
         const hasScores = progress.thru > 0;
@@ -107,6 +120,21 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
         // included — so the reader knows how many holes the score covers
         // without needing the course length. No "FINAL" label.
         const thruText = hasScores ? `THRU ${progress.thru}` : undefined;
+
+        const totalHoles = visibleHoles.length || 18;
+        const fraction = totalHoles > 0 ? progress.thru / totalHoles : 0;
+        const ringColor =
+          tone === 'over'
+            ? colors.accent
+            : tone === 'even'
+              ? colors.cyan
+              : colors.lime;
+
+        const teeMeta = s.tee
+          ? s.tee.totalYardage
+            ? `${s.tee.name} · ${s.tee.totalYardage.toLocaleString()} yds`
+            : s.tee.name
+          : null;
 
         // Stat tiles are gated on (a) the scorer being in the
         // round's tracked set AND (b) actually having engaged with
@@ -149,31 +177,50 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
             : [];
 
         return (
-          <View key={s.id} style={i > 0 ? styles.rowSep : styles.row}>
-            <ScorerSummaryRow
-              members={s.members}
-              name={s.name}
-              tee={s.tee ?? null}
-              scoreText={scoreText}
-              tone={tone}
-              scoreSub={thruText}
-              onPressTee={
-                onPressTeeForScorer
-                  ? () => onPressTeeForScorer(s.id)
-                  : undefined
-              }
-            />
-            <SummaryAggregateTiles tiles={tiles} />
-            {isScramble && engagement.hasFor(s.id) ? (
-              <TeamContributionRow
-                contributions={summarizeContributions(
-                  shotRows,
-                  s.id,
-                  s.members.map((m) => m.id)
-                )}
-                members={s.members}
-              />
+          <View key={s.id} style={i > 0 ? styles.blockSep : styles.block}>
+            {!single ? (
+              <View style={styles.idRow}>
+                <TeamAvatarCluster
+                  members={s.members}
+                  size="sm"
+                  ringColor={colors.cardBg}
+                />
+                <Text style={styles.handle} numberOfLines={1}>
+                  {joinHandles(s.members)}
+                </Text>
+                {thruText ? <Text style={styles.thru}>{thruText}</Text> : null}
+              </View>
             ) : null}
+            <View style={styles.ringRow}>
+              <ProgressDial
+                value={scoreText}
+                label="TO PAR"
+                fraction={fraction}
+                size={single ? 96 : 76}
+                progressColor={ringColor}
+              />
+              <View style={styles.legend}>
+                {single && thruText ? (
+                  <Text style={styles.thruLead}>{thruText}</Text>
+                ) : null}
+                {teeMeta ? (
+                  <Text style={styles.teeMeta} numberOfLines={1}>
+                    {teeMeta}
+                  </Text>
+                ) : null}
+                <SummaryAggregateTiles tiles={tiles} />
+                {isScramble && engagement.hasFor(s.id) ? (
+                  <TeamContributionRow
+                    contributions={summarizeContributions(
+                      shotRows,
+                      s.id,
+                      s.members.map((m) => m.id)
+                    )}
+                    members={s.members}
+                  />
+                ) : null}
+              </View>
+            </View>
           </View>
         );
       })}
@@ -181,21 +228,84 @@ export function SummaryTabContent({ round, onPressTeeForScorer }: Props) {
   );
 }
 
+function joinHandles(members: readonly AvatarMember[]): string {
+  const names = members.map((m) => m.handle ?? m.name);
+  if (names.length <= 1) return names[0] ?? '';
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     list: {
       paddingHorizontal: 18,
-      paddingTop: 4,
-      paddingBottom: 8,
-    },
-    row: {
-      paddingVertical: 10,
-    },
-    rowSep: {
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
       paddingTop: 10,
-      paddingBottom: 10,
+      paddingBottom: 12,
+    },
+    lead: {
+      marginBottom: 14,
+    },
+    leadTitle: {
+      fontSize: 20,
+      fontWeight: '900',
+      letterSpacing: -0.3,
+      color: colors.textTitle,
+    },
+    leadContext: {
+      marginTop: 3,
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    block: {
+      paddingVertical: 4,
+    },
+    blockSep: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.glassStroke,
+      paddingTop: 14,
+      marginTop: 12,
+    },
+    idRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 10,
+    },
+    handle: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 14,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    thru: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+      color: colors.textMuted,
+    },
+    ringRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+    },
+    legend: {
+      flex: 1,
+      minWidth: 0,
+    },
+    thruLead: {
+      fontSize: 10,
+      fontWeight: '800',
+      letterSpacing: 1.4,
+      textTransform: 'uppercase',
+      color: colors.textMuted,
+      marginBottom: 4,
+    },
+    teeMeta: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textMuted,
     },
   });
 }

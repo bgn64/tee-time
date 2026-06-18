@@ -11,6 +11,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { GlassCard, NeonButton, NumericText, Stepper } from '@/components/aurora';
 import { formatScore } from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
 
@@ -55,48 +56,39 @@ export function CustomScoreSheet({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onCancel}>
       <View style={styles.overlay}>
         <Pressable style={styles.backdrop} onPress={onCancel} />
-        <View style={styles.sheet}>
+        <GlassCard strong glow style={styles.sheet}>
           <Text style={styles.title}>Custom score</Text>
           <Text style={styles.subtitle}>
             {scorerName}  ·  Hole {holeNumber}  ·  Par {par}
           </Text>
 
           <View style={styles.stepperRow}>
-            <Pressable
-              onPress={() => setDraft((d) => Math.max(1, d - 1))}
-              style={styles.stepBtn}
-              hitSlop={6}>
-              <Text style={styles.stepText}>−</Text>
-            </Pressable>
             <View
               style={[
                 styles.display,
                 tone === 'over' && styles.displayOver,
                 tone === 'under' && styles.displayUnder,
               ]}>
-              <Text style={styles.displayText}>{formatScore(rel)}</Text>
+              <Text style={styles.displayLabel}>TO PAR</Text>
+              <NumericText style={styles.displayText}>{formatScore(rel)}</NumericText>
             </View>
-            <Pressable
-              onPress={() => setDraft((d) => d + 1)}
-              style={styles.stepBtn}
-              hitSlop={6}>
-              <Text style={styles.stepText}>+</Text>
-            </Pressable>
+            <Stepper
+              value={draft}
+              min={1}
+              onDecrement={() => setDraft((d) => Math.max(1, d - 1))}
+              onIncrement={() => setDraft((d) => d + 1)}
+            />
           </View>
 
-          <Text style={styles.strokes}>
+          <NumericText style={styles.strokes}>
             {draft} {draft === 1 ? 'stroke' : 'strokes'}
-          </Text>
+          </NumericText>
 
           <View style={styles.actions}>
-            <Pressable style={styles.cancelBtn} onPress={onCancel}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </Pressable>
-            <Pressable style={styles.doneBtn} onPress={() => onConfirm(draft)}>
-              <Text style={styles.doneText}>Done</Text>
-            </Pressable>
+            <NeonButton label="Cancel" variant="ghost" onPress={onCancel} style={styles.actionBtn} />
+            <NeonButton label="Done" onPress={() => onConfirm(draft)} style={styles.actionBtn} />
           </View>
-        </View>
+        </GlassCard>
       </View>
     </Modal>
   );
@@ -107,16 +99,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     overlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
     backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.45)' },
     sheet: {
-      width: 280,
-      backgroundColor: colors.cardBg,
-      borderRadius: 16,
-      padding: 18,
+      width: 320,
+      maxWidth: '92%',
       alignItems: 'center',
-      shadowColor: '#000',
-      shadowOpacity: 0.2,
-      shadowRadius: 12,
-      shadowOffset: { width: 0, height: 4 },
-      elevation: 6,
     },
     title: {
       fontSize: 15,
@@ -133,39 +118,39 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       letterSpacing: 0.3,
     },
     stepperRow: {
-      flexDirection: 'row',
+      width: '100%',
       alignItems: 'center',
-      gap: 12,
-    },
-    stepBtn: {
-      width: 48,
-      height: 48,
-      borderRadius: 12,
-      backgroundColor: colors.chipBg,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    stepText: {
-      fontSize: 26,
-      lineHeight: 28,
-      fontWeight: '800',
-      color: colors.primaryDark,
+      gap: 14,
     },
     display: {
-      minWidth: 96,
-      height: 56,
+      width: '100%',
+      height: 88,
       paddingHorizontal: 14,
-      borderRadius: 14,
-      backgroundColor: colors.primary,
+      borderRadius: 22,
+      backgroundColor: colors.glowLime,
+      borderWidth: 1,
+      borderColor: colors.lime,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    displayOver: { backgroundColor: colors.accent },
-    displayUnder: { backgroundColor: colors.primaryDark },
+    displayOver: {
+      backgroundColor: colors.glassFill2,
+      borderColor: colors.accent,
+    },
+    displayUnder: {
+      backgroundColor: colors.glowCyan,
+      borderColor: colors.cyan,
+    },
+    displayLabel: {
+      color: colors.textMuted,
+      fontSize: 10,
+      fontWeight: '900',
+      letterSpacing: 1,
+    },
     displayText: {
-      color: '#fff',
-      fontSize: 26,
-      fontWeight: '800',
+      color: colors.lime,
+      fontSize: 34,
+      fontWeight: '900',
       letterSpacing: 0.5,
     },
     strokes: {
@@ -181,30 +166,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       gap: 8,
       width: '100%',
     },
-    cancelBtn: {
+    actionBtn: {
       flex: 1,
-      paddingVertical: 11,
-      borderRadius: 11,
-      alignItems: 'center',
-      borderWidth: 1,
-      borderColor: colors.border,
-    },
-    cancelText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: colors.textMuted,
-    },
-    doneBtn: {
-      flex: 1,
-      paddingVertical: 11,
-      borderRadius: 11,
-      alignItems: 'center',
-      backgroundColor: colors.primary,
-    },
-    doneText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: '#fff',
     },
   });
 }

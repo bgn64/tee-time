@@ -21,7 +21,6 @@
  */
 
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useMemo } from 'react';
 import {
@@ -32,6 +31,7 @@ import {
   View,
 } from 'react-native';
 
+import { GlassSurface, PHONE_MAX_WIDTH } from '@/components/aurora';
 import { LiveStatusChip } from '@/components/round/LiveStatusChip';
 import { LiveTopStrip } from '@/components/round/LiveTopStrip';
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
@@ -68,8 +68,8 @@ export default function RoundsHubScreen() {
 
   if (!roundHydrated) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
-        <ActivityIndicator color={colors.primary} />
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.lime} />
       </View>
     );
   }
@@ -141,10 +141,10 @@ export default function RoundsHubScreen() {
   return (
     <View style={styles.container}>
       <PullToRefreshScrollView onRefresh={refresh} contentContainerStyle={styles.content}>
-        <View style={styles.titleBlock}>
+        <GlassSurface strong glow style={styles.titleBlock}>
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.title}>{title}</Text>
-        </View>
+        </GlassSurface>
 
         {/* Primary action first, then disabled, then Previous. Order shifts
             when current-round state changes — primary always rides up top. */}
@@ -236,7 +236,7 @@ function PrimaryHubCard({
         <Ionicons
           name={iconName}
           size={20}
-          color={isLive ? colors.primaryDark : '#ffffff'}
+          color={isLive ? colors.lime : colors.onNeon}
         />
       </View>
       <View style={styles.body}>
@@ -266,7 +266,7 @@ function PrimaryHubCard({
       <Ionicons
         name="chevron-forward"
         size={20}
-        color={isLive ? colors.textMuted : '#ffffff'}
+        color={isLive ? colors.textMuted : colors.onNeon}
       />
     </>
   );
@@ -291,14 +291,11 @@ function PrimaryHubCard({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={label}>
-      <LinearGradient
-        colors={[colors.primary, colors.primaryDark]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.card, styles.cardPrimary]}>
+      accessibilityLabel={label}
+      style={({ pressed }) => [pressed && styles.cardPressed]}>
+      <GlassSurface strong glow style={[styles.card, styles.cardPrimary]}>
         {row}
-      </LinearGradient>
+      </GlassSurface>
     </Pressable>
   );
 }
@@ -368,7 +365,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: 'transparent',
     },
     centered: {
       flex: 1,
@@ -376,43 +373,49 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       justifyContent: 'center',
     },
     content: {
-      padding: 14,
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
+      padding: 16,
       paddingTop: 20,
-      paddingBottom: 32,
+      paddingBottom: 36,
     },
     titleBlock: {
-      marginBottom: 14,
-      paddingHorizontal: 2,
+      marginBottom: 16,
+      padding: 16,
+      borderRadius: 24,
     },
     greeting: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: colors.textMuted,
-      letterSpacing: 0.2,
+      fontSize: 12,
+      fontWeight: '900',
+      color: colors.cyan,
+      letterSpacing: 1.3,
+      textTransform: 'uppercase',
     },
     title: {
-      fontSize: 22,
-      fontWeight: '800',
+      fontSize: 30,
+      fontWeight: '900',
       color: colors.textTitle,
       marginTop: 4,
+      letterSpacing: -0.5,
     },
     card: {
-      borderRadius: 14,
+      borderRadius: 22,
       paddingVertical: 14,
       paddingHorizontal: 16,
-      marginBottom: 10,
+      marginBottom: 12,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 14,
     },
     cardPrimary: {
-      borderWidth: 1,
-      borderColor: colors.primary,
+      borderColor: colors.lime,
+      backgroundColor: colors.glowLime,
     },
     cardNeutral: {
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.glassStroke,
     },
     cardPressed: {
       opacity: 0.85,
@@ -420,15 +423,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     cardDisabled: {
       backgroundColor: 'transparent',
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.glassStroke,
       borderStyle: 'dashed',
     },
     liveHubCard: {
       borderRadius: 14,
       marginBottom: 10,
       borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: colors.cardBg,
+      borderColor: colors.glassStroke,
+      backgroundColor: colors.glassFill,
       overflow: 'hidden',
     },
     liveHubContent: {
@@ -447,13 +450,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexShrink: 0,
     },
     iconSquareNeutral: {
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glowCyan,
     },
     iconSquarePrimary: {
-      backgroundColor: 'rgba(255,255,255,0.22)',
+      backgroundColor: colors.lime,
     },
     iconSquareLive: {
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glowLime,
     },
     iconSquareDisabled: {
       backgroundColor: 'transparent',
@@ -478,7 +481,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       letterSpacing: 0.1,
     },
     labelOnPrimary: {
-      color: '#ffffff',
+      color: colors.onNeon,
     },
     labelMuted: {
       color: colors.textMuted,
@@ -490,7 +493,8 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginTop: 3,
     },
     subOnPrimary: {
-      color: 'rgba(255,255,255,0.85)',
+      color: colors.onNeon,
+      opacity: 0.76,
     },
     scoreChip: {
       paddingHorizontal: 6,

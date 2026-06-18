@@ -20,6 +20,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { GlassSurface } from '@/components/aurora';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { HoleRange } from '@/types/golf';
@@ -72,7 +73,7 @@ export function FrontBackPill({ current, onChange }: Props) {
           onPress={() => setOpen(false)}
           accessibilityLabel="Dismiss range picker">
           <View style={styles.menuWrap}>
-            <View style={styles.menu}>
+            <GlassSurface strong glow style={styles.menu}>
               {OPTIONS.map((opt, i) => {
                 const isActive = opt.value === current;
                 return (
@@ -95,7 +96,7 @@ export function FrontBackPill({ current, onChange }: Props) {
                   </Pressable>
                 );
               })}
-            </View>
+            </GlassSurface>
           </View>
         </Pressable>
       </Modal>
@@ -113,7 +114,9 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 11,
       paddingVertical: 6,
       borderRadius: 999,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill2,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
     },
     label: {
       fontSize: 12.5,
@@ -126,7 +129,7 @@ function makeStyles(colors: ThemeColors) {
     },
     backdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.18)',
+      backgroundColor: 'rgba(0,0,0,0.32)',
       justifyContent: 'center',
       alignItems: 'center',
     },
@@ -134,14 +137,7 @@ function makeStyles(colors: ThemeColors) {
       width: 200,
     },
     menu: {
-      backgroundColor: colors.cardBg,
       borderRadius: 12,
-      overflow: 'hidden',
-      shadowColor: '#000',
-      shadowOpacity: 0.18,
-      shadowRadius: 16,
-      shadowOffset: { width: 0, height: 6 },
-      elevation: 8,
     },
     item: {
       flexDirection: 'row',
@@ -155,7 +151,7 @@ function makeStyles(colors: ThemeColors) {
       borderTopColor: colors.hairline,
     },
     itemActive: {
-      backgroundColor: 'rgba(124,179,66,0.10)',
+      backgroundColor: colors.glowLime,
     },
     itemLabel: {
       flex: 1,

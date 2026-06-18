@@ -64,8 +64,8 @@ export function SwipeableCardContent({ panes }: Props) {
   const [canHover] = useState(deviceSupportsHover);
   const [heights, setHeights] = useState<number[]>(() => panes.map(() => 0));
 
-  const maxHeight = heights.reduce((m, h) => (h > m ? h : m), 0);
   const count = panes.length;
+  const activeHeight = heights[index] || 0;
 
   const animateTo = useCallback(
     (i: number) => {
@@ -146,7 +146,7 @@ export function SwipeableCardContent({ panes }: Props) {
   return (
     <View style={styles.wrap}>
       <View
-        style={styles.viewport}
+        style={[styles.viewport, { height: activeHeight || undefined }]}
         onLayout={onViewportLayout}
         {...hoverProps}
         {...pan.panHandlers}>
@@ -155,7 +155,6 @@ export function SwipeableCardContent({ panes }: Props) {
             styles.track,
             {
               width: width ? width * count : undefined,
-              height: maxHeight || undefined,
               transform: [{ translateX: tx }],
             },
           ]}>
@@ -163,7 +162,7 @@ export function SwipeableCardContent({ panes }: Props) {
             ? panes.map((pane, i) => (
                 <View
                   key={pane.key}
-                  style={[styles.page, { width, height: maxHeight || undefined }]}>
+                  style={[styles.page, { width }]}>
                   <View
                     onLayout={(e) =>
                       setPaneHeight(i, e.nativeEvent.layout.height)
@@ -216,8 +215,8 @@ function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     wrap: {
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
-      paddingTop: 6,
+      borderTopColor: colors.glassStroke,
+      paddingTop: 8,
     },
     viewport: {
       position: 'relative',
@@ -225,9 +224,10 @@ function makeStyles(colors: ThemeColors) {
     },
     track: {
       flexDirection: 'row',
+      alignItems: 'flex-start',
     },
     page: {
-      justifyContent: 'center',
+      alignSelf: 'flex-start',
     },
     arrow: {
       position: 'absolute',
@@ -238,11 +238,11 @@ function makeStyles(colors: ThemeColors) {
       borderRadius: 15,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.cardBg,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: colors.border,
-      shadowColor: '#000',
-      shadowOpacity: 0.1,
+      backgroundColor: colors.glassFill2,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+      shadowColor: colors.cyan,
+      shadowOpacity: 0.16,
       shadowOffset: { width: 0, height: 2 },
       shadowRadius: 6,
       elevation: 3,
@@ -262,17 +262,17 @@ function makeStyles(colors: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
       paddingTop: 11,
-      paddingBottom: 3,
+      paddingBottom: 5,
     },
     dot: {
       width: 6,
       height: 6,
       borderRadius: 3,
-      backgroundColor: colors.border,
+      backgroundColor: colors.glassStroke,
     },
     dotActive: {
       width: 18,
-      backgroundColor: colors.primaryDark,
+      backgroundColor: colors.lime,
     },
   });
 }

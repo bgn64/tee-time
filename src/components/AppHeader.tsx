@@ -1,6 +1,6 @@
 /**
  * AppHeader — custom native-stack header used by every screen
- * inside the tabbed surface (Home / Rounds / Search / You stacks).
+ * inside the tabbed surface (Feed / Score / Search / You stacks).
  *
  * Three-slot layout:
  *
@@ -11,12 +11,8 @@
  *   - Title text uses the same weight / colour conventions as the
  *     rest of the app's titles instead of the default semibold
  *     system font that read as "basic".
- *   - The header gets a hairline bottom border so it visually
- *     separates from the feed cards beneath it — feed cards share
- *     the header's background colour (`cardBg` ≡ `tabBar` in the
- *     palette), so without the border the boundary is invisible
- *     on overlap. Mirrors what the tab-bar's `borderTopColor`
- *     already does at the bottom of the screen.
+ *   - The header is translucent glass over the root Aurora gradient,
+ *     with a hairline stroke so it reads as floating chrome.
  *
  * Wiring: set `header: (props) => <AppHeader {...props} />` on a
  * `<Stack>`'s `screenOptions`. Per-screen `options.title`,
@@ -29,11 +25,33 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Logo } from '@/components/Logo';
+import { PHONE_MAX_WIDTH } from '@/components/aurora';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 
 const HEADER_HEIGHT = 52;
+
+/**
+ * Render a header title, coloring any `·` interpunct in lime so the
+ * "Tee·Time" wordmark matches the mockup (`.top h1 i{color:var(--lime)}`).
+ * Plain titles (no interpunct) render as a single string.
+ */
+function renderTitle(title: string, dotStyle: { color: string }): React.ReactNode {
+  if (!title.includes('·')) return title;
+  const parts = title.split('·');
+  const nodes: React.ReactNode[] = [];
+  parts.forEach((part, i) => {
+    if (i > 0) {
+      nodes.push(
+        <Text key={`dot-${i}`} style={dotStyle}>
+          ·
+        </Text>
+      );
+    }
+    nodes.push(part);
+  });
+  return nodes;
+}
 
 /**
  * Minimal local type for the props expo-router's native-stack
@@ -95,40 +113,34 @@ export function AppHeader({
       : null;
 
   return (
-    <View
-      style={[
-        styles.container,
-        { paddingTop: insets.top, height: HEADER_HEIGHT + insets.top },
-      ]}>
-      <View style={styles.row}>
-        <View style={styles.leftSlot}>
-          {back ? (
-            <Pressable
-              onPress={navigation.goBack}
-              hitSlop={8}
-              style={({ pressed }) => [
-                styles.backBtn,
-                pressed && styles.pressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Go back">
-              <Text style={styles.backChevron}>‹</Text>
-              <Text style={styles.backLabel} numberOfLines={1}>
-                {back.title ?? 'Back'}
+    <View style={[styles.outer, { paddingTop: insets.top }]}>
+      <View style={[styles.bar, { height: HEADER_HEIGHT }]}>
+        <View style={styles.row}>
+          <View style={styles.leftSlot}>
+            {back ? (
+              <Pressable
+                onPress={navigation.goBack}
+                hitSlop={8}
+                style={({ pressed }) => [
+                  styles.backBtn,
+                  pressed && styles.pressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="Go back">
+                <Text style={styles.backChevron}>‹</Text>
+                <Text style={styles.backLabel} numberOfLines={1}>
+                  {back.title ?? 'Back'}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.titleText} numberOfLines={1}>
+                {renderTitle(title, styles.titleDot)}
               </Text>
-            </Pressable>
-          ) : (
-            <Text style={styles.titleText} numberOfLines={1}>
-              {title}
-            </Text>
-          )}
-        </View>
+            )}
+          </View>
 
-        <View pointerEvents="none" style={styles.centerSlot}>
-          <Logo size={36} variant="disc" />
+          <View style={styles.rightSlot}>{rightNode}</View>
         </View>
-
-        <View style={styles.rightSlot}>{rightNode}</View>
       </View>
     </View>
   );
@@ -136,10 +148,14 @@ export function AppHeader({
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
-    container: {
-      backgroundColor: colors.tabBar,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+    outer: {
+      backgroundColor: 'transparent',
+      alignItems: 'center',
+    },
+    bar: {
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      backgroundColor: 'transparent',
     },
     row: {
       flex: 1,
@@ -170,10 +186,13 @@ function makeStyles(colors: ThemeColors) {
       justifyContent: 'center',
     },
     titleText: {
-      fontSize: 17,
-      fontWeight: '800',
+      fontSize: 18,
+      fontWeight: '700',
       color: colors.textTitle,
-      letterSpacing: 0.1,
+      letterSpacing: 0.4,
+    },
+    titleDot: {
+      color: colors.lime,
     },
     backBtn: {
       flexDirection: 'row',
@@ -183,12 +202,12 @@ function makeStyles(colors: ThemeColors) {
       fontSize: 24,
       lineHeight: 24,
       marginRight: 2,
-      color: colors.primaryDark,
+      color: colors.lime,
       fontWeight: '700',
     },
     backLabel: {
       fontSize: 15,
-      color: colors.primaryDark,
+      color: colors.lime,
       fontWeight: '700',
     },
     pressed: {

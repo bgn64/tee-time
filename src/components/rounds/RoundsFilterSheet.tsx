@@ -148,11 +148,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.32)',
+      backgroundColor: 'rgba(0,0,0,0.46)',
       justifyContent: 'flex-end'
     },
     sheet: {
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill2,
       borderTopLeftRadius: 18,
       borderTopRightRadius: 18,
       paddingHorizontal: 18,
@@ -164,7 +164,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       width: 36,
       height: 4,
       borderRadius: 2,
-      backgroundColor: colors.border,
+      backgroundColor: colors.glassStroke,
       marginBottom: 14
     },
     header: {
@@ -186,7 +186,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     clearLink: {
       fontSize: 12,
       fontWeight: '800',
-      color: colors.primary,
+      color: colors.lime,
       letterSpacing: 0.3
     },
     closeBtn: {
@@ -214,13 +214,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderRadius: 999,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill,
       borderWidth: 1,
-      borderColor: colors.border
+      borderColor: colors.glassStroke
     },
     chipActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary
+      backgroundColor: colors.lime,
+      borderColor: colors.lime
     },
     chipText: {
       fontSize: 12.5,
@@ -228,7 +228,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textTitle
     },
     chipTextActive: {
-      color: '#ffffff'
+      color: colors.onNeon
     }
   });
 }

@@ -171,10 +171,10 @@ function makeStyles(colors: ThemeColors) {
       paddingBottom: 14,
       gap: 12,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
+      borderTopColor: colors.glassStroke,
     },
     statSection: {
-      gap: 8,
+      gap: 10,
     },
     shotsGroup: {
       marginTop: 4,
@@ -188,3 +188,4 @@ function makeStyles(colors: ThemeColors) {
     },
   });
 }
+

@@ -1,15 +1,12 @@
 /**
- * Theme provider — exposes the active light/dark token set, driven by the
- * device's color scheme (`react-native` useColorScheme()).
+ * Theme provider — exposes the single fixed Aurora Glass dark token set.
  *
- * No persistence and no manual override: `app.json` sets
- * `userInterfaceStyle: "automatic"` so the OS controls the scheme, and we
- * just react to it. A manual override can be layered on later by extending
- * the context value.
+ * The public shape still includes `themeName` so existing consumers keep
+ * working, but the value is always `dark` and both palette entries resolve to
+ * the same permanent Aurora theme.
  */
 
 import React from 'react';
-import { useColorScheme } from 'react-native';
 
 import { themes, type ThemeColors, type ThemeName } from './themes';
 
@@ -20,12 +17,12 @@ type ThemeContextValue = {
 
 const ThemeContext = React.createContext<ThemeContextValue | null>(null);
 
+const themeName: ThemeName = 'dark';
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const scheme = useColorScheme();
-  const themeName: ThemeName = scheme === 'dark' ? 'dark' : 'light';
   const value = React.useMemo<ThemeContextValue>(
-    () => ({ colors: themes[themeName], themeName }),
-    [themeName],
+    () => ({ colors: themes.dark, themeName }),
+    [],
   );
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

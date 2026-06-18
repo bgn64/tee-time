@@ -12,10 +12,12 @@
  * `TeamBucket`; this file just stacks them.
  */
 
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/library/theme/ThemeContext';
 import { TeamBucket, type BucketMember } from './TeamBucket';
+import type { ThemeColors } from '@/library/theme/themes';
 import type { Tee } from '@/types/golf';
 
 export type TeamBucketView = {
@@ -52,6 +54,7 @@ export function TeamBucketsRow({
   newTeamSlot,
 }: Props) {
   const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.stack}>
       {teams.map((team) => (
@@ -75,44 +78,37 @@ export function TeamBucketsRow({
           onPress={newTeamSlot.onTap}
           style={({ pressed }) => [
             styles.addRow,
-            {
-              borderColor: colors.accent,
-              backgroundColor: withAlpha(colors.accent, 0.08),
-            },
             pressed ? { opacity: 0.85 } : null,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Move to a new team alone">
-          <Text style={[styles.addPlus, { color: colors.accent }]}>+</Text>
+          <Text style={styles.addPlus}>+</Text>
         </Pressable>
       ) : null}
     </View>
   );
 }
 
-function withAlpha(hex: string, alpha: number): string {
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return hex;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    stack: {
+      gap: 8,
+    },
+    addRow: {
+      borderRadius: 18,
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+      borderColor: colors.cyan,
+      backgroundColor: colors.glowCyan,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    addPlus: {
+      color: colors.cyan,
+      fontSize: 24,
+      fontWeight: '900',
+      lineHeight: 26,
+    },
+  });
 }
-
-const styles = StyleSheet.create({
-  stack: {
-    gap: 8,
-  },
-  addRow: {
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-    paddingVertical: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addPlus: {
-    fontSize: 22,
-    fontWeight: '800',
-    lineHeight: 24,
-  },
-});

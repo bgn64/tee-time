@@ -10,10 +10,9 @@
  *  - 'mark' (default) — the flat fairway-and-flag mark on a
  *    transparent background. Colors come from the active theme so
  *    it adapts to dark / light mode.
- *  - 'disc' — the full sunset disc: vertical sunset gradient, sun,
+ *  - 'disc' — the full Aurora disc: vertical lime/cyan gradient, sun,
  *    mark inscribed on the horizon line, and the dark green
- *    outline ring. Sunset palette is hardcoded — the disc is the
- *    brand identity, not a theme token.
+ *    outline ring. Palette comes from Aurora tokens.
  *
  * The 'disc' variant is what the app header renders today; 'mark'
  * is preserved for any callers that want just the flat artwork.
@@ -62,10 +61,10 @@ function MarkLogo({
   ballFill?: string;
 }) {
   const { colors } = useTheme();
-  const darkGreen = color ?? colors.primaryDark;
-  const lightGreen = colors.primary;
+  const darkGreen = color ?? colors.cyan;
+  const lightGreen = colors.lime;
   const cutout = ballFill ?? colors.background;
-  const cup = colors.textTitle;
+  const cup = colors.onNeon;
 
   return (
     <Svg width={size} height={size} viewBox="0 0 1024 1024">
@@ -91,7 +90,7 @@ function MarkLogo({
         strokeLinecap="round"
       />
       <Ellipse cx={368} cy={564} rx={36} ry={10} fill={cup} opacity={0.5} />
-      <Ellipse cx={368} cy={562} rx={24} ry={5.5} fill="#0b1f15" opacity={0.72} />
+      <Ellipse cx={368} cy={562} rx={24} ry={5.5} fill={colors.onNeon} opacity={0.72} />
       <Path
         d="M368 324 C365 410 365 492 368 562"
         fill="none"
@@ -101,11 +100,11 @@ function MarkLogo({
       />
       <Path
         d="M368 326 C416 308 456 328 500 310 L500 380 C450 402 416 382 371 398 C368 370 367 346 368 326 Z"
-        fill={colors.accent}
+        fill={colors.cyan}
       />
       <Path
         d="M388 341 C418 337 446 347 480 336 L480 366 C449 376 420 368 389 378 Z"
-        fill="#f97066"
+        fill={colors.violet}
         opacity={0.5}
       />
     </Svg>
@@ -113,6 +112,7 @@ function MarkLogo({
 }
 
 function DiscLogo({ size }: { size: number }) {
+  const { colors } = useTheme();
   // Generate per-instance IDs so multiple disc logos on the same screen
   // don't collide on the gradient / clip-path references (react-native-svg
   // has reuse bugs when ids clash across <Svg> roots on some platforms).
@@ -124,10 +124,10 @@ function DiscLogo({ size }: { size: number }) {
     <Svg width={size} height={size} viewBox="0 0 1024 1024">
       <Defs>
         <LinearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0%" stopColor="#f8d4a0" />
-          <Stop offset="38%" stopColor="#f4b27a" />
-          <Stop offset="58%" stopColor="#a8c97b" />
-          <Stop offset="100%" stopColor="#2f7d4b" />
+          <Stop offset="0%" stopColor={colors.cyan} stopOpacity={0.95} />
+          <Stop offset="38%" stopColor={colors.lime} stopOpacity={0.9} />
+          <Stop offset="62%" stopColor={colors.nightTop} />
+          <Stop offset="100%" stopColor={colors.nightViolet} />
         </LinearGradient>
         <ClipPath id={clipId}>
           <Circle cx={512} cy={512} r={500} />
@@ -138,58 +138,58 @@ function DiscLogo({ size }: { size: number }) {
 
       <G clipPath={`url(#${clipId})`}>
         {/* Sun */}
-        <Circle cx={720} cy={370} r={78} fill="#ffeacb" opacity={0.85} />
-        <Circle cx={720} cy={370} r={50} fill="#fff3da" opacity={0.95} />
+        <Circle cx={720} cy={370} r={78} fill={colors.lime} opacity={0.32} />
+        <Circle cx={720} cy={370} r={50} fill={colors.cyan} opacity={0.74} />
 
         {/* Fairway sweep */}
         <Path
           d="M126 644 C246 526 382 526 512 634 C642 742 782 728 900 606"
           fill="none"
-          stroke="#2f7d4b"
+          stroke={colors.lime}
           strokeWidth={92}
           strokeLinecap="round"
         />
         <Path
           d="M136 718 C274 626 412 632 544 720 C672 804 794 798 900 706"
           fill="none"
-          stroke="#14543a"
+          stroke={colors.cyan}
           strokeWidth={36}
           strokeLinecap="round"
         />
         <Path
           d="M182 654 C304 590 420 602 534 676 C646 748 758 746 852 672"
           fill="none"
-          stroke="#f6f7f2"
+          stroke={colors.night}
           strokeWidth={20}
           strokeLinecap="round"
           opacity={0.85}
         />
 
         {/* Cup */}
-        <Ellipse cx={368} cy={564} rx={36} ry={10} fill="#123322" opacity={0.5} />
-        <Ellipse cx={368} cy={562} rx={24} ry={5.5} fill="#0b1f15" opacity={0.72} />
+        <Ellipse cx={368} cy={564} rx={36} ry={10} fill={colors.onNeon} opacity={0.5} />
+        <Ellipse cx={368} cy={562} rx={24} ry={5.5} fill={colors.onNeon} opacity={0.72} />
 
         {/* Flagstick + flag */}
         <Path
           d="M368 324 C365 410 365 492 368 562"
           fill="none"
-          stroke="#123322"
+          stroke={colors.onNeon}
           strokeWidth={14}
           strokeLinecap="round"
         />
         <Path
           d="M368 326 C416 308 456 328 500 310 L500 380 C450 402 416 382 371 398 C368 370 367 346 368 326 Z"
-          fill="#d94835"
+          fill={colors.cyan}
         />
         <Path
           d="M388 341 C418 337 446 347 480 336 L480 366 C449 376 420 368 389 378 Z"
-          fill="#f97066"
+          fill={colors.violet}
           opacity={0.5}
         />
       </G>
 
       {/* Disc outline ring */}
-      <Circle cx={512} cy={512} r={500} fill="none" stroke="#0e3a26" strokeWidth={10} />
+      <Circle cx={512} cy={512} r={500} fill="none" stroke={colors.lime} strokeWidth={10} opacity={0.72} />
     </Svg>
   );
 }

@@ -1,18 +1,5 @@
 /**
- * CommentsSection — comments thread + composer for a round.
- *
- * Renders the (already-deleted-filtered) list from
- * `useRoundComments` plus a sticky-feeling composer at the bottom.
- * Author-only Edit and Delete are inline on each comment row;
- * Edit swaps the body text for an input, Save calls `editComment`.
- *
- * Round-owner badge: a comment authored by the round's
- * `ownerUserId` gets a small "scorer" accent next to the handle so
- * viewers know the comment is from the person who played.
- *
- * Author identity (avatar / handle) comes from `useProfile` (same
- * resolver the feed band uses). Unfriended ex-friends still
- * resolve via the direct-Supabase fetch fallback that lives there.
+ * CommentsSection — Aurora Glass comments thread + composer for a round.
  */
 
 import { useMemo, useState } from 'react';
@@ -25,6 +12,7 @@ import {
   View,
 } from 'react-native';
 
+import { Avatar, GlassCard, NeonButton } from '@/components/aurora';
 import {
   type Comment,
   editComment,
@@ -36,10 +24,10 @@ import { formatRelativeTime } from '@/library/golf/scoring';
 import { useAccount } from '@/library/social/AccountContext';
 import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
+import type { ThemeColors } from '@/library/theme/themes';
 
 type Props = {
   roundId: string;
-  /** Round owner — flagged with the "scorer" badge in the thread. */
   ownerUserId: string;
 };
 
@@ -77,7 +65,7 @@ export function CommentsSection({ roundId, ownerUserId }: Props) {
   }
 
   return (
-    <View style={styles.section}>
+    <GlassCard style={styles.section}>
       <View style={styles.head}>
         <Text style={styles.headTitle}>COMMENTS</Text>
         <Text style={styles.headCount}>{comments.length}</Text>
@@ -85,7 +73,7 @@ export function CommentsSection({ roundId, ownerUserId }: Props) {
 
       {isLoading && comments.length === 0 ? (
         <View style={styles.loading}>
-          <ActivityIndicator color={colors.primary} />
+          <ActivityIndicator color={colors.lime} />
         </View>
       ) : comments.length === 0 ? (
         <Text style={styles.empty}>No comments yet — be the first.</Text>
@@ -108,41 +96,34 @@ export function CommentsSection({ roundId, ownerUserId }: Props) {
           style={styles.input}
           value={draft}
           onChangeText={setDraft}
-          placeholder={
-            signedInUserId ? 'Write a comment…' : 'Sign in to comment'
-          }
+          placeholder={signedInUserId ? 'Add a comment…' : 'Sign in to comment'}
           placeholderTextColor={colors.textMuted}
           editable={!!signedInUserId && !posting}
           maxLength={1000}
           multiline
         />
-        <Pressable
-          onPress={handleSend}
-          disabled={!canSend}
-          style={[styles.sendBtn, !canSend && styles.sendBtnDisabled]}
-          accessibilityLabel="Send comment"
-          accessibilityState={{ disabled: !canSend }}>
-          {posting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={[styles.sendText, !canSend && styles.sendTextDisabled]}>
-              Send
-            </Text>
-          )}
-        </Pressable>
+        {posting ? (
+          <View style={styles.sendBusy}>
+            <ActivityIndicator color={colors.onNeon} />
+          </View>
+        ) : (
+          <NeonButton
+            label="↑"
+            size="sm"
+            onPress={canSend ? handleSend : undefined}
+            disabled={!canSend}
+            style={styles.sendBtn}
+          />
+        )}
       </View>
-      {postError ? (
-        <Text style={styles.error}>{postError}</Text>
-      ) : null}
-    </View>
+      {postError ? <Text style={styles.error}>{postError}</Text> : null}
+    </GlassCard>
   );
 }
 
 type RowProps = {
   comment: Comment;
-  /** True when this comment's author is the round's scorer. */
   isOwnerComment: boolean;
-  /** True when this comment was authored by the signed-in user. */
   isOwn: boolean;
 };
 
@@ -158,7 +139,7 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
 
   const displayName = profile?.displayName?.trim() || 'Player';
   const handle = profile?.handle ? `@${profile.handle}` : displayName;
-  const avatarColor = profile?.avatarColor ?? colors.primary;
+  const avatarColor = profile?.avatarColor ?? colors.cyan;
   const initial = (displayName[0] ?? '?').toUpperCase();
 
   async function handleSaveEdit() {
@@ -185,8 +166,6 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
     setError(null);
     try {
       await softDeleteComment(comment.id);
-      // No state to flip — the next sync tick removes us from the
-      // useRoundComments query result and we unmount.
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete comment.');
       setBusy(false);
@@ -195,23 +174,13 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
 
   return (
     <View style={[styles.commentRow, isOwn && styles.commentRowOwn]}>
-      <View style={[styles.avatar, { backgroundColor: avatarColor }]}>
-        <Text style={styles.avatarLetter}>{initial}</Text>
-      </View>
+      <Avatar initial={initial} color={avatarColor} size={30} style={styles.avatar} />
       <View style={styles.commentBody}>
         <View style={styles.commentMeta}>
-          <Text style={styles.commentHandle} numberOfLines={1}>
-            {handle}
-          </Text>
-          {isOwnerComment ? (
-            <Text style={styles.scorerBadge}>· SCORER</Text>
-          ) : null}
-          <Text style={styles.commentWhen}>
-            · {formatRelativeTime(comment.createdAt)}
-          </Text>
-          {comment.edited ? (
-            <Text style={styles.commentEdited}>· edited</Text>
-          ) : null}
+          <Text style={styles.commentHandle} numberOfLines={1}>{handle}</Text>
+          {isOwnerComment ? <Text style={styles.scorerBadge}>· SCORER</Text> : null}
+          <Text style={styles.commentWhen}>· {formatRelativeTime(comment.createdAt)}</Text>
+          {comment.edited ? <Text style={styles.commentEdited}>· edited</Text> : null}
         </View>
         {editing ? (
           <View style={styles.editBlock}>
@@ -235,9 +204,7 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
                 <Text style={styles.editActionMuted}>Cancel</Text>
               </Pressable>
               <Pressable onPress={handleSaveEdit} disabled={busy}>
-                <Text style={styles.editActionPrimary}>
-                  {busy ? 'Saving…' : 'Save'}
-                </Text>
+                <Text style={styles.editActionPrimary}>{busy ? 'Saving…' : 'Save'}</Text>
               </Pressable>
             </View>
           </View>
@@ -250,9 +217,7 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
               <Text style={styles.actionMuted}>Edit</Text>
             </Pressable>
             <Pressable onPress={handleDelete} disabled={busy}>
-              <Text style={styles.actionDanger}>
-                {busy ? 'Deleting…' : 'Delete'}
-              </Text>
+              <Text style={styles.actionDanger}>{busy ? 'Deleting…' : 'Delete'}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -262,34 +227,32 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
   );
 }
 
-function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
+function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     section: {
-      backgroundColor: colors.cardBg,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: 20,
       overflow: 'hidden',
+      padding: 0,
     },
     head: {
-      padding: 10,
+      paddingVertical: 11,
       paddingHorizontal: 14,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
+      borderBottomColor: colors.glassStroke,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
     },
     headTitle: {
       fontSize: 11,
-      fontWeight: '800',
-      letterSpacing: 0.5,
+      fontWeight: '900',
+      letterSpacing: 1.6,
       color: colors.textMuted,
     },
     headCount: {
       fontSize: 11,
-      fontWeight: '800',
-      color: colors.textTitle,
+      fontWeight: '900',
+      color: colors.cyan,
     },
     loading: {
       padding: 22,
@@ -306,40 +269,40 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     list: { paddingVertical: 4 },
     commentSep: {
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.border,
+      borderTopColor: colors.glassStroke,
     },
     commentRow: {
       flexDirection: 'row',
-      padding: 10,
+      padding: 12,
       paddingHorizontal: 14,
       gap: 10,
     },
     commentRowOwn: {
-      backgroundColor: 'rgba(47, 125, 75, 0.04)',
+      backgroundColor: colors.glowLime,
     },
     avatar: {
-      width: 30,
-      height: 30,
-      borderRadius: 15,
-      alignItems: 'center',
-      justifyContent: 'center',
       flexShrink: 0,
-    },
-    avatarLetter: {
-      color: '#fff',
-      fontWeight: '800',
-      fontSize: 12,
+      borderRadius: 10,
     },
     commentBody: {
       flex: 1,
       minWidth: 0,
+      backgroundColor: colors.glassFill2,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+      borderTopLeftRadius: 5,
+      borderTopRightRadius: 14,
+      borderBottomLeftRadius: 14,
+      borderBottomRightRadius: 14,
+      paddingHorizontal: 12,
+      paddingVertical: 9,
     },
     commentMeta: {
       flexDirection: 'row',
       alignItems: 'baseline',
       flexWrap: 'wrap',
       gap: 4,
-      marginBottom: 2,
+      marginBottom: 3,
     },
     commentHandle: {
       fontSize: 12,
@@ -349,9 +312,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     scorerBadge: {
       fontSize: 10,
-      fontWeight: '800',
-      letterSpacing: 0.4,
-      color: colors.primary,
+      fontWeight: '900',
+      letterSpacing: 0.6,
+      color: colors.lime,
     },
     commentWhen: {
       fontSize: 11,
@@ -365,7 +328,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     commentText: {
       fontSize: 13.5,
-      lineHeight: 18,
+      lineHeight: 19,
       color: colors.textBody,
     },
     editBlock: {
@@ -373,11 +336,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginTop: 4,
     },
     editInput: {
-      backgroundColor: colors.background,
+      backgroundColor: colors.glassFill,
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 8,
-      padding: 8,
+      borderColor: colors.glassStroke,
+      borderRadius: 12,
+      padding: 9,
       fontSize: 13,
       color: colors.textTitle,
       minHeight: 40,
@@ -394,13 +357,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     editActionPrimary: {
       fontSize: 12,
-      fontWeight: '800',
-      color: colors.primary,
+      fontWeight: '900',
+      color: colors.lime,
     },
     actionRow: {
       flexDirection: 'row',
       gap: 14,
-      marginTop: 4,
+      marginTop: 6,
     },
     actionMuted: {
       fontSize: 11,
@@ -420,45 +383,39 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     composer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      padding: 10,
-      paddingHorizontal: 12,
+      gap: 9,
+      padding: 12,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.border,
-      backgroundColor: colors.background,
+      borderTopColor: colors.glassStroke,
+      backgroundColor: 'transparent',
     },
     input: {
       flex: 1,
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill2,
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 999,
+      borderColor: colors.glassStroke,
+      borderRadius: 20,
       paddingHorizontal: 14,
-      paddingVertical: 8,
+      paddingVertical: 10,
       fontSize: 13.5,
       color: colors.textTitle,
       maxHeight: 100,
     },
     sendBtn: {
-      backgroundColor: colors.primary,
-      borderRadius: 999,
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      minWidth: 60,
+      width: 42,
+      height: 42,
+      minHeight: 42,
+      borderRadius: 21,
+      paddingHorizontal: 0,
+      paddingVertical: 0,
+    },
+    sendBusy: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
       alignItems: 'center',
       justifyContent: 'center',
-    },
-    sendBtnDisabled: {
-      backgroundColor: colors.chipBg,
-    },
-    sendText: {
-      color: '#fff',
-      fontWeight: '800',
-      fontSize: 12,
-      letterSpacing: 0.4,
-    },
-    sendTextDisabled: {
-      color: colors.textMuted,
+      backgroundColor: colors.lime,
     },
     error: {
       padding: 10,

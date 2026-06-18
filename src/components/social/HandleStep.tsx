@@ -20,15 +20,9 @@
  */
 
 import React from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View
-} from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { GlassSurface, NeonButton } from '@/components/aurora';
 import { useAccount } from '@/library/social/AccountContext';
 import { isValidHandle, normalizeHandle } from '@/library/social/handles';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -86,7 +80,7 @@ export function HandleStep() {
       </Text>
 
       <Text style={styles.fieldLabel}>Display name</Text>
-      <View style={[styles.field, nameValid && styles.fieldValid]}>
+      <GlassSurface style={[styles.field, nameValid && styles.fieldValid]}>
         <TextInput
           style={styles.fieldInput}
           value={displayName}
@@ -99,10 +93,10 @@ export function HandleStep() {
           placeholderTextColor={colors.textMuted}
           returnKeyType="next"
         />
-      </View>
+      </GlassSurface>
 
       <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>@Handle</Text>
-      <View style={[styles.field, handleValid && styles.fieldValid]}>
+      <GlassSurface style={[styles.field, handleValid && styles.fieldValid]}>
         <Text style={styles.fieldPrefix}>@</Text>
         <TextInput
           style={styles.fieldInput}
@@ -117,21 +111,17 @@ export function HandleStep() {
           onSubmitEditing={onSubmit}
           returnKeyType="done"
         />
-      </View>
+      </GlassSurface>
       <Text style={styles.helper}>
         3–20 chars. Start with a letter; lowercase letters, digits, dots, and underscores only.
       </Text>
 
-      <Pressable
-        style={[styles.primaryButton, !canSubmit && styles.primaryButtonDisabled]}
+      <NeonButton
+        label={submitting ? 'Saving…' : 'Continue'}
         onPress={onSubmit}
-        disabled={!canSubmit}>
-        {submitting ? (
-          <ActivityIndicator color="#ffffff" />
-        ) : (
-          <Text style={styles.primaryButtonText}>Continue</Text>
-        )}
-      </Pressable>
+        disabled={!canSubmit}
+        style={styles.primaryButton}
+      />
     </View>
   );
 }
@@ -162,14 +152,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     field: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill2,
       borderRadius: 12,
-      borderWidth: 2,
-      borderColor: colors.border,
+      borderColor: colors.glassStroke,
       paddingHorizontal: 14,
       paddingVertical: 12
     },
-    fieldValid: { borderColor: colors.primary },
+    fieldValid: { borderColor: colors.lime },
     fieldPrefix: {
       color: colors.textMuted,
       fontWeight: '700',
@@ -188,19 +177,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textMuted,
       marginTop: 8
     },
-    primaryButton: {
-      backgroundColor: colors.primary,
-      borderRadius: 12,
-      paddingVertical: 14,
-      alignItems: 'center',
-      marginTop: 22
-    },
-    primaryButtonDisabled: { opacity: 0.4 },
-    primaryButtonText: {
-      color: '#ffffff',
-      fontSize: 15,
-      fontWeight: '800',
-      letterSpacing: 0.3
-    }
+    primaryButton: { marginTop: 22 }
   });
 }
