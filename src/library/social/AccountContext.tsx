@@ -64,6 +64,7 @@ type CloudProfileRow = {
   handle: string;
   display_name: string;
   avatar_color: string;
+  created_at?: string | null;
 };
 
 function cloudRowToAccount(row: CloudProfileRow): Account {
@@ -71,7 +72,8 @@ function cloudRowToAccount(row: CloudProfileRow): Account {
     userId: row.user_id,
     handle: row.handle,
     displayName: row.display_name,
-    avatarColor: row.avatar_color
+    avatarColor: row.avatar_color,
+    createdAt: row.created_at ?? null
   };
 }
 
@@ -110,7 +112,7 @@ export function AccountProvider({ children }: { children: React.ReactNode }) {
       }
       const { data, error } = await supabase
         .from('profiles')
-        .select('user_id, handle, display_name, avatar_color')
+        .select('user_id, handle, display_name, avatar_color, created_at')
         .eq('user_id', userId)
         .maybeSingle();
       if (error) throw error;

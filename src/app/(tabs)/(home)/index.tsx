@@ -22,31 +22,28 @@
 
 import React from 'react';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  View,
 } from 'react-native';
 
-import { GlassCard, NeonButton, PHONE_MAX_WIDTH, SectionLabel, SegmentedToggle } from '@/components/aurora';
+import { GlassCard, NeonButton, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
 import { CompletedRoundRow } from '@/components/round/CompletedRoundRow';
 import { RoundListCard } from '@/components/round/RoundListCard';
 import { IncomingRequestsBanner } from '@/components/social/IncomingRequestsBanner';
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
 import { useRefresh } from '@/library/data/useRefresh';
+import { useRound } from '@/library/golf/RoundContext';
+import { getScorerProgress, scorerIdForUser } from '@/library/golf/scoring';
 import { useFeedRounds } from '@/library/golf/useFeedRounds';
-import { useAccount } from '@/library/social/AccountContext';
 import { useFriends } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
-
-type FeedSegment = 'feed' | 'live' | 'friends';
-
-const SEGMENTS: { key: FeedSegment; label: string }[] = [
-  { key: 'feed', label: 'Feed' },
-  { key: 'live', label: 'Live' },
-  { key: 'friends', label: 'Friends' },
-];
+import type { Round } from '@/types/golf';
 
 export default function HomeFeedScreen() {
   const { colors } = useTheme();
@@ -54,34 +51,13 @@ export default function HomeFeedScreen() {
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const refresh = useRefresh();
 
-  const { account } = useAccount();
   const { friends, hydrated: friendsHydrated } = useFriends();
   const { liveRounds, completedRounds, isLoading: feedLoading } = useFeedRounds();
-  const [segment, setSegment] = React.useState<FeedSegment>('feed');
+  const { currentRound, userId } = useRound();
 
   const feedRounds = React.useMemo(
     () => [...liveRounds, ...completedRounds],
     [liveRounds, completedRounds]
-  );
-
-  // Segment filters the two sections. "Live" hides completed; "Friends"
-  // drops the viewer's own rounds (the social slice). "Feed" shows all.
-  const myId = account?.userId;
-  const liveForSegment = React.useMemo(
-    () =>
-      segment === 'friends'
-        ? liveRounds.filter((r) => r.ownerUserId !== myId)
-        : liveRounds,
-    [segment, liveRounds, myId]
-  );
-  const completedForSegment = React.useMemo(
-    () =>
-      segment === 'live'
-        ? []
-        : segment === 'friends'
-          ? completedRounds.filter((r) => r.ownerUserId !== myId)
-          : completedRounds,
-    [segment, completedRounds, myId]
   );
 
   // Don't decide between empty/populated states until BOTH the friend
@@ -106,7 +82,7 @@ export default function HomeFeedScreen() {
   // friends NOR any own completed rounds to show. The feed includes
   // own completed rounds, so a friendless user with a finished round
   // still sees their own card and skips this CTA.
-  if (friends.length === 0 && feedRounds.length === 0) {
+  if (friends.length === 0 && feedRounds.length === 0 && !currentRound) {
     return (
       <PullToRefreshScrollView
         onRefresh={refresh}
@@ -132,7 +108,7 @@ export default function HomeFeedScreen() {
     );
   }
 
-  if (feedRounds.length === 0) {
+  if (feedRounds.length === 0 && !currentRound) {
     return (
       <PullToRefreshScrollView
         onRefresh={refresh}
@@ -153,25 +129,17 @@ export default function HomeFeedScreen() {
     );
   }
 
-  const nothingInSegment =
-    liveForSegment.length === 0 && completedForSegment.length === 0;
-
   return (
     <PullToRefreshScrollView
       onRefresh={refresh}
       style={styles.scroll}
       contentContainerStyle={styles.content}>
       <IncomingRequestsBanner style={styles.banner} />
-      <SegmentedToggle
-        options={SEGMENTS}
-        value={segment}
-        onChange={setSegment}
-        style={styles.seg}
-      />
+      <ContinueRoundBanner round={currentRound} userId={userId} />
 
-      {liveForSegment.length > 0 ? (
+      {liveRounds.length > 0 ? (
         <>
-          {liveForSegment.map((round) => (
+          {liveRounds.map((round) => (
             <RoundListCard
               key={round.id}
               round={round}
@@ -182,10 +150,10 @@ export default function HomeFeedScreen() {
         </>
       ) : null}
 
-      {completedForSegment.length > 0 ? (
+      {completedRounds.length > 0 ? (
         <>
-          <SectionLabel>Completed</SectionLabel>
-          {completedForSegment.map((round) => (
+          <SectionLabel>Completed today</SectionLabel>
+          {completedRounds.map((round) => (
             <CompletedRoundRow
               key={round.id}
               round={round}
@@ -196,17 +164,53 @@ export default function HomeFeedScreen() {
           ))}
         </>
       ) : null}
-
-      {nothingInSegment ? (
-        <GlassCard strong style={styles.segmentEmpty}>
-          <Text style={styles.segmentEmptyText}>
-            {segment === 'live'
-              ? 'No live rounds right now.'
-              : 'Nothing from friends yet.'}
-          </Text>
-        </GlassCard>
-      ) : null}
     </PullToRefreshScrollView>
+  );
+}
+
+function ContinueRoundBanner({
+  round,
+  userId,
+}: {
+  round: Round | null;
+  userId: string | null;
+}) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const router = useRouter();
+
+  if (!round) return null;
+
+  const scorerId = userId
+    ? scorerIdForUser(round, userId)
+    : round.ownerUserId
+      ? scorerIdForUser(round, round.ownerUserId)
+      : undefined;
+  const { thruCount } = getScorerProgress(round, scorerId);
+
+  return (
+    <Pressable
+      style={styles.resumeFrame}
+      onPress={() => router.push('/(tabs)/(score)/scoring' as never)}
+      accessibilityRole="button"
+      accessibilityLabel="Continue your round">
+      <LinearGradient
+        colors={[colors.glowLime, 'rgba(182, 255, 59, 0)']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.resume}>
+        <View style={styles.resumePlay}>
+          <Text style={styles.resumePlayText}>▶</Text>
+        </View>
+        <View style={styles.resumeText}>
+          <Text style={styles.resumeTitle}>Continue your round</Text>
+          <Text style={styles.resumeSubtitle} numberOfLines={1}>
+            {round.course.name} · thru {thruCount}
+          </Text>
+        </View>
+        <Text style={styles.resumeChevron}>›</Text>
+      </LinearGradient>
+    </Pressable>
   );
 }
 
@@ -235,19 +239,59 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     banner: {
       marginBottom: 14
     },
-    seg: {
-      marginBottom: 6,
+    resumeFrame: {
+      marginBottom: 14,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: 'rgba(182, 255, 59, 0.27)',
+      overflow: 'hidden',
     },
-    segmentEmpty: {
+    resume: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
+    resumePlay: {
+      width: 34,
+      height: 34,
+      borderRadius: 11,
       alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 28,
-      marginTop: 12,
+      backgroundColor: colors.lime,
+      shadowColor: colors.lime,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.45,
+      shadowRadius: 12,
+      elevation: 4,
     },
-    segmentEmptyText: {
+    resumePlayText: {
+      color: colors.onNeon,
       fontSize: 13,
-      fontWeight: '700',
+      fontWeight: '900',
+      marginLeft: 1,
+    },
+    resumeText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    resumeTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    resumeSubtitle: {
+      marginTop: 2,
+      fontSize: 11.5,
+      fontWeight: '600',
       color: colors.textMuted,
+    },
+    resumeChevron: {
+      marginLeft: 'auto',
+      color: colors.lime,
+      fontSize: 22,
+      fontWeight: '700',
     },
     empty: {
       alignItems: 'center',

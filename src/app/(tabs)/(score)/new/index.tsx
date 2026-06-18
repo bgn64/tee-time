@@ -3,9 +3,9 @@
  * Rounds tab's hub via the "New round" action.
  *
  * Search-driven picker over the `public.courses` catalog. Typing into
- * the search bar issues debounced REST queries; tapping a row navigates
- * to the player picker. Catalog rows without per-hole scorecard data
- * are enriched lazily by `useCourse(id)` on the next screen, so the
+ * the search bar issues debounced REST queries; tapping a row returns
+ * to the single New round form with the selected course id. Catalog rows
+ * without per-hole scorecard data are enriched lazily by `useCourse(id)` on the next screen, so the
  * picker itself doesn't need to discriminate enriched vs un-enriched.
  *
  * Redirect gate: if a round is already in flight, send the user
@@ -117,8 +117,8 @@ export default function CourseSelectionScreen() {
                   key={c.id}
                   course={c}
                   onPress={() =>
-                    router.push({
-                      pathname: '/(tabs)/(score)/players' as never,
+                    router.replace({
+                      pathname: '/(tabs)/(score)' as never,
                       params: { courseId: c.id },
                     })
                   }

@@ -25,7 +25,7 @@ export function ProgressDial(props: { value: string; label?: string; fraction: n
   const innerSize = size - strokeWidth * 2.2;
 
   return (
-    <View style={[styles.root, { width: size, height: size }]}>
+    <View style={[styles.root, { width: size, height: size, borderRadius: size / 2 }]}>
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Circle
           cx={center}

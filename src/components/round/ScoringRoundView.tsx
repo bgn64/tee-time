@@ -6,40 +6,28 @@
  * editing (mockups `scoring-banner.html`,
  * `scoring-screen-redesign.html`, `edit-round-screen-redesign.html`):
  *
- *   [CourseBanner]               per-course gradient + @handle title +
- *                                live/completed meta (purely visual
- *                                here — no ⋯ on the banner)
- *   [SwipeableHoleEditor]        per-hole editing pager (flex: 1)
+ *   [compact info bar]           course + format / round tee / autosave
+ *   [hole hero]                  focused hole number, meta, running score
+ *   [SwipeableHoleEditor]        per-hole editing surface + prev/next nav
  *   [footer]
- *     Scorecard button           → ScorecardSheet (Front 9 / Back 9)
  *     primary button             optional — "Finish round" on live
  *                                scoring; omitted on edit (Done is in
  *                                the header there)
- *     RoundActionBar             Like + Comments
  *
  * The route owns the native stack header (back + title + ⋯ overflow for
- * the destructive Abandon/Delete), the destructive confirm, the tee
- * picker, and the score/tee write wiring (passed in as callbacks). This
- * component owns the course banner, the pager, the footer, and the
- * scorecard + comments sheets.
+ * the destructive Abandon/Delete), the destructive confirm, and the
+ * score write wiring (passed in as callbacks). This component owns the
+ * course info, hole hero, editor, and footer CTA.
  */
 
-import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CommentsSheet } from './CommentsSheet';
-import { CourseBanner } from './CourseBanner';
-import { RoundActionBar } from './RoundActionBar';
-import { ScorecardSheet } from './ScorecardSheet';
 import { SwipeableHoleEditor } from './SwipeableHoleEditor';
-import { GlassCard, NeonButton, NumericText, StatChip } from '@/components/aurora';
-import { useCommentSummary } from '@/library/comments/useRoundComments';
-import { formatRelativeTime, formatScore, getScorerProgress } from '@/library/golf/scoring';
-import { useRoundLikes } from '@/library/golf/useRoundLikes';
-import { useProfile } from '@/library/social/FriendsContext';
+import { GlassCard, NeonButton, NumericText } from '@/components/aurora';
+import { findTee } from '@/library/golf/courseHelpers';
+import { formatScore, getScorerProgress } from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -58,31 +46,31 @@ type Props = {
    */
   primaryLabel?: string;
   onPrimary?: () => void;
+  /**
+   * Inline destructive link rendered under the primary button — the
+   * live-scoring screen wires "Abandon round" here (mockup
+   * `04-aurora-glass.html`, the `.abandon` link beneath Finish). Omit
+   * both to hide it; the edit-round screen keeps Delete in its header
+   * instead.
+   */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
 };
 
 export function ScoringRoundView({
   round,
-  profileRoutePrefix,
   currentHoleNumber,
   onChangeCurrentHole,
   onChangeScore,
   onPressTeeForScorer,
   primaryLabel,
   onPrimary,
+  secondaryLabel,
+  onSecondary,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
-  const router = useRouter();
-
-  const { count: commentCount } = useCommentSummary(round.id);
-  const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
-    round.id
-  );
-  const { profile: ownerProfile } = useProfile(round.ownerUserId ?? null);
-
-  const [scorecardOpen, setScorecardOpen] = useState(false);
-  const [commentsOpen, setCommentsOpen] = useState(false);
 
   const isInProgress = !round.completedAt;
   const currentHole = round.course.holes.find((h) => h.number === currentHoleNumber);
@@ -91,16 +79,19 @@ export function ScoringRoundView({
       ? round.teams?.[0]?.id
       : round.playerIds[0];
   const progress = getScorerProgress(round, primaryScorerId);
-  const timeText = formatRelativeTime(
-    isInProgress
-      ? round.lastScoreAt ?? round.startedAt
-      : round.completedAt ?? round.startedAt
+  const formatLabel = round.scoringRule === 'scramble' ? 'Scramble' : 'Stroke';
+  const firstParticipantKey =
+    round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0
+      ? round.teams?.[0]?.playerIds[0]
+      : round.playerIds[0];
+  const roundTee = findTee(
+    round.course,
+    round.participants.find((p) => p.participantKey === firstParticipantKey)?.teeId
   );
-
-  const ownerUserId = round.ownerUserId ?? '';
-  const onPressOwner = ownerUserId
-    ? () => router.push(`${profileRoutePrefix}/${ownerUserId}` as never)
-    : undefined;
+  const teeLine = roundTee
+    ? `${roundTee.name}${roundTee.totalYardage ? ` ${roundTee.totalYardage.toLocaleString()}y` : ''}`
+    : 'No tee';
+  const metaLine = `${formatLabel} · ${teeLine} · ${isInProgress ? 'autosaving' : 'saved'} ●`;
 
   return (
     <View style={styles.root}>
@@ -113,44 +104,37 @@ export function ScoringRoundView({
         showsVerticalScrollIndicator={false}>
         <View style={styles.card}>
           <GlassCard strong glow style={styles.headerCard}>
-            <CourseBanner
-              handle={ownerProfile?.handle}
-              displayName={ownerProfile?.displayName}
-              avatarColor={ownerProfile?.avatarColor}
-              avatarSeed={round.ownerUserId}
-              courseName={round.course.name}
-              timeText={timeText}
-              isLive={isInProgress}
-              onPressOwner={onPressOwner}
-            />
+            <View style={styles.infoBar}>
+              <Text style={styles.infoCourse} numberOfLines={1}>
+                {round.course.name}
+              </Text>
+              <Text style={styles.infoMeta} numberOfLines={1}>
+                {metaLine}
+              </Text>
+            </View>
             {currentHole ? (
               <View style={styles.hero}>
-                <View style={styles.heroNumberWrap}>
-                  <Text style={styles.heroEyebrow}>HOLE</Text>
-                  <NumericText style={styles.heroNumber}>
-                    {currentHole.number}
-                  </NumericText>
-                </View>
+                <NumericText style={styles.heroNumber}>
+                  {currentHole.number}
+                </NumericText>
                 <View style={styles.heroMeta}>
-                  <Text style={styles.heroCourse} numberOfLines={1}>
-                    {round.course.name}
-                  </Text>
-                  <View style={styles.heroStats}>
-                    <StatChip label="Par" value={currentHole.par} state="neutral" />
-                    {currentHole.yardage ? (
-                      <StatChip label="Yards" value={currentHole.yardage} state="neutral" />
-                    ) : null}
-                    {currentHole.handicapIndex ? (
-                      <StatChip label="Hcp" value={currentHole.handicapIndex} state="neutral" />
-                    ) : null}
-                  </View>
+                  <Text style={styles.heroMetaText}>Par {currentHole.par}</Text>
+                  {currentHole.yardage ? (
+                    <Text style={styles.heroMetaText}>
+                      {currentHole.yardage.toLocaleString()} yds
+                    </Text>
+                  ) : null}
+                  {currentHole.handicapIndex ? (
+                    <Text style={styles.heroMetaText}>
+                      Hcp {currentHole.handicapIndex}
+                    </Text>
+                  ) : null}
                 </View>
-                <View style={styles.toParChip}>
-                  <Text style={styles.toParLabel}>TO PAR</Text>
+                <View style={styles.toPar}>
                   <NumericText style={styles.toParValue}>
                     {formatScore(progress.relativeScore)}
                   </NumericText>
-                  <Text style={styles.toParThru}>THRU {progress.thruCount}</Text>
+                  <Text style={styles.toParLabel}>RUNNING</Text>
                 </View>
               </View>
             ) : null}
@@ -165,46 +149,29 @@ export function ScoringRoundView({
           />
 
           <View style={styles.footer}>
-            <NeonButton
-              label="Scorecard"
-              variant="ghost"
-              onPress={() => setScorecardOpen(true)}
-              iconLeft={<Ionicons name="grid-outline" size={17} color={colors.cyan} />}
-            />
-
             {onPrimary ? (
               <NeonButton
                 label={primaryLabel ?? 'Continue'}
                 onPress={onPrimary}
               />
             ) : null}
-
-            <View style={styles.actionBarWrap}>
-              <RoundActionBar
-                liked={likedByMe}
-                likeCount={likeCount}
-                commentCount={commentCount}
-                onToggleLike={toggleLike}
-                onOpenComments={() => setCommentsOpen(true)}
-              />
-            </View>
+            {onSecondary ? (
+              <Pressable
+                onPress={onSecondary}
+                accessibilityRole="button"
+                accessibilityLabel={secondaryLabel ?? 'Abandon round'}
+                style={({ pressed }) => [
+                  styles.abandon,
+                  pressed ? styles.abandonPressed : null,
+                ]}>
+                <Text style={styles.abandonText}>
+                  {secondaryLabel ?? 'Abandon round'}
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
         </View>
       </ScrollView>
-
-      <ScorecardSheet
-        round={round}
-        visible={scorecardOpen}
-        onClose={() => setScorecardOpen(false)}
-      />
-
-      <CommentsSheet
-        visible={commentsOpen}
-        roundId={round.id}
-        ownerUserId={round.ownerUserId ?? ''}
-        commentCount={commentCount}
-        onClose={() => setCommentsOpen(false)}
-      />
     </View>
   );
 }
@@ -226,88 +193,88 @@ function makeStyles(colors: ThemeColors) {
       gap: 12,
     },
     headerCard: {
-      gap: 16,
+      gap: 14,
+    },
+    infoBar: {
+      paddingHorizontal: 18,
+      paddingVertical: 16,
+      borderRadius: 22,
+      backgroundColor: colors.glassFill,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+    },
+    infoCourse: {
+      color: colors.textTitle,
+      fontSize: 17,
+      fontWeight: '800',
+      letterSpacing: -0.25,
+    },
+    infoMeta: {
+      marginTop: 4,
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '700',
     },
     hero: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 14,
-      paddingTop: 14,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.glassStroke,
-    },
-    heroNumberWrap: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      width: 78,
-      height: 82,
-      borderRadius: 22,
-      backgroundColor: colors.night,
-      borderWidth: 1,
-      borderColor: colors.glassStroke,
-    },
-    heroEyebrow: {
-      color: colors.cyan,
-      fontSize: 10,
-      fontWeight: '900',
-      letterSpacing: 1,
+      gap: 16,
+      paddingHorizontal: 4,
+      paddingBottom: 2,
     },
     heroNumber: {
       color: colors.lime,
-      fontSize: 42,
+      fontSize: 60,
       fontWeight: '900',
-      lineHeight: 46,
+      lineHeight: 62,
+      textShadowColor: colors.cyan,
+      textShadowOffset: { width: 0, height: 0 },
+      textShadowRadius: 18,
     },
     heroMeta: {
       flex: 1,
       minWidth: 0,
-      gap: 9,
+      gap: 2,
     },
-    heroCourse: {
-      color: colors.textTitle,
-      fontSize: 16,
+    heroMetaText: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: '700',
+      lineHeight: 19,
+    },
+    toPar: {
+      alignItems: 'flex-end',
+      marginLeft: 'auto',
+    },
+    toParValue: {
+      color: colors.lime,
+      fontSize: 30,
       fontWeight: '900',
-      letterSpacing: -0.3,
-    },
-    heroStats: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 7,
-    },
-    toParChip: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      minWidth: 72,
-      minHeight: 72,
-      borderRadius: 20,
-      backgroundColor: colors.glowLime,
-      borderWidth: 1,
-      borderColor: colors.lime,
+      lineHeight: 34,
     },
     toParLabel: {
       color: colors.textMuted,
       fontSize: 9,
       fontWeight: '900',
-      letterSpacing: 0.8,
-    },
-    toParValue: {
-      color: colors.lime,
-      fontSize: 25,
-      fontWeight: '900',
-      lineHeight: 29,
-    },
-    toParThru: {
-      color: colors.textMuted,
-      fontSize: 9,
-      fontWeight: '800',
-      letterSpacing: 0.5,
+      letterSpacing: 2,
     },
     footer: {
       paddingTop: 2,
       gap: 8,
     },
-    actionBarWrap: {
-      marginTop: 2,
+    abandon: {
+      alignSelf: 'center',
+      paddingVertical: 7,
+      paddingHorizontal: 16,
+    },
+    abandonPressed: {
+      opacity: 0.6,
+    },
+    abandonText: {
+      color: colors.accent,
+      fontSize: 12,
+      fontWeight: '700',
+      textAlign: 'center',
     },
   });
 }

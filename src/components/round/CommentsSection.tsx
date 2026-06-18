@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 
-import { Avatar, GlassCard, NeonButton } from '@/components/aurora';
+import { Avatar, NeonButton } from '@/components/aurora';
 import {
   type Comment,
   editComment,
@@ -65,28 +65,20 @@ export function CommentsSection({ roundId, ownerUserId }: Props) {
   }
 
   return (
-    <GlassCard style={styles.section}>
-      <View style={styles.head}>
-        <Text style={styles.headTitle}>COMMENTS</Text>
-        <Text style={styles.headCount}>{comments.length}</Text>
-      </View>
-
+    <View style={styles.section}>
       {isLoading && comments.length === 0 ? (
         <View style={styles.loading}>
           <ActivityIndicator color={colors.lime} />
         </View>
-      ) : comments.length === 0 ? (
-        <Text style={styles.empty}>No comments yet — be the first.</Text>
       ) : (
         <View style={styles.list}>
-          {comments.map((c, idx) => (
-            <View key={c.id} style={idx === 0 ? null : styles.commentSep}>
-              <CommentRow
-                comment={c}
-                isOwnerComment={c.authorUserId === ownerUserId}
-                isOwn={c.authorUserId === signedInUserId}
-              />
-            </View>
+          {comments.map((c) => (
+            <CommentRow
+              key={c.id}
+              comment={c}
+              isOwnerComment={c.authorUserId === ownerUserId}
+              isOwn={c.authorUserId === signedInUserId}
+            />
           ))}
         </View>
       )}
@@ -117,7 +109,7 @@ export function CommentsSection({ roundId, ownerUserId }: Props) {
         )}
       </View>
       {postError ? <Text style={styles.error}>{postError}</Text> : null}
-    </GlassCard>
+    </View>
   );
 }
 
@@ -230,55 +222,20 @@ function CommentRow({ comment, isOwnerComment, isOwn }: RowProps) {
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     section: {
-      borderRadius: 20,
-      overflow: 'hidden',
       padding: 0,
-    },
-    head: {
-      paddingVertical: 11,
-      paddingHorizontal: 14,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.glassStroke,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
-    },
-    headTitle: {
-      fontSize: 11,
-      fontWeight: '900',
-      letterSpacing: 1.6,
-      color: colors.textMuted,
-    },
-    headCount: {
-      fontSize: 11,
-      fontWeight: '900',
-      color: colors.cyan,
     },
     loading: {
       padding: 22,
       alignItems: 'center',
     },
-    empty: {
-      padding: 18,
-      paddingHorizontal: 14,
-      color: colors.textMuted,
-      fontSize: 12,
-      fontStyle: 'italic',
-      textAlign: 'center',
-    },
-    list: { paddingVertical: 4 },
-    commentSep: {
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.glassStroke,
-    },
+    list: { gap: 0 },
     commentRow: {
       flexDirection: 'row',
-      padding: 12,
-      paddingHorizontal: 14,
+      marginVertical: 6,
       gap: 10,
     },
     commentRowOwn: {
-      backgroundColor: colors.glowLime,
+      backgroundColor: 'transparent',
     },
     avatar: {
       flexShrink: 0,
@@ -384,9 +341,7 @@ function makeStyles(colors: ThemeColors) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 9,
-      padding: 12,
-      borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.glassStroke,
+      marginTop: 10,
       backgroundColor: 'transparent',
     },
     input: {

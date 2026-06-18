@@ -78,6 +78,12 @@
   .mini .m{font-size:11px;color:var(--muted);margin-top:2px}
   .mini .lk{margin-left:auto;font-size:12px;color:var(--muted)}
 
+  .resume{display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,#b6ff3b1f,transparent);border:1px solid #b6ff3b44;border-radius:18px;padding:12px 14px;margin-bottom:14px}
+  .resume .pl{width:34px;height:34px;border-radius:11px;background:var(--lime);color:#08121a;display:grid;place-items:center;font-size:14px;flex:0 0 auto;box-shadow:0 0 18px -3px #b6ff3b88}
+  .resume .rt{font-size:14px;font-weight:700}
+  .resume .rs{font-size:11px;color:var(--muted);margin-top:2px}
+  .resume .chev{margin-left:auto;color:var(--lime);font-size:18px}
+
   .tabs{display:flex;background:rgba(8,11,17,.7);border-top:1px solid var(--stroke);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
   .tabs a{flex:1;text-align:center;padding:11px 0 24px;font-size:10px;color:var(--muted);text-decoration:none}
   .tabs a .ic{display:block;font-size:17px;margin-bottom:5px}
@@ -107,6 +113,8 @@
   .nv{display:flex;gap:11px;margin-top:16px}
   .nv button{flex:1;padding:15px;border-radius:16px;border:1px solid var(--stroke);background:var(--glass2);color:var(--ink);font-size:14px;font-weight:600;cursor:pointer}
   .nv button.go{background:var(--lime);color:#08121a;border-color:transparent;box-shadow:0 0 24px -4px #b6ff3b88}
+  .finish{width:100%;margin-top:12px;padding:15px;border-radius:16px;border:1px solid #b6ff3b66;background:#b6ff3b14;color:var(--lime);font-size:14px;font-weight:700;cursor:pointer}
+  .abandon{text-align:center;margin-top:11px;font-size:12px;font-weight:600;color:#ff8e8e}
   .label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:14px 4px 10px}
   .label .r{float:right;letter-spacing:.5px;text-transform:none;color:var(--cy)}
 
@@ -203,6 +211,10 @@
       <div class="screen"><div class="scrim">
         <div class="top"><h1>Tee<i>·</i>Time</h1><div class="me">B</div></div>
 
+        <div class="resume"><span class="pl">▶</span>
+          <div><div class="rt">Continue your round</div><div class="rs">Cedar Ridge G.C. · thru 7</div></div>
+          <span class="chev">›</span></div>
+
         <div class="card">
           <div class="row"><span class="av" style="background:#7cb342">M</span>
             <div><div class="hand">@marcus</div><div class="sub">Scramble · with @priya, @deshawn</div></div>
@@ -239,7 +251,7 @@
     <!-- SCORING -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim">
-        <div class="top"><h1>Scoring</h1><div class="me" style="background:linear-gradient(135deg,#b6ff3b,#39e6c6)">●</div></div>
+        <div class="top"><h1>Scoring</h1><div class="me" style="background:var(--glass2);color:var(--muted)">⋯</div></div>
         <div class="sb"><div class="c">Torrey Pines — South</div><div class="m">Scramble · Blue 6,602y · autosaving ●</div></div>
         <div class="holehero"><span class="hn">13</span>
           <span class="meta">Par 4<br>438 yds<br>Hcp 3</span>
@@ -254,6 +266,8 @@
         <div class="tg"><span class="tog yes"><b>✓</b>Fairway</span><span class="tog"><b>–</b>Green</span>
           <span class="tog"><b>–</b>Putts</span><span class="tog"><b>0</b>OB</span></div>
         <div class="nv"><button>‹ Prev</button><button class="go">Next ›</button></div>
+        <button class="finish">Finish round ›</button>
+        <div class="abandon">Abandon round</div>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
         <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
@@ -381,7 +395,7 @@
           <div class="ptile"><b class="cy">76</b><span>Personal best</span></div>
           <div class="ptile"><b>12.3</b><span>Handicap index</span></div>
         </div>
-        <div class="label">Recent rounds</div>
+        <div class="label">Recent rounds<span class="r">All rounds ›</span></div>
         <div class="mini"><div class="v">78<small> +6</small></div>
           <div><div class="c">Pebble Creek</div><div class="m">stroke · 18 · 2 days ago</div></div><span class="lk">♥ 9</span></div>
         <div class="mini"><div class="v">81<small> +9</small></div>

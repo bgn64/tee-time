@@ -5,9 +5,10 @@
  * that's one row per team, with the avatar cluster carrying all
  * team members.
  *
- * Two-line layout (unchanged across editing / viewing):
+ * Two-line layout:
  *   Line 1: [avatar(s)]  [name (flex: 1)]  [running/final tint chip]
- *   Line 2: [tee pill]  [score buttons (flex-end, editing only)]
+ *   Line 2: viewing shows a static tee pill when known; editing shows
+ *           the raw-stroke Aurora Stepper.
  *
  * `isEditing` drives the differences:
  *
@@ -18,27 +19,17 @@
  *     - Score buttons are hidden.
  *
  *   isEditing=true (editing):
- *     - Tee pill is interactive (chev visible, tap fires `onPressTee`).
- *     - **When `tee` is undefined, a dashed `+ Tee` placeholder is
- *       rendered so the picker is reachable.** This fixes the bug
- *       where a round started without picking a tee left the user
- *       with no way to set one mid-round.
- *     - Score buttons render to the right of the tee pill.
- *
- * The quick-pick chip row shows relative-to-par values
- * (−2 / −1 / E / +1 / +2). Tapping a chip sets the score. A sixth
- * `✕` chip opens the `CustomScoreSheet` for arbitrary values; once
- * a score outside −2…+2 is set, that chip displays the actual value
- * (`+4`, `−3`) and tapping it re-opens the sheet.
+ *     - Per-player tee controls are omitted; tees are treated as
+ *       round-level presentation.
+ *     - The Stepper writes raw stroke counts through the parent handler.
  */
 
-import { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
-import { CustomScoreSheet } from '@/components/scoring/CustomScoreSheet';
+import { Stepper } from '@/components/aurora';
 import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import { teeSwatch } from '@/components/scoring/TeePickerSheet';
-import { formatScore } from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Tee } from '@/types/golf';
 
@@ -55,29 +46,20 @@ type Props = {
   thruText?: string;
   /** This scorer's tee. */
   tee?: Tee;
-  /** Fires when the tee pill is tapped. Only wired in editing mode. */
+  /** Accepted for API compatibility; editing rows no longer render a tee selector. */
   onPressTee?: () => void;
   /**
-   * True when the row should expose score-entry affordances (buttons
-   * + interactive tee pill, including the "+ Tee" placeholder).
+   * True when the row should expose score-entry affordances.
    * False renders the row in viewing mode.
    */
   isEditing: boolean;
-  /** Current hole context for the score-entry chips. Unused when viewing. */
+  /** Current hole context for legacy callers. Unused by the Stepper UI. */
   holeNumber: number;
   par: number;
   strokes: number | null;
   /** Required when isEditing; ignored when viewing. */
   onChange?: (strokes: number) => void;
 };
-
-const QUICK_PICKS: readonly { rel: number; label: string }[] = [
-  { rel: -2, label: '−2' },
-  { rel: -1, label: '−1' },
-  { rel: 0, label: 'E' },
-  { rel: 1, label: '+1' },
-  { rel: 2, label: '+2' },
-];
 
 export function ScorerRow({
   members,
@@ -86,26 +68,14 @@ export function ScorerRow({
   runningTone,
   thruText,
   tee,
-  onPressTee,
   isEditing,
-  holeNumber,
   par,
   strokes,
   onChange,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
-
-  const [sheetOpen, setSheetOpen] = useState(false);
-
-  const rel = strokes === null ? null : strokes - par;
-  const customActive = rel !== null && (rel > 2 || rel < -2);
-
-  const handleQuickPick = (relVal: number) => {
-    onChange?.(Math.max(1, par + relVal));
-  };
-
-  const sheetHeading = name ?? members.map((m) => m.name).filter(Boolean).join(' & ');
+  const stepperValue = strokes ?? Math.max(1, par);
 
   // Score chip on line 1. Tone-tinted background, optional THRU sub-label.
   const runningChip = runningText ? (
@@ -127,38 +97,10 @@ export function ScorerRow({
     </View>
   ) : null;
 
-  // Tee pill rendering decision tree:
-  //   editing + tee: interactive pill with swatch + name + chev.
-  //   editing + no tee: dashed "+ Tee" placeholder (bug fix — was
-  //     previously hidden, leaving the picker unreachable).
-  //   viewing + tee: static pill with swatch + name.
-  //   viewing + no tee: nothing.
+  // Viewing surfaces may still show the scorer's tee. Editing surfaces
+  // use a round-level tee convention, so no per-player tee selector renders.
   let teePill: React.ReactNode = null;
-  if (isEditing) {
-    const interactiveLabel = tee ? `Change tee from ${tee.name}` : 'Pick a tee';
-    teePill = (
-      <Pressable
-        onPress={onPressTee}
-        style={tee ? styles.teePill : styles.teePillEmpty}
-        accessibilityRole="button"
-        accessibilityLabel={interactiveLabel}>
-        {tee ? (
-          <>
-            <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} />
-            <Text style={styles.teeName} numberOfLines={1}>
-              {tee.name}
-            </Text>
-            <Text style={styles.teeChev}>▾</Text>
-          </>
-        ) : (
-          <>
-            <Text style={styles.teePlaceholder}>+ Tee</Text>
-            <Text style={styles.teeChev}>▾</Text>
-          </>
-        )}
-      </Pressable>
-    );
-  } else if (tee) {
+  if (!isEditing && tee) {
     teePill = (
       <View style={styles.teePill}>
         <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} />
@@ -169,8 +111,6 @@ export function ScorerRow({
     );
   }
 
-  // Line 2 is omitted entirely when viewing AND there's no tee to show
-  // (avoids reserving empty vertical space below an identity-only row).
   const showLine2 = isEditing || tee !== undefined;
 
   return (
@@ -194,52 +134,18 @@ export function ScorerRow({
           {teePill}
           {isEditing ? (
             <View style={styles.controls}>
-              {QUICK_PICKS.map((q) => {
-                const isActive = rel === q.rel;
-                return (
-                  <Pressable
-                    key={q.rel}
-                    onPress={() => handleQuickPick(q.rel)}
-                    style={[
-                      styles.chip,
-                      isActive && (q.rel > 0 ? styles.chipActiveOver : styles.chipActive),
-                    ]}
-                    hitSlop={2}>
-                    <Text style={[styles.chipText, isActive && styles.chipTextActive]}>
-                      {q.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              <Pressable
-                onPress={() => setSheetOpen(true)}
-                style={[
-                  styles.chip,
-                  customActive && (rel! > 0 ? styles.chipActiveOver : styles.chipActive),
-                ]}
-                hitSlop={2}>
-                <Text style={[styles.chipText, customActive && styles.chipTextActive]}>
-                  {customActive ? formatScore(rel!) : '✕'}
-                </Text>
-              </Pressable>
+              <Stepper
+                value={stepperValue}
+                min={1}
+                displayValue={strokes == null ? '–' : String(strokes)}
+                onDecrement={() => onChange?.(Math.max(1, stepperValue - 1))}
+                onIncrement={() =>
+                  onChange?.(strokes == null ? stepperValue : stepperValue + 1)
+                }
+              />
             </View>
           ) : null}
         </View>
-      ) : null}
-
-      {isEditing ? (
-        <CustomScoreSheet
-          visible={sheetOpen}
-          scorerName={sheetHeading}
-          holeNumber={holeNumber}
-          par={par}
-          initialStrokes={strokes}
-          onCancel={() => setSheetOpen(false)}
-          onConfirm={(v) => {
-            setSheetOpen(false);
-            onChange?.(v);
-          }}
-        />
       ) : null}
     </View>
   );
@@ -309,19 +215,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderRadius: 999,
       backgroundColor: colors.chipBg,
     },
-    teePillEmpty: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'flex-start',
-      gap: 5,
-      paddingHorizontal: 9,
-      paddingVertical: 5,
-      borderRadius: 999,
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderStyle: 'dashed',
-      backgroundColor: 'transparent',
-    },
     teeDot: {
       width: 9,
       height: 9,
@@ -332,46 +225,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '800',
       color: colors.textTitle,
     },
-    teePlaceholder: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: colors.textMuted,
-    },
-    teeChev: {
-      fontSize: 9,
-      fontWeight: '800',
-      color: colors.textMuted,
-      marginLeft: 1,
-    },
     controls: {
       flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'flex-end',
-      gap: 4,
-    },
-    chip: {
-      height: 38,
-      minWidth: 40,
-      paddingHorizontal: 6,
-      borderRadius: 9,
-      backgroundColor: colors.chipBg,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    chipActive: {
-      backgroundColor: colors.primary,
-    },
-    chipActiveOver: {
-      backgroundColor: colors.accent,
-    },
-    chipText: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: colors.primaryDark,
-    },
-    chipTextActive: {
-      color: '#fff',
     },
   });
 }

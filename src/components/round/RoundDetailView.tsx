@@ -1,27 +1,21 @@
 /**
- * RoundDetailView � Aurora Glass round detail lane.
+ * RoundDetailView — Aurora Glass round detail lane.
  */
 
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { CommentsSection } from './CommentsSection';
-import { CommentsSheet } from './CommentsSheet';
 import { CourseBanner } from './CourseBanner';
 import type { OverflowItem } from './HeaderOverflowMenu';
-import { HolesTabContent } from './HolesTabContent';
-import { RoundActionBar } from './RoundActionBar';
-import { SummaryTabContent } from './SummaryTabContent';
-import { TabbedRoundShell } from './TabbedRoundShell';
 import { GlassCard, NumericText, ScorePip, SectionLabel, StatChip } from '@/components/aurora';
 import { applicableStatsForHole } from '@/library/golf/builtInStats';
+import { yardageForHoleRange } from '@/library/golf/courseHelpers';
 import { formatRelativeTime, formatScore, holesInRange, playerProgress } from '@/library/golf/scoring';
 import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundScorers, type RoundScorer } from '@/library/golf/useRoundScorers';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
-import { useRoundLikes } from '@/library/golf/useRoundLikes';
-import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
 import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -51,11 +45,8 @@ export function RoundDetailView({
 
   const { profile: ownerProfile } = useProfile(round.ownerUserId ?? null);
   const { count: commentCount } = useCommentSummary(round.id);
-  const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(round.id);
-  const engagement = useRoundStatEngagement(round.id);
   const scorers = useRoundScorers(round);
   const { getValues } = useRoundHoleDetails(round.id);
-  const [sheetVisible, setSheetVisible] = useState(false);
 
   const isInProgress = !round.completedAt;
   const timeText = formatRelativeTime(
@@ -67,13 +58,17 @@ export function RoundDetailView({
     ? () => router.push(`${profileRoutePrefix}/${ownerUserId}` as never)
     : undefined;
 
-  const showHolesTab = engagement.hasAny;
-  const holesBody = showHolesTab ? <HolesTabContent round={round} /> : undefined;
   const primaryScorer = scorers[0];
   const progress = primaryScorer ? playerProgress(round, primaryScorer.id) : { rel: 0, thru: 0 };
   const quickStats = useMemo(
     () => computeQuickStats(round, primaryScorer, getValues),
     [round, primaryScorer, getValues]
+  );
+  const courseSubline = formatCourseSubline(round, primaryScorer, progress.thru);
+  const ownerKey = round.ownerUserId ? `user:${round.ownerUserId}` : null;
+  const bannerSubtitle = useMemo(
+    () => formatBannerSubtitle(round, scorers, ownerKey),
+    [round, scorers, ownerKey]
   );
 
   return (
@@ -85,11 +80,16 @@ export function RoundDetailView({
           avatarColor={ownerProfile?.avatarColor}
           avatarSeed={round.ownerUserId}
           courseName={round.course.name}
+          subtitle={bannerSubtitle}
           timeText={timeText}
           isLive={isInProgress}
           onPressOwner={onPressOwner}
           overflowActions={overflowActions}
         />
+        <View style={styles.courseBlock}>
+          <Text style={styles.courseTitle}>{round.course.name}</Text>
+          <Text style={styles.courseSubline}>{courseSubline}</Text>
+        </View>
         <View style={styles.heroStrip}>
           <NumericText style={styles.heroScore}>{formatScore(progress.rel)}</NumericText>
           <Text style={styles.heroLabel}>to par{progress.thru ? `\nthru ${progress.thru}` : ''}</Text>
@@ -101,33 +101,13 @@ export function RoundDetailView({
       </GlassCard>
 
       <GlassCard padded={false} style={styles.detailCard}>
-        <TabbedRoundShell
-          summary={<SummaryTabContent round={round} />}
-          scorecard={<FullScorecard round={round} scorers={scorers} />}
-          holes={holesBody}
-          defaultTab="scorecard"
-        />
-        <RoundActionBar
-          liked={likedByMe}
-          likeCount={likeCount}
-          commentCount={commentCount}
-          onToggleLike={toggleLike}
-          onOpenComments={() => setSheetVisible(true)}
-        />
+        <FullScorecard round={round} scorers={scorers} />
       </GlassCard>
 
       <View style={styles.commentsWrap}>
         <SectionLabel right={<Text style={styles.commentCountLabel}>{commentCount}</Text>}>Comments</SectionLabel>
         <CommentsSection roundId={round.id} ownerUserId={round.ownerUserId ?? ''} />
       </View>
-
-      <CommentsSheet
-        visible={sheetVisible}
-        roundId={round.id}
-        ownerUserId={round.ownerUserId ?? ''}
-        commentCount={commentCount}
-        onClose={() => setSheetVisible(false)}
-      />
     </View>
   );
 }
@@ -148,12 +128,12 @@ function FullScorecard({ round, scorers }: { round: Round; scorers: RoundScorer[
       <View style={styles.totalBar}>
         <Text style={styles.totalMuted}>
           Out <Text style={styles.totalStrong}>{nineTotal(round, front, scorers[0]?.id)}</Text>
-          {hasBack ? ' � In ' : ''}
+          {hasBack ? ' · In ' : ''}
           {hasBack ? <Text style={styles.totalStrong}>{nineTotal(round, back, scorers[0]?.id)}</Text> : null}
         </Text>
         {scorers[0] ? (
           <NumericText style={styles.totalToPar}>
-            {formatScore(playerProgress(round, scorers[0].id).rel)} � thru {playerProgress(round, scorers[0].id).thru}
+            {formatScore(playerProgress(round, scorers[0].id).rel)} · thru {playerProgress(round, scorers[0].id).thru}
           </NumericText>
         ) : null}
       </View>
@@ -178,7 +158,7 @@ function NineGrid({ label, holes, round, scorers }: { label: string; holes: Hole
             const score = round.scores.find((s) => s.scorerId === scorer.id && s.holeNumber === hole.number);
             return (
               <View key={hole.number} style={styles.scoreCell}>
-                {score ? <ScorePip strokes={score.strokes} par={hole.par} size={24} /> : <Text style={styles.dash}>�</Text>}
+                {score ? <ScorePip strokes={score.strokes} par={hole.par} size={24} /> : <Text style={styles.dash}>—</Text>}
               </View>
             );
           })}
@@ -208,7 +188,7 @@ function computeQuickStats(
   scorer: RoundScorer | undefined,
   getValues: (scorerId: string, holeNumber: number) => Record<string, unknown>
 ): QuickStats {
-  if (!scorer) return { fir: '�', firState: 'neutral', gir: '�', girState: 'neutral' };
+  if (!scorer) return { fir: '—', firState: 'neutral', gir: '—', girState: 'neutral' };
   let firMade = 0;
   let firEntered = 0;
   let girMade = 0;
@@ -226,15 +206,15 @@ function computeQuickStats(
     }
   }
   return {
-    fir: firEntered ? `${firMade}/${firEntered}` : '�',
+    fir: firEntered ? `${firMade}/${firEntered}` : '—',
     firState: firEntered ? (firMade * 2 >= firEntered ? 'on' : 'no') : 'neutral',
-    gir: girEntered ? `${girMade}/${girEntered}` : '�',
+    gir: girEntered ? `${girMade}/${girEntered}` : '—',
     girState: girEntered ? (girMade * 2 >= girEntered ? 'on' : 'no') : 'neutral',
   };
 }
 
 function nineTotal(round: Round, holes: Hole[], scorerId: string | undefined): string {
-  if (!scorerId || holes.length === 0) return '�';
+  if (!scorerId || holes.length === 0) return '—';
   let total = 0;
   let entered = 0;
   for (const hole of holes) {
@@ -244,11 +224,36 @@ function nineTotal(round: Round, holes: Hole[], scorerId: string | undefined): s
       entered += 1;
     }
   }
-  return entered === holes.length ? String(total) : entered ? `${total}` : '�';
+  return entered === holes.length ? String(total) : entered ? `${total}` : '—';
 }
 
 function shortName(name: string): string {
   return name.split(/\s+/)[0] ?? name;
+}
+
+function formatCourseSubline(round: Round, scorer: RoundScorer | undefined, thru: number): string {
+  const tee = scorer?.tee ?? round.course.tees?.[0];
+  const teeLabel = tee?.name ? `${tee.name} tees` : 'Tees';
+  const yardage =
+    tee?.totalYardage ??
+    yardageForHoleRange(round.course, round.holeRange, tee?.id);
+  const totalHoles = round.course.holes.length || holesInRange(round.course.holes, round.holeRange).length;
+  return `${teeLabel} · ${yardage ? yardage.toLocaleString() : '—'}y · thru ${thru} of ${totalHoles}`;
+}
+
+function formatBannerSubtitle(round: Round, scorers: RoundScorer[], ownerKey: string | null): string {
+  const ruleLabel = round.scoringRule === 'scramble' ? 'Scramble' : 'Stroke';
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const scorer of scorers) {
+    for (const member of scorer.members) {
+      if (ownerKey && member.id === ownerKey) continue;
+      if (seen.has(member.id)) continue;
+      seen.add(member.id);
+      names.push(member.handle ? `@${member.handle}` : member.name);
+    }
+  }
+  return names.length > 0 ? `${ruleLabel} · ${names.join(', ')}` : ruleLabel;
 }
 
 function makeStyles(colors: ThemeColors) {
@@ -259,6 +264,22 @@ function makeStyles(colors: ThemeColors) {
     bannerCard: {
       padding: 0,
       overflow: 'hidden',
+    },
+    courseBlock: {
+      marginHorizontal: 18,
+      marginTop: 13,
+    },
+    courseTitle: {
+      color: colors.textTitle,
+      fontSize: 19,
+      fontWeight: '700',
+      letterSpacing: 0.2,
+    },
+    courseSubline: {
+      marginTop: 2,
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '600',
     },
     heroStrip: {
       flexDirection: 'row',
@@ -386,4 +407,3 @@ function makeStyles(colors: ThemeColors) {
     },
   });
 }
-

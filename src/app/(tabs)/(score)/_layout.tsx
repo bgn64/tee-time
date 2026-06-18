@@ -1,10 +1,9 @@
 /**
  * Score tab stack (folder name kept as `(score)`).
  *
- * Hub-led structure:
- *   index           — three-action hub (New round · Continue · Previous)
- *   new/index       — course picker (step 1 of the new-round flow)
- *   players         — consolidated round setup (players, format, tees, stats)
+ * Score-tab structure:
+ *   index           — single New round form
+ *   new/index       — course picker
  *   scoring         — live scoring (locked once a round is in flight)
  *   previous/index  — completed-rounds list (absorbed from old Rounds tab)
  *   previous/[id]   — round detail (read-only)
@@ -31,7 +30,6 @@
 import { Stack } from 'expo-router';
 
 import { AppHeader } from '@/components/AppHeader';
-import { ScreenBackground } from '@/components/aurora';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 export const unstable_settings = {
@@ -41,25 +39,22 @@ export const unstable_settings = {
 export default function ScoreLayout() {
   const { colors } = useTheme();
   return (
-    <ScreenBackground>
-      <Stack
-        screenOptions={{
-          headerShown: true,
-          header: (props) => <AppHeader {...props} />,
-          headerStyle: { backgroundColor: 'transparent' },
-          headerTintColor: colors.textTitle,
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: 'transparent' }
-        }}>
-        <Stack.Screen name="index" options={{ title: 'Score' }} />
-        <Stack.Screen name="new/index" options={{ title: 'New round' }} />
-        <Stack.Screen name="players" options={{ title: 'Setup round' }} />
-        <Stack.Screen name="scoring" options={{ gestureEnabled: false }} />
-        <Stack.Screen name="previous/index" options={{ title: 'Previous rounds' }} />
-        <Stack.Screen name="previous/[id]" options={{ title: 'Round' }} />
-        <Stack.Screen name="previous/[id]/edit" options={{ title: 'Edit Round' }} />
-        <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
-      </Stack>
-    </ScreenBackground>
+    <Stack
+      screenOptions={{
+        headerShown: true,
+        header: (props) => <AppHeader {...props} />,
+        headerStyle: { backgroundColor: 'transparent' },
+        headerTintColor: colors.textTitle,
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: 'transparent' }
+      }}>
+      <Stack.Screen name="index" options={{ title: 'New round' }} />
+      <Stack.Screen name="new/index" options={{ title: 'Choose course' }} />
+      <Stack.Screen name="scoring" options={{ gestureEnabled: false }} />
+      <Stack.Screen name="previous/index" options={{ title: 'Previous rounds' }} />
+      <Stack.Screen name="previous/[id]" options={{ title: 'Round' }} />
+      <Stack.Screen name="previous/[id]/edit" options={{ title: 'Edit Round' }} />
+      <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
+    </Stack>
   );
 }

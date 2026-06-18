@@ -55,7 +55,6 @@ export function ScorerStack({
   isEditing,
   currentHoleNumber,
   onChangeScore,
-  onPressTeeForScorer,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -159,11 +158,6 @@ export function ScorerStack({
               runningTone={tone}
               thruText={thruText}
               tee={resolveScorerTee(s.id)}
-              onPressTee={
-                isEditing && onPressTeeForScorer
-                  ? () => onPressTeeForScorer(s.id)
-                  : undefined
-              }
               isEditing={isEditing}
               holeNumber={currentHoleNumber ?? 0}
               par={currentHole?.par ?? 0}

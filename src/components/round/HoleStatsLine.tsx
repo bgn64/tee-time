@@ -1,7 +1,7 @@
 /**
  * HoleStatsLine — read-only inline summary of a scorer's per-hole
  * stat values, used by the per-hole viewing surface
- * (`HolesTabContent`). Renders a single `<Text>` containing
+ * (`HoleDetailSheet`). Renders a single `<Text>` containing
  * comma-separated tokens:
  *
  *   Binary set:   `Yes GIR` / `No GIR` (Yes/No tone-coloured)
@@ -10,9 +10,10 @@
  *                 (value coloured per aggregateTone only when > 0
  *                 AND tone !== 'neutral' — e.g. "3 OB" red, "0 OB" not)
  *
- * Mirrors `SummaryAggregateTiles`'s inline-line treatment so the
- * per-hole and aggregate views read as the same design language.
- * Tokens are separated by `·` in the muted text colour.
+ * Renders the same `StatChip` row the editable scoring surface
+ * (`EditableHoleStats`) uses, so the viewing and editing surfaces read
+ * as one design language. Tokens are separated by `·` in the muted
+ * text colour.
  *
  * Pure presentation: caller supplies the applicable stats (already
  * filtered by enabled-set + par) and the value map for the

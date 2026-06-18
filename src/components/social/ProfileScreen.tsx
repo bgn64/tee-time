@@ -3,6 +3,7 @@
  */
 
 import React from 'react';
+import { router } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -11,15 +12,16 @@ import {
   View
 } from 'react-native';
 
-import { Avatar, GlassCard, NeonButton, PHONE_MAX_WIDTH, SectionLabel, StatTile } from '@/components/aurora';
+import { Avatar, GlassCard, NeonButton, NumericText, PHONE_MAX_WIDTH, SectionLabel, StatTile } from '@/components/aurora';
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
 import { useRefresh } from '@/library/data/useRefresh';
 import { holesInRange, scoreForRoundsList, scorerIdForUser, formatRelativeTime, formatScore } from '@/library/golf/scoring';
 import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
+import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useScorecardStats } from '@/library/golf/useScorecardStats';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRequiredAccount } from '@/library/social/AccountContext';
-import { useFriends, useProfile } from '@/library/social/FriendsContext';
+import { useProfile } from '@/library/social/FriendsContext';
 import { signOut } from '@/library/supabase/auth';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Round } from '@/types/golf';
@@ -27,24 +29,27 @@ import { FriendActionPill } from './FriendActionPill';
 
 type Props = {
   userId: string;
-  onPressFriends?: () => void;
 };
 
 type RoundMetric = {
   round: Round;
   total: number;
   relative: number;
+  holeCount: number;
+  holesScored: number;
 };
 
-export function ProfileScreen({ userId, onPressFriends }: Props) {
+export function ProfileScreen({ userId }: Props) {
   const { colors } = useTheme();
   const account = useRequiredAccount();
   const { profile, loading } = useProfile(userId);
-  const { friends } = useFriends();
   const { roundsPlayed, roundsTogether } = useScorecardStats();
   const { rounds } = useCompletedRounds();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const refresh = useRefresh();
+  const handleEditProfile = React.useCallback(() => {
+    // TODO: open the edit-profile flow when that route exists.
+  }, []);
 
   const isOwn = userId === account.userId;
   const targetKey = userParticipantKey(userId);
@@ -64,16 +69,30 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
       });
   }, [rounds, isOwn, targetKey, account.userId, userId]);
 
+  // Conservative gate for the headline stats: only full 18-hole
+  // stroke-play rounds where every hole was scored, compared by
+  // relative-to-par so courses with slightly different pars stay
+  // comparable. Looser rounds are deferred until there's real data.
+  const eligibleMetrics = React.useMemo(
+    () => roundMetrics.filter(isStatEligible),
+    [roundMetrics]
+  );
+
   const scoringAverage = React.useMemo(() => {
-    if (roundMetrics.length === 0) return '—';
-    const total = roundMetrics.reduce((acc, metric) => acc + metric.total, 0);
-    return (total / roundMetrics.length).toFixed(1);
-  }, [roundMetrics]);
+    if (eligibleMetrics.length === 0) return '—';
+    const sum = eligibleMetrics.reduce((acc, metric) => acc + metric.relative, 0);
+    return formatRelativeAverage(sum / eligibleMetrics.length);
+  }, [eligibleMetrics]);
 
   const personalBest = React.useMemo(() => {
-    if (roundMetrics.length === 0) return '—';
-    return String(Math.min(...roundMetrics.map((metric) => metric.total)));
-  }, [roundMetrics]);
+    if (eligibleMetrics.length === 0) return '—';
+    return formatScore(Math.min(...eligibleMetrics.map((metric) => metric.relative)));
+  }, [eligibleMetrics]);
+
+  const handicapIndex = React.useMemo(
+    () => formatHandicapIndex(eligibleMetrics),
+    [eligibleMetrics]
+  );
 
   const recentRounds = roundMetrics.slice(0, 3);
 
@@ -101,40 +120,47 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
     );
   }
 
+  const joinedYear = formatJoinedYear(isOwn ? account.createdAt : profile.createdAt);
+  const handleText = joinedYear ? `@${profile.handle} · joined ${joinedYear}` : `@${profile.handle}`;
+
   return (
     <PullToRefreshScrollView
       onRefresh={refresh}
       style={styles.container}
       contentContainerStyle={styles.content}>
-      <GlassCard strong glow style={styles.headerCard}>
+      <View style={styles.profileHead}>
         <Avatar
           initial={profile.displayName || profile.handle}
           color={isOwn ? undefined : profile.avatarColor}
           gradient={isOwn ? [colors.lime, colors.cyan] : undefined}
-          size={86}
+          size={78}
+          style={styles.profileAvatar}
         />
         <Text style={styles.name}>{profile.displayName}</Text>
-        <Text style={styles.handle}>@{profile.handle}</Text>
+        <Text style={styles.handle}>{handleText}</Text>
 
-        {!isOwn ? (
+        {isOwn ? (
+          <NeonButton
+            label="Edit profile"
+            variant="ghost"
+            size="sm"
+            style={styles.editBtn}
+            onPress={handleEditProfile}
+          />
+        ) : (
           <View style={styles.pillRow}>
             <FriendActionPill target={profile} />
           </View>
-        ) : null}
-      </GlassCard>
+        )}
+      </View>
 
       <View style={styles.tilesGrid}>
         {isOwn ? (
           <>
-            <Pressable
-              disabled={!onPressFriends}
-              onPress={onPressFriends}
-              style={({ pressed }) => [styles.tilePress, pressed && styles.tilePressed]}>
-              <StatTile value={friends.length} label="Friends" tone="cyan" style={styles.tile} />
-            </Pressable>
             <StatTile value={roundsPlayed} label="Rounds played" tone="lime" style={styles.tile} />
             <StatTile value={scoringAverage} label="Scoring average" style={styles.tile} />
             <StatTile value={personalBest} label="Personal best" tone="cyan" style={styles.tile} />
+            <StatTile value={handicapIndex} label="Handicap index" style={styles.tile} />
           </>
         ) : (
           <>
@@ -144,7 +170,20 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
         )}
       </View>
 
-      <SectionLabel>{isOwn ? 'Recent rounds' : 'Recent rounds together'}</SectionLabel>
+      <SectionLabel
+        right={
+          isOwn ? (
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/(tabs)/(score)/previous' as never)}
+              hitSlop={8}
+              style={({ pressed }) => (pressed ? styles.linkPressed : null)}>
+              <Text style={styles.sectionLink}>All rounds ›</Text>
+            </Pressable>
+          ) : null
+        }>
+        {isOwn ? 'Recent rounds' : 'Recent rounds together'}
+      </SectionLabel>
       {recentRounds.length === 0 ? (
         <GlassCard style={styles.emptyRounds}>
           <Text style={styles.emptyText}>
@@ -153,21 +192,7 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
         </GlassCard>
       ) : (
         recentRounds.map((metric) => (
-          <GlassCard key={metric.round.id} padded={false} style={styles.roundRow}>
-            <View style={styles.roundScore}>
-              <Text style={styles.roundTotal}>{metric.total}</Text>
-              <Text style={styles.roundRelative}>{formatScore(metric.relative)}</Text>
-            </View>
-            <View style={styles.roundBody}>
-              <Text style={styles.courseName} numberOfLines={1}>
-                {metric.round.course.name}
-              </Text>
-              <Text style={styles.roundMeta} numberOfLines={1}>
-                {metric.round.scoringRule} · {holesInRange(metric.round.course.holes, metric.round.holeRange).length} ·{' '}
-                {formatRelativeTime(metric.round.completedAt ?? metric.round.startedAt)}
-              </Text>
-            </View>
-          </GlassCard>
+          <RecentRoundRow key={metric.round.id} metric={metric} styles={styles} />
         ))
       )}
 
@@ -185,21 +210,99 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
   );
 }
 
+type ProfileStyles = ReturnType<typeof makeStyles>;
+
+function RecentRoundRow({ metric, styles }: { metric: RoundMetric; styles: ProfileStyles }) {
+  const { count: likeCount } = useRoundLikes(metric.round.id);
+
+  return (
+    <GlassCard padded={false} style={styles.roundRow}>
+      <View style={styles.roundScore}>
+        <NumericText style={styles.roundTotal}>{metric.total}</NumericText>
+        <NumericText style={styles.roundRelative}>{formatScore(metric.relative)}</NumericText>
+      </View>
+      <View style={styles.roundBody}>
+        <Text style={styles.courseName} numberOfLines={1}>
+          {metric.round.course.name}
+        </Text>
+        <Text style={styles.roundMeta} numberOfLines={1}>
+          {metric.round.scoringRule} · {holesInRange(metric.round.course.holes, metric.round.holeRange).length} ·{' '}
+          {formatRelativeTime(metric.round.completedAt ?? metric.round.startedAt)}
+        </Text>
+      </View>
+      <Text style={styles.likeCount}>♥ {likeCount}</Text>
+    </GlassCard>
+  );
+}
+
 function buildRoundMetric(round: Round, metricUserId: string): RoundMetric | null {
   const scorerId = scorerIdForUser(round, metricUserId);
   if (!scorerId) return null;
-  const allowed = new Set(holesInRange(round.course.holes, round.holeRange).map((hole) => hole.number));
+  const allowed = new Set(
+    holesInRange(round.course.holes, round.holeRange).map((hole) => hole.number)
+  );
+  const scoredHoles = new Set<number>();
   let total = 0;
   for (const score of round.scores) {
     if (score.scorerId !== scorerId || !allowed.has(score.holeNumber)) continue;
+    if (score.strokes <= 0 || scoredHoles.has(score.holeNumber)) continue;
+    scoredHoles.add(score.holeNumber);
     total += score.strokes;
   }
   if (total <= 0) return null;
   return {
     round,
     total,
-    relative: scoreForRoundsList(round, metricUserId)
+    relative: scoreForRoundsList(round, metricUserId),
+    holeCount: allowed.size,
+    holesScored: scoredHoles.size
   };
+}
+
+function formatJoinedYear(createdAt?: string | null): string | null {
+  if (!createdAt) return null;
+  const year = new Date(createdAt).getFullYear();
+  return Number.isFinite(year) ? String(year) : null;
+}
+
+function formatHandicapIndex(eligibleMetrics: RoundMetric[]): string {
+  const differentials = eligibleMetrics
+    .map((metric) => metric.relative)
+    .filter((relative) => Number.isFinite(relative))
+    .sort((a, b) => a - b);
+
+  if (differentials.length === 0) return '—';
+
+  const bestCount = Math.max(1, Math.min(8, Math.ceil(differentials.length * 0.4)));
+  const bestAverage =
+    differentials.slice(0, bestCount).reduce((sum, relative) => sum + relative, 0) / bestCount;
+  const index = bestAverage * 0.96;
+
+  if (index < 0) return `+${Math.abs(index).toFixed(1)}`;
+  return index.toFixed(1);
+}
+
+/**
+ * Conservative gate for the headline profile stats (scoring average,
+ * personal best, handicap index): only full 18-hole stroke-play rounds
+ * where every hole was scored. Looser formats — 9-hole, scramble,
+ * partial cards — are intentionally excluded until there's enough real
+ * data to handle them well.
+ */
+function isStatEligible(metric: RoundMetric): boolean {
+  return (
+    metric.round.scoringRule === 'stroke' &&
+    metric.holeCount === 18 &&
+    metric.holesScored === metric.holeCount
+  );
+}
+
+/** Signed one-decimal to-par average, e.g. "+2.7" / "−1.3" / "E". */
+function formatRelativeAverage(avg: number): string {
+  const rounded = Math.round(avg * 10) / 10;
+  if (rounded === 0) return 'E';
+  const magnitude = Math.abs(rounded).toFixed(1);
+  return rounded > 0 ? `+${magnitude}` : `−${magnitude}`;
 }
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
@@ -224,23 +327,29 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       minWidth: 120,
       alignItems: 'center'
     },
-    headerCard: {
+    profileHead: {
       alignItems: 'center',
-      paddingVertical: 22,
-      marginBottom: 14
+      paddingTop: 12,
+      paddingBottom: 4
+    },
+    profileAvatar: {
+      marginBottom: 12
     },
     name: {
-      marginTop: 14,
       color: colors.textTitle,
       fontSize: 22,
-      fontWeight: '900',
+      fontWeight: '700',
       textAlign: 'center'
     },
     handle: {
       marginTop: 3,
       color: colors.textMuted,
       fontSize: 13,
-      fontWeight: '700'
+      fontWeight: '600'
+    },
+    editBtn: {
+      marginTop: 13,
+      borderRadius: 20
     },
     pillRow: {
       marginTop: 16
@@ -255,42 +364,36 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexGrow: 1,
       minWidth: 138
     },
-    tilePress: {
-      flexBasis: '47%',
-      flexGrow: 1,
-      minWidth: 138
+    sectionLink: {
+      color: colors.cyan,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.5
     },
-    tilePressed: {
-      opacity: 0.82,
-      transform: [{ scale: 0.99 }]
+    linkPressed: {
+      opacity: 0.7
     },
     roundRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 12,
-      padding: 12,
-      marginBottom: 8
+      gap: 13,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+      marginBottom: 11,
+      borderRadius: 18
     },
     roundScore: {
-      width: 58,
-      minHeight: 48,
-      borderRadius: 16,
-      backgroundColor: colors.glassFill2,
-      borderWidth: 1,
-      borderColor: colors.glassStroke,
-      alignItems: 'center',
-      justifyContent: 'center'
+      minWidth: 54
     },
     roundTotal: {
       color: colors.textTitle,
-      fontSize: 20,
+      fontSize: 24,
       fontWeight: '900'
     },
     roundRelative: {
-      color: colors.lime,
+      color: colors.cyan,
       fontSize: 11,
-      fontWeight: '900',
-      marginTop: 1
+      fontWeight: '700'
     },
     roundBody: {
       flex: 1,
@@ -307,6 +410,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
       marginTop: 3,
       textTransform: 'lowercase'
+    },
+    likeCount: {
+      marginLeft: 'auto',
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: '700'
     },
     emptyRounds: {
       alignItems: 'center'

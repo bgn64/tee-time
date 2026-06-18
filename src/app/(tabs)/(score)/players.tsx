@@ -1,18 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Redirect, useLocalSearchParams, useNavigation } from 'expo-router';
+import { Redirect, router, useLocalSearchParams, useNavigation } from 'expo-router';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type LayoutChangeEvent } from 'react-native';
 
-import { Avatar, GlassCard, GlassSurface, NeonButton, PHONE_MAX_WIDTH, SectionLabel, SegmentedToggle, StatChip } from '@/components/aurora';
+import { Avatar, GlassCard, GlassSurface, NeonButton, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
 import { ScrambleBody } from '@/components/scoring/ScrambleBody';
 import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
-import { ToggleRow } from '@/components/widgets/ToggleRow';
-import { BUILT_IN_STATS, defaultEnabledStatKeys, type StatKey } from '@/library/golf/builtInStats';
+import { defaultEnabledStatKeys, type StatKey } from '@/library/golf/builtInStats';
 import { defaultTeeIdForCourse } from '@/library/golf/courseHelpers';
 import { createCustomPlayer, softDeleteCustomPlayer, useCustomPlayers } from '@/library/golf/customPlayers';
 import { customParticipantKey, userParticipantKey } from '@/library/golf/participantKey';
 import { useRound } from '@/library/golf/RoundContext';
 import { buildInitialScrambleState, buildTeamsFromGroups } from '@/library/golf/teams';
+import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
 import { useCourse } from '@/library/golf/useCourses';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useRequiredAccount } from '@/library/social/AccountContext';
@@ -24,6 +24,13 @@ import type { ScoringRule, Tee, Team } from '@/types/golf';
 
 const MAX_PLAYERS = 4;
 const NEW_TEAM_PLACEHOLDER = 'New team';
+const STAT_OPTIONS: readonly { key: StatKey; label: string }[] = [
+  { key: 'fir', label: 'Fairways' },
+  { key: 'gir', label: 'Greens' },
+  { key: 'putts', label: 'Putts' },
+  { key: 'ob', label: 'Penalties' },
+  { key: 'sand', label: 'Sand' },
+];
 
 type FriendEntry = { kind: 'friend'; participantKey: string; userId: string };
 type CustomEntry = { kind: 'custom'; participantKey: string; customPlayerId: string };
@@ -39,29 +46,43 @@ export default function PlayersScreen() {
   const account = useRequiredAccount();
   const { friends } = useFriends();
   const { customPlayers: customRows } = useCustomPlayers(account.userId);
-  const { course, loading: courseLoading, enriching: courseEnriching, error: courseError } = useCourse(courseId);
+  const { rounds: completedRounds } = useCompletedRounds();
+  const defaultCourseId = useMemo(() => {
+    const latest = completedRounds.reduce<(typeof completedRounds)[number] | null>(
+      (acc, round) => {
+        if (!acc) return round;
+        const a = new Date(round.completedAt ?? round.startedAt).getTime();
+        const b = new Date(acc.completedAt ?? acc.startedAt).getTime();
+        return a > b ? round : acc;
+      },
+      null
+    );
+    return latest?.course.id;
+  }, [completedRounds]);
+  const activeCourseId = courseId ?? defaultCourseId;
+  const { course, loading: courseLoading, enriching: courseEnriching, error: courseError } = useCourse(activeCourseId);
 
   const selfKey = useMemo(() => userParticipantKey(account.userId), [account.userId]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>(() => [selfKey]);
-  const [query, setQuery] = useState('');
   const [namePromptOpen, setNamePromptOpen] = useState(false);
   const [namePromptValue, setNamePromptValue] = useState('');
   const namePromptInputRef = useRef<TextInput | null>(null);
   const [menuTarget, setMenuTarget] = useState<{ id: string; anchor: { x: number; y: number; width: number } } | null>(null);
 
   const [scoringRule, setScoringRule] = useState<ScoringRule>('stroke');
-  const [teeIds, setTeeIds] = useState<Record<string, string | undefined>>(() => ({ [selfKey]: undefined }));
-  const [pickerTarget, setPickerTarget] = useState<string | null>(null);
+  const [roundTeeId, setRoundTeeId] = useState<string | undefined>(undefined);
+  const [teePickerOpen, setTeePickerOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const [trackedScorerIds, setTrackedScorerIds] = useState<readonly string[]>([]);
-  const [enabledStatKeys, setEnabledStatKeys] = useState<readonly StatKey[]>(() => defaultEnabledStatKeys());
+  const [enabledStatKeys, setEnabledStatKeys] = useState<readonly StatKey[]>(() =>
+    defaultEnabledStatKeys().filter((key) => key !== 'ob')
+  );
 
   const defaultTeeId = course ? defaultTeeIdForCourse(course) : undefined;
-  const [scrambleInit] = useState(() => buildInitialScrambleState([selfKey], defaultTeeId));
+  const [scrambleInit] = useState(() => buildInitialScrambleState([selfKey], undefined));
   const [scrambleGroups, setScrambleGroups] = useState<string[][]>(scrambleInit.groups);
   const [scrambleTeamIds, setScrambleTeamIds] = useState<string[]>(scrambleInit.teamIds);
-  const [scrambleTeeIdByTeam, setScrambleTeeIdByTeam] = useState<Record<string, string | undefined>>(scrambleInit.teeIdByTeam);
+  const [, setScrambleTeeIdByTeam] = useState<Record<string, string | undefined>>(scrambleInit.teeIdByTeam);
 
   const resolverKeys = useMemo(() => {
     const set = new Set<string>([selfKey]);
@@ -75,6 +96,7 @@ export default function PlayersScreen() {
   const courseTees: Tee[] = useMemo(() => course?.tees ?? [], [course?.tees]);
   const hasTees = courseTees.length > 0;
   const teeById = useMemo(() => new Map(courseTees.map((t) => [t.id, t])), [courseTees]);
+  const selectedTeeId = roundTeeId && teeById.has(roundTeeId) ? roundTeeId : defaultTeeId;
   const selfParticipantKey = userId ? userParticipantKey(userId) : undefined;
   const selfFirstName = useMemo(() => {
     if (!selfParticipantKey) return undefined;
@@ -98,69 +120,41 @@ export default function PlayersScreen() {
   const scrambleTeeIdByParticipant = useMemo(() => {
     const out: Record<string, string | undefined> = {};
     for (const team of scrambleTeams) {
-      const teeId = scrambleTeeIdByTeam[team.id] ?? defaultTeeId;
-      for (const pid of team.playerIds) out[pid] = teeId;
+      for (const pid of team.playerIds) out[pid] = selectedTeeId;
     }
     return out;
-  }, [scrambleTeams, scrambleTeeIdByTeam, defaultTeeId]);
+  }, [scrambleTeams, selectedTeeId]);
   const scrambleCanStart = scrambleTeams.length > 0 && scrambleTeams.every((t) => t.playerIds.length > 0);
-  const validTrackedScorerIds = useMemo(
-    () => new Set(scoringRule === 'scramble' ? scrambleTeams.map((t) => t.id) : selectedKeys),
-    [scoringRule, scrambleTeams, selectedKeys]
-  );
-  const effectiveTrackedScorerIds = useMemo(
-    () => trackedScorerIds.filter((id) => validTrackedScorerIds.has(id)),
-    [trackedScorerIds, validTrackedScorerIds]
-  );
+  const globalTeeIdByTeam = useMemo(() => {
+    const out: Record<string, string | undefined> = {};
+    for (const id of scrambleTeamIds) out[id] = selectedTeeId;
+    return out;
+  }, [scrambleTeamIds, selectedTeeId]);
 
   if (!roundHydrated) return <CenteredSpinner label="Preparing setup…" styles={styles} colors={colors} />;
   if (currentRound) return <Redirect href="/(tabs)/(score)/scoring" />;
-  if (courseLoading || courseEnriching) return <CenteredSpinner label={courseEnriching ? 'Loading scorecard…' : 'Loading course…'} styles={styles} colors={colors} />;
-  if (!course || !courseId) {
-    return (
-      <View style={styles.centered}>
-        <GlassCard strong><Text style={styles.errorText}>{courseError ?? 'Missing course. Go back and try again.'}</Text></GlassCard>
-      </View>
-    );
-  }
+  if (activeCourseId && (courseLoading || courseEnriching)) return <CenteredSpinner label={courseEnriching ? 'Loading scorecard…' : 'Loading course…'} styles={styles} colors={colors} />;
 
   const atCap = selectedKeys.length >= MAX_PLAYERS;
-  const trimmedQuery = query.trim();
-  const searchActive = trimmedQuery.length > 0;
   const friendEntries: FriendEntry[] = friends.map((uid) => ({ kind: 'friend', participantKey: userParticipantKey(uid), userId: uid }));
   const customEntries: CustomEntry[] = customRows.map((c) => ({ kind: 'custom', participantKey: customParticipantKey(c.id), customPlayerId: c.id }));
-  function matchesSearch(entry: ListEntry): boolean {
-    if (!searchActive) return true;
-    const q = trimmedQuery.toLowerCase();
-    const resolved = resolver.get(entry.participantKey);
-    return !!(resolved?.displayName?.toLowerCase().includes(q) || resolved?.handle?.toLowerCase().includes(q));
-  }
   function nameOf(entry: ListEntry): string { return resolver.get(entry.participantKey)?.displayName || ''; }
-  const visibleFriends = friendEntries.filter(matchesSearch).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-  const visibleCustoms = customEntries.filter(matchesSearch).sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
-  const emptyVisible = !searchActive && visibleFriends.length === 0 && visibleCustoms.length === 0;
+  const visibleFriends = friendEntries.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  const visibleCustoms = customEntries.sort((a, b) => nameOf(a).localeCompare(nameOf(b)));
+  const emptyVisible = visibleFriends.length === 0 && visibleCustoms.length === 0;
 
-  function resolveName(playerId: string): string { return playerId === selfKey ? account.displayName || 'You' : resolver.get(playerId)?.displayName || 'Player'; }
-  function resolveColor(playerId: string): string { return playerId === selfKey ? account.avatarColor : resolver.get(playerId)?.avatarColor || colors.cyan; }
   function commitSelectedKeys(nextKeys: string[]) {
     setSelectedKeys(nextKeys);
-    setTeeIds((prev) => {
-      const next: Record<string, string | undefined> = {};
-      for (const key of nextKeys) next[key] = prev[key];
-      return next;
-    });
     const nextGroups = syncGroupsToPlayers(scrambleGroups, nextKeys);
     const nextTeamIds = syncTeamIds(scrambleTeamIds, nextGroups.length);
     setScrambleGroups(nextGroups);
     setScrambleTeamIds(nextTeamIds);
     setScrambleTeeIdByTeam((prev) => {
       const next: Record<string, string | undefined> = {};
-      for (const id of nextTeamIds) next[id] = prev[id] ?? defaultTeeId;
+      for (const id of nextTeamIds) next[id] = prev[id] ?? selectedTeeId;
       return next;
     });
     if (scoringRule === 'scramble' && nextKeys.length < 2) setScoringRule('stroke');
-    const valid = new Set(scoringRule === 'scramble' ? nextTeamIds : nextKeys);
-    setTrackedScorerIds((prev) => prev.filter((id) => valid.has(id)));
   }
   function toggleSelected(participantKey: string) {
     if (participantKey === selfKey) return;
@@ -171,7 +165,6 @@ export default function PlayersScreen() {
     if (selectedKeys.length >= MAX_PLAYERS) return;
     commitSelectedKeys([...selectedKeys, participantKey]);
   }
-  function removeSelected(participantKey: string) { if (participantKey !== selfKey) commitSelectedKeys(selectedKeys.filter((k) => k !== participantKey)); }
   async function createAndSelect(rawNickname: string) {
     if (atCap) return;
     const nickname = rawNickname.trim();
@@ -186,7 +179,6 @@ export default function PlayersScreen() {
   }
   function handleAddRowPress() {
     if (atCap) return;
-    if (searchActive) { void createAndSelect(trimmedQuery); setQuery(''); return; }
     setNamePromptValue(''); setNamePromptOpen(true);
   }
   function submitNamePrompt() {
@@ -206,111 +198,108 @@ export default function PlayersScreen() {
       showAlert('Could not delete player', err instanceof Error ? err.message : 'Something went wrong. Try again.');
     }
   }
-  const toggleScorerId = (id: string) => setTrackedScorerIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const toggleStatKey = (key: StatKey) => setEnabledStatKeys((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]));
 
   async function handleStart() {
-    if (starting || selectedKeys.length === 0) return;
+    if (starting || selectedKeys.length === 0 || !course) return;
     setStarting(true); setStartError(null);
     try {
-      const finalEnabledStatKeys = effectiveTrackedScorerIds.length > 0 ? enabledStatKeys : [];
+      const finalEnabledStatKeys = enabledStatKeys;
       if (scoringRule === 'scramble') {
         if (!scrambleCanStart || scrambleTeams.length === 0) throw new Error('Every team needs at least one player.');
-        await startRound({ course: course!, playerIds: scrambleTeams.flatMap((t) => t.playerIds), holeRange: 'all', teeIds: scrambleTeeIdByParticipant, scoringRule: 'scramble', teams: scrambleTeams, enabledStatKeys: finalEnabledStatKeys, trackedScorerIds: effectiveTrackedScorerIds });
+        await startRound({
+          course: course!,
+          playerIds: scrambleTeams.flatMap((t) => t.playerIds),
+          holeRange: 'all',
+          teeIds: scrambleTeeIdByParticipant,
+          scoringRule: 'scramble',
+          teams: scrambleTeams,
+          enabledStatKeys: finalEnabledStatKeys,
+          trackedScorerIds: finalEnabledStatKeys.length > 0 ? scrambleTeams.map((t) => t.id) : [],
+        });
       } else {
-        await startRound({ course: course!, playerIds: selectedKeys, holeRange: 'all', teeIds, enabledStatKeys: finalEnabledStatKeys, trackedScorerIds: effectiveTrackedScorerIds });
+        const teeIds = Object.fromEntries(selectedKeys.map((key) => [key, selectedTeeId]));
+        await startRound({
+          course: course!,
+          playerIds: selectedKeys,
+          holeRange: 'all',
+          teeIds,
+          enabledStatKeys: finalEnabledStatKeys,
+          trackedScorerIds: finalEnabledStatKeys.length > 0 ? selectedKeys : [],
+        });
       }
       navigation.reset({ index: 1, routes: [{ name: 'index' as never }, { name: 'scoring' as never }] });
     } catch (err: unknown) {
       setStartError(err instanceof Error ? err.message : String(err)); setStarting(false);
     }
   }
-  const startDisabled = starting || selectedKeys.length === 0 || (scoringRule === 'scramble' && !scrambleCanStart);
+  const startDisabled = starting || !course || selectedKeys.length === 0 || (scoringRule === 'scramble' && !scrambleCanStart);
+  const selectedTee = selectedTeeId ? teeById.get(selectedTeeId) : undefined;
+  const courseValue = course?.name ?? (activeCourseId ? 'Course unavailable' : 'Choose a course');
+  const teeValue = selectedTee ? formatTeeValue(selectedTee) : hasTees ? 'Choose tees' : 'No tee data';
 
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <View style={styles.hero}>
-          <Text style={styles.eyebrow}>New round setup</Text>
-          <Text style={styles.title}>Dial in the card</Text>
+        <Text style={styles.title}>New round</Text>
+        <SectionLabel style={styles.firstSection}>Course</SectionLabel>
+        <Pressable onPress={() => router.push('/(tabs)/(score)/new' as never)} style={({ pressed }) => [pressed && styles.pressed]}>
           <GlassSurface style={styles.courseField} strong>
-            <Ionicons name="flag" size={18} color={colors.lime} />
+            <Ionicons name="golf" size={18} color={colors.cyan} />
             <View style={styles.courseCopy}>
-              <Text style={styles.courseName} numberOfLines={1}>{course.name}</Text>
-              <Text style={styles.courseMeta} numberOfLines={1}>{course.location || `${course.holes.length} holes`}</Text>
+              <Text style={styles.courseMeta}>Selected course</Text>
+              <Text style={[styles.courseName, !course && styles.placeholder]} numberOfLines={1}>{courseValue}</Text>
+              {courseError && activeCourseId ? <Text style={styles.inlineError} numberOfLines={1}>{courseError}</Text> : null}
             </View>
+            <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </GlassSurface>
+        </Pressable>
+
+        <SectionLabel>Format</SectionLabel>
+        <View style={styles.choiceRow}>
+          <ChoiceCard label="Stroke" sublabel="solo · individual" selected={scoringRule === 'stroke'} onPress={() => setScoringRule('stroke')} styles={styles} />
+          <ChoiceCard label="Scramble" sublabel="teams · best ball" selected={scoringRule === 'scramble'} disabled={selectedKeys.length < 2} onPress={() => setScoringRule('scramble')} styles={styles} />
         </View>
+        {scoringRule === 'scramble' ? (
+          <GlassCard strong style={styles.card}>
+            <ScrambleBody playerIds={selectedKeys} resolver={resolver} selfParticipantKey={selfParticipantKey} firstNameForSelf={selfFirstName} courseTees={[]} defaultTeeId={selectedTeeId} groups={scrambleGroups} setGroups={setScrambleGroups} teamIds={scrambleTeamIds} setTeamIds={setScrambleTeamIds} teeIdByTeam={globalTeeIdByTeam} setTeeIdByTeam={setScrambleTeeIdByTeam} />
+          </GlassCard>
+        ) : null}
+
+        <SectionLabel right={<Text style={styles.countText}>{selectedKeys.length} selected</Text>}>Players</SectionLabel>
         <GlassCard strong style={styles.card}>
-          <SectionLabel style={styles.firstSection}>Format</SectionLabel>
-          <SegmentedToggle
-            value={scoringRule}
-            onChange={(value) => { if (value === 'scramble' && selectedKeys.length < 2) return; setScoringRule(value); }}
-            options={[{ key: 'stroke', label: 'Stroke', sublabel: 'Individual' }, { key: 'scramble', label: 'Scramble', sublabel: selectedKeys.length < 2 ? '2+ players' : 'Teams' }]}
-          />
-          <Text style={styles.helperText}>{scoringRule === 'stroke' ? 'Everyone scores their own ball. Pick tees per player below.' : 'Move players between teams below. Each team shares a tee.'}</Text>
-        </GlassCard>
-        <GlassCard strong style={styles.card}>
-          <SectionLabel style={styles.firstSection} right={<Text style={styles.countText}>{selectedKeys.length}/{MAX_PLAYERS}</Text>}>Players</SectionLabel>
-          <View style={styles.searchBox}>
-            <Ionicons name="search" size={16} color={colors.textMuted} />
-            <TextInput style={styles.searchInput} value={query} onChangeText={setQuery} placeholder="Search friends or custom players" placeholderTextColor={colors.textMuted} autoCorrect={false} autoCapitalize="words" />
-            {searchActive ? <Pressable onPress={() => setQuery('')} hitSlop={8}><Ionicons name="close" size={16} color={colors.textMuted} /></Pressable> : null}
-          </View>
-          <View style={styles.selectedRail}>
-            {selectedKeys.map((key) => {
-              const name = resolveName(key); const isSelf = key === selfKey;
-              return <View key={key} style={[styles.selectedChip, isSelf && styles.selectedChipSelf]}><Avatar initial={name[0] ?? '?'} color={resolveColor(key)} size={24} circle /><Text style={styles.selectedChipText}>{isSelf ? 'You' : name}</Text>{!isSelf ? <Pressable onPress={() => removeSelected(key)} hitSlop={6}><Ionicons name="close" size={13} color={colors.textMuted} /></Pressable> : null}</View>;
-            })}
-          </View>
-          <Pressable style={({ pressed }) => [styles.addRow, searchActive && styles.addRowActive, atCap && styles.disabled, pressed && !atCap ? styles.pressed : null]} disabled={atCap} onPress={handleAddRowPress}>
-            <View style={styles.addIcon}><Ionicons name="add" size={18} color={searchActive ? colors.onNeon : colors.lime} /></View>
-            <Text style={[styles.addText, searchActive && styles.addTextActive]}>{searchActive ? `Add "${trimmedQuery}" as a custom player` : 'Add custom player'}</Text>
-          </Pressable>
-          <PlayerRow label={account.displayName || 'You'} sublabel="You" color={account.avatarColor} selected pinned onPress={() => undefined} styles={styles} colors={colors} />
-          {visibleFriends.length > 0 ? <SectionLabel>Friends</SectionLabel> : null}
+          <PlayerRow label={account.displayName || 'You'} sublabel="host" color={account.avatarColor} selected pinned onPress={() => undefined} styles={styles} colors={colors} self />
           {visibleFriends.map((entry) => <PlayerRowFriend key={entry.participantKey} entry={entry} resolver={resolver} selected={selectedKeys.includes(entry.participantKey)} atCap={atCap} onToggle={() => toggleSelected(entry.participantKey)} styles={styles} colors={colors} />)}
-          {visibleCustoms.length > 0 ? <SectionLabel>Custom players</SectionLabel> : null}
           {visibleCustoms.map((entry) => <PlayerRowCustom key={entry.participantKey} entry={entry} resolver={resolver} selected={selectedKeys.includes(entry.participantKey)} atCap={atCap} onToggle={() => toggleSelected(entry.participantKey)} onOpenMenu={(anchor) => setMenuTarget({ id: entry.customPlayerId, anchor })} styles={styles} colors={colors} />)}
           {emptyVisible ? <Text style={styles.emptyText}>No friends or custom players yet. Add a custom player to score with them today.</Text> : null}
-          {searchActive && visibleFriends.length === 0 && visibleCustoms.length === 0 ? <Text style={styles.emptyText}>No matches for “{trimmedQuery}”. Use the add row above.</Text> : null}
+          <Pressable style={({ pressed }) => [styles.addRow, atCap && styles.disabled, pressed && !atCap ? styles.pressed : null]} disabled={atCap} onPress={handleAddRowPress}>
+            <View style={styles.addIcon}><Ionicons name="add" size={18} color={colors.textMuted} /></View>
+            <Text style={styles.addText}>Add custom player</Text>
+          </Pressable>
         </GlassCard>
-        <GlassCard strong style={styles.card}>
-          <SectionLabel style={styles.firstSection}>{scoringRule === 'stroke' ? 'Tees' : 'Teams & tees'}</SectionLabel>
-          {scoringRule === 'stroke' ? (
-            <View style={styles.list}>
-              {selectedKeys.map((id) => {
-                const tee = teeIds[id] ? teeById.get(teeIds[id]!) : undefined;
-                return (
-                  <View key={id} style={styles.teeRow}>
-                    <Avatar initial={resolveName(id)[0] ?? '?'} color={resolveColor(id)} size={34} circle />
-                    <Text style={styles.teeName} numberOfLines={1}>{id === selfKey ? 'You' : resolveName(id)}</Text>
-                    {hasTees ? (
-                      <Pressable style={[styles.teePill, !tee && styles.teePillEmpty]} onPress={() => setPickerTarget(id)}>
-                        {tee ? <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} /> : null}
-                        <Text style={tee ? styles.teePillText : styles.teePillTextEmpty} numberOfLines={1}>{tee ? tee.name : '+ Tee'}</Text>
-                        <Ionicons name="chevron-down" size={13} color={colors.textMuted} />
-                      </Pressable>
-                    ) : <Text style={styles.noTeesText}>No tee data</Text>}
-                  </View>
-                );
-              })}
+
+        <SectionLabel>Tees</SectionLabel>
+        <Pressable disabled={!hasTees} onPress={() => setTeePickerOpen(true)} style={({ pressed }) => [pressed && hasTees ? styles.pressed : null]}>
+          <GlassSurface style={[styles.courseField, !hasTees && styles.disabled]} strong>
+            <Ionicons name="flag" size={18} color={colors.cyan} />
+            <View style={styles.courseCopy}>
+              <Text style={styles.courseMeta}>Tees</Text>
+              <View style={styles.teeValue}>
+                {selectedTee ? <View style={[styles.teeDot, { backgroundColor: teeSwatch(selectedTee, colors) }]} /> : null}
+                <Text style={[styles.courseName, !selectedTee && styles.placeholder]} numberOfLines={1}>{teeValue}</Text>
+              </View>
             </View>
-          ) : (
-            <ScrambleBody playerIds={selectedKeys} resolver={resolver} selfParticipantKey={selfParticipantKey} firstNameForSelf={selfFirstName} courseTees={courseTees} defaultTeeId={defaultTeeId} groups={scrambleGroups} setGroups={setScrambleGroups} teamIds={scrambleTeamIds} setTeamIds={setScrambleTeamIds} teeIdByTeam={scrambleTeeIdByTeam} setTeeIdByTeam={setScrambleTeeIdByTeam} />
-          )}
-        </GlassCard>
-        <GlassCard strong style={styles.card}>
-          <SectionLabel style={styles.firstSection}>Track stats</SectionLabel>
-          <Text style={styles.helperText}>Optional. Choose whose detail stats are recorded, then pick the stat chips.</Text>
-          <View style={styles.configCard}>
-            <Text style={styles.configCardLabel}>Track for</Text>
-            {scoringRule === 'scramble'
-              ? scrambleTeams.map((team, i) => <View key={team.id} style={i > 0 ? styles.toggleRowSep : null}><ToggleRow label={team.name} value={effectiveTrackedScorerIds.includes(team.id)} onToggle={() => toggleScorerId(team.id)} disabled={team.playerIds.length === 0} /></View>)
-              : selectedKeys.map((id, i) => <View key={id} style={i > 0 ? styles.toggleRowSep : null}><ToggleRow label={id === selfKey ? 'You' : resolveName(id)} value={effectiveTrackedScorerIds.includes(id)} onToggle={() => toggleScorerId(id)} leading={<Avatar initial={resolveName(id)[0] ?? '?'} color={resolveColor(id)} size={28} circle />} /></View>)}
-          </View>
-          {effectiveTrackedScorerIds.length > 0 ? <View style={styles.statChips}>{BUILT_IN_STATS.map((stat) => <StatChip key={stat.key} label={stat.label} state={enabledStatKeys.includes(stat.key) ? 'on' : 'neutral'} onPress={() => toggleStatKey(stat.key)} />)}</View> : null}
-        </GlassCard>
+            {hasTees ? <Ionicons name="chevron-forward" size={20} color={colors.textMuted} /> : null}
+          </GlassSurface>
+        </Pressable>
+
+        <SectionLabel>Track stats</SectionLabel>
+        <View style={styles.statChips}>
+          {STAT_OPTIONS.map((stat) => {
+            const selected = enabledStatKeys.includes(stat.key);
+            return <Pressable key={stat.key} onPress={() => toggleStatKey(stat.key)} style={({ pressed }) => [styles.statToggle, selected && styles.statToggleOn, pressed && styles.pressed]}><Text style={[styles.statMark, selected && styles.statMarkOn]}>{selected ? '✓' : '+'}</Text><Text style={[styles.statText, selected && styles.statTextOn]}>{stat.label}</Text></Pressable>;
+          })}
+        </View>
         {startError ? <Text style={styles.startError}>{startError}</Text> : null}
       </ScrollView>
       <View style={styles.footerWrap} pointerEvents="box-none">
@@ -318,7 +307,7 @@ export default function PlayersScreen() {
           <NeonButton label={starting ? 'Starting…' : 'Start round'} disabled={startDisabled} onPress={handleStart} iconRight={starting ? <ActivityIndicator color={colors.onNeon} /> : <Ionicons name="arrow-forward" size={17} color={colors.onNeon} />} />
         </GlassSurface>
       </View>
-      <TeePickerSheet visible={pickerTarget !== null && hasTees && scoringRule === 'stroke'} scorerName={pickerTarget ? resolveName(pickerTarget) : ''} tees={courseTees} selectedTeeId={pickerTarget ? teeIds[pickerTarget] : undefined} onCancel={() => setPickerTarget(null)} onPick={(teeId) => { if (!pickerTarget) return; setTeeIds((prev) => ({ ...prev, [pickerTarget]: teeId })); setPickerTarget(null); }} />
+      <TeePickerSheet visible={teePickerOpen && hasTees} scorerName="Round" tees={courseTees} selectedTeeId={selectedTeeId} onCancel={() => setTeePickerOpen(false)} onPick={(teeId) => { setRoundTeeId(teeId); setTeePickerOpen(false); }} />
       <NamePromptModal visible={namePromptOpen} value={namePromptValue} setValue={setNamePromptValue} inputRef={namePromptInputRef} onCancel={cancelNamePrompt} onSubmit={submitNamePrompt} styles={styles} colors={colors} />
       <CustomPlayerMenu target={menuTarget} onClose={() => setMenuTarget(null)} onDelete={(id) => void handleDeleteCustom(id)} styles={styles} />
     </View>
@@ -329,9 +318,13 @@ function CenteredSpinner({ label, styles, colors }: { label: string; styles: Row
   return <View style={styles.centered}><ActivityIndicator color={colors.lime} /><Text style={styles.loadingText}>{label}</Text></View>;
 }
 
+function ChoiceCard({ label, sublabel, selected, disabled, onPress, styles }: { label: string; sublabel: string; selected: boolean; disabled?: boolean; onPress: () => void; styles: RowStyles }) {
+  return <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.choiceCard, selected && styles.choiceCardSelected, disabled && styles.disabled, pressed && !disabled ? styles.pressed : null]}><Text style={[styles.choiceTitle, selected && styles.choiceTitleSelected]}>{label}</Text><Text style={styles.choiceSub}>{sublabel}</Text></Pressable>;
+}
+
 function PlayerRowFriend({ entry, resolver, selected, atCap, onToggle, styles, colors }: { entry: FriendEntry; resolver: ReturnType<typeof useParticipantResolver>; selected: boolean; atCap: boolean; onToggle: () => void; styles: RowStyles; colors: ThemeColors }) {
   const resolved = resolver.get(entry.participantKey);
-  return <PlayerRow label={resolved?.displayName || 'Player'} sublabel={resolved?.handle ? `@${resolved.handle}` : 'Friend'} color={resolved?.avatarColor || colors.cyan} selected={selected} disabled={!selected && atCap} onPress={onToggle} styles={styles} colors={colors} />;
+  return <PlayerRow label={resolved?.handle ? `@${resolved.handle}` : resolved?.displayName || 'Player'} sublabel="friend" color={resolved?.avatarColor || colors.cyan} selected={selected} disabled={!selected && atCap} onPress={onToggle} styles={styles} colors={colors} />;
 }
 
 function PlayerRowCustom({ entry, resolver, selected, atCap, onToggle, onOpenMenu, styles, colors }: { entry: CustomEntry; resolver: ReturnType<typeof useParticipantResolver>; selected: boolean; atCap: boolean; onToggle: () => void; onOpenMenu: (anchor: { x: number; y: number; width: number }) => void; styles: RowStyles; colors: ThemeColors }) {
@@ -339,15 +332,16 @@ function PlayerRowCustom({ entry, resolver, selected, atCap, onToggle, onOpenMen
   const dotsRef = useRef<View>(null);
   const openMenu = useCallback(() => { dotsRef.current?.measureInWindow((x, y, width) => onOpenMenu({ x, y, width })); }, [onOpenMenu]);
   const onDotsLayout = useCallback((_event: LayoutChangeEvent) => undefined, []);
-  return <PlayerRow label={resolved?.displayName || 'Player'} sublabel="Custom" color={resolved?.avatarColor || colors.violet} selected={selected} disabled={!selected && atCap} onPress={onToggle} styles={styles} colors={colors} right={<Pressable ref={dotsRef} onLayout={onDotsLayout} onPress={(event) => { event.stopPropagation(); openMenu(); }} hitSlop={8} style={styles.dotsBtn}><Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} /></Pressable>} />;
+  return <PlayerRow label={resolved?.displayName || 'Player'} sublabel="guest · custom player" color={resolved?.avatarColor || colors.violet} selected={selected} disabled={!selected && atCap} onPress={onToggle} styles={styles} colors={colors} right={<Pressable ref={dotsRef} onLayout={onDotsLayout} onPress={(event) => { event.stopPropagation(); openMenu(); }} hitSlop={8} style={styles.dotsBtn}><Ionicons name="ellipsis-vertical" size={18} color={colors.textMuted} /></Pressable>} />;
 }
 
-function PlayerRow({ label, sublabel, color, selected, pinned, disabled, onPress, styles, colors, right }: { label: string; sublabel: string; color: string; selected: boolean; pinned?: boolean; disabled?: boolean; onPress: () => void; styles: RowStyles; colors: ThemeColors; right?: React.ReactNode }) {
+function PlayerRow({ label, sublabel, color, selected, pinned, disabled, onPress, styles, colors, right, self }: { label: string; sublabel: string; color: string; selected: boolean; pinned?: boolean; disabled?: boolean; onPress: () => void; styles: RowStyles; colors: ThemeColors; right?: React.ReactNode; self?: boolean }) {
   return (
-    <Pressable onPress={onPress} disabled={disabled || pinned} style={({ pressed }) => [styles.player, selected && styles.playerSelected, disabled && styles.disabled, pressed && !disabled ? styles.pressed : null]}>
-      <View><Avatar initial={label[0] ?? '?'} color={color} size={38} circle />{selected ? <View style={styles.checkBadge}><Ionicons name="checkmark" size={10} color={colors.onNeon} /></View> : null}</View>
-      <View style={styles.playerInfo}><Text style={styles.playerName} numberOfLines={1}>{label}</Text><Text style={styles.playerMeta} numberOfLines={1}>{pinned ? 'Pinned' : sublabel}</Text></View>
-      {right ?? <Ionicons name={selected ? 'checkmark-circle' : 'ellipse-outline'} size={20} color={selected ? colors.lime : colors.textMuted} />}
+    <Pressable onPress={onPress} disabled={disabled || pinned} style={({ pressed }) => [styles.player, disabled && styles.disabled, pressed && !disabled ? styles.pressed : null]}>
+      <Avatar initial={label.replace('@', '')[0] ?? '?'} color={color} size={34} circle />
+      <View style={styles.playerInfo}><Text style={styles.playerName} numberOfLines={1}>{label}{self ? <Text style={styles.youText}> YOU</Text> : null}</Text><Text style={styles.playerMeta} numberOfLines={1}>{sublabel}</Text></View>
+      {right}
+      <View style={[styles.checkCircle, selected && styles.checkCircleOn]}><Ionicons name="checkmark" size={14} color={selected ? colors.onNeon : 'transparent'} /></View>
     </Pressable>
   );
 }
@@ -370,6 +364,10 @@ function NamePromptModal({ visible, value, setValue, inputRef, onCancel, onSubmi
 
 function CustomPlayerMenu({ target, onClose, onDelete, styles }: { target: { id: string; anchor: { x: number; y: number; width: number } } | null; onClose: () => void; onDelete: (id: string) => void; styles: RowStyles }) {
   return <Modal visible={target !== null} transparent animationType="fade" onRequestClose={onClose}><Pressable style={styles.menuBackdrop} onPress={onClose}>{target ? <GlassSurface strong style={[styles.menuPopover, { top: target.anchor.y + 28, left: Math.max(8, target.anchor.x - 140) }]}><Pressable style={({ pressed }) => [styles.menuItem, pressed && styles.pressed]} onPress={() => onDelete(target.id)}><Text style={styles.menuItemDanger}>Delete</Text></Pressable></GlassSurface> : null}</Pressable></Modal>;
+}
+
+function formatTeeValue(tee: Tee) {
+  return `${tee.name}${tee.totalYardage ? ` · ${tee.totalYardage.toLocaleString()} yds` : ''}`;
 }
 
 function syncGroupsToPlayers(groups: string[][], playerIds: string[]) {
@@ -398,6 +396,14 @@ function makeStyles(colors: ThemeColors) {
     courseCopy: { flex: 1, minWidth: 0 },
     courseName: { color: colors.textTitle, fontSize: 15, fontWeight: '900' },
     courseMeta: { color: colors.textMuted, fontSize: 12, fontWeight: '700', marginTop: 2 },
+    placeholder: { color: colors.textMuted },
+    inlineError: { color: colors.accent, fontSize: 11, fontWeight: '800', marginTop: 3 },
+    choiceRow: { flexDirection: 'row', gap: 9, marginBottom: 14 },
+    choiceCard: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: colors.glassStroke, backgroundColor: colors.glassFill, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 8 },
+    choiceCardSelected: { borderColor: colors.lime, backgroundColor: colors.glowLime },
+    choiceTitle: { color: colors.textTitle, fontSize: 14, fontWeight: '800' },
+    choiceTitleSelected: { color: colors.lime },
+    choiceSub: { color: colors.textMuted, fontSize: 10, fontWeight: '700', marginTop: 2 },
     card: { marginBottom: 14 },
     firstSection: { marginTop: 0 },
     helperText: { color: colors.textMuted, fontSize: 12.5, fontWeight: '600', lineHeight: 18, marginTop: 10 },
@@ -415,11 +421,14 @@ function makeStyles(colors: ThemeColors) {
     addTextActive: { color: colors.onNeon },
     list: { gap: 8 },
     player: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: colors.glassStroke, backgroundColor: colors.glassFill, borderRadius: 18, padding: 10, marginBottom: 8 },
+    youText: { color: colors.cyan, fontSize: 10, fontWeight: '900' },
     playerSelected: { borderColor: colors.lime, backgroundColor: colors.glowLime },
     playerInfo: { flex: 1, minWidth: 0 },
     playerName: { color: colors.textTitle, fontSize: 14, fontWeight: '900' },
     playerMeta: { color: colors.textMuted, fontSize: 11, fontWeight: '700', marginTop: 2 },
     checkBadge: { position: 'absolute', right: -3, bottom: -3, width: 16, height: 16, borderRadius: 8, backgroundColor: colors.lime, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.night },
+    checkCircle: { marginLeft: 'auto', width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.glassStroke, alignItems: 'center', justifyContent: 'center' },
+    checkCircleOn: { backgroundColor: colors.lime, borderColor: 'transparent' },
     dotsBtn: { padding: 6 },
     disabled: { opacity: 0.45 },
     pressed: { opacity: 0.76, transform: [{ scale: 0.99 }] },
@@ -429,6 +438,7 @@ function makeStyles(colors: ThemeColors) {
     teePill: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 999, backgroundColor: colors.glassFill2, borderWidth: 1, borderColor: colors.glassStroke, paddingHorizontal: 10, paddingVertical: 7, maxWidth: 128 },
     teePillEmpty: { backgroundColor: 'transparent', borderStyle: 'dashed' },
     teeDot: { width: 9, height: 9, borderRadius: 5, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.glassStroke },
+    teeValue: { flexDirection: 'row', alignItems: 'center', gap: 7 },
     teePillText: { flexShrink: 1, color: colors.textTitle, fontSize: 11, fontWeight: '900' },
     teePillTextEmpty: { color: colors.textMuted, fontSize: 11, fontWeight: '800' },
     noTeesText: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
@@ -436,6 +446,12 @@ function makeStyles(colors: ThemeColors) {
     configCardLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '900', letterSpacing: 1.2, textTransform: 'uppercase', marginTop: 8, marginBottom: 2 },
     toggleRowSep: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
     statChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+    statToggle: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, borderWidth: 1, borderColor: colors.glassStroke, backgroundColor: colors.glassFill, paddingVertical: 8, paddingHorizontal: 10 },
+    statToggleOn: { borderColor: colors.lime, backgroundColor: colors.glowLime },
+    statMark: { color: colors.textMuted, fontSize: 12, fontWeight: '900' },
+    statMarkOn: { color: colors.lime },
+    statText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+    statTextOn: { color: colors.textTitle },
     startError: { color: colors.accent, fontSize: 13, fontWeight: '800', textAlign: 'center', marginTop: 4, marginBottom: 10 },
     footerWrap: { position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center', paddingHorizontal: 12 },
     footer: { width: '100%', maxWidth: PHONE_MAX_WIDTH, padding: 10, borderRadius: 24 },

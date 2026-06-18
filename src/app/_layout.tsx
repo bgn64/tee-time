@@ -1,6 +1,8 @@
 import React from 'react';
+import { Platform } from 'react-native';
 import { Stack, ThemeProvider as NavThemeProvider, DarkTheme } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { enableScreens } from 'react-native-screens';
 import { QueryClientProvider } from '@tanstack/react-query';
 
 import { ScreenBackground } from '@/components/aurora';
@@ -8,6 +10,17 @@ import { queryClient } from '@/library/data/queryClient';
 import { startOutboxAutoFlush } from '@/library/data/writeOutbox';
 import { RoundProvider } from '@/library/golf/RoundContext';
 import { ThemeProvider, useTheme } from '@/library/theme/ThemeContext';
+
+// react-native-screens stays disabled on web by default, so the bottom-tab
+// navigator falls back to plain Views that merely z-index inactive scenes
+// behind the active one instead of unmounting them. With the single
+// transparent Aurora backdrop (scenes are transparent so the root gradient
+// shows through), those inactive scenes bleed through the active tab. Enabling
+// screens on web restores proper `display:none` hiding of inactive scenes
+// while keeping the transparent backdrop intact. No-op on native (already on).
+if (Platform.OS === 'web') {
+  enableScreens(true);
+}
 
 export default function RootLayout() {
   return (

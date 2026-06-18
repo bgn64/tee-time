@@ -25,7 +25,6 @@ import {
   type StatValueMap,
 } from '@/library/golf/builtInStats';
 import { holeScoreDisplay } from '@/library/golf/holeScoreDisplay';
-import { getHoleStats } from '@/library/golf/teeGrouping';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Hole, Round } from '@/types/golf';
@@ -100,12 +99,6 @@ export function HoleEditPane({
           : undefined;
         const teamMembers = isScramble ? s.members : undefined;
 
-        // Per-hole context for the meta line — same source as the
-        // viewing surface so the editing/viewing screens stay aligned.
-        const holeStats = s.tee
-          ? getHoleStats(s.tee, hole.number, hole)
-          : { par: hole.par, handicapIndex: hole.handicapIndex };
-
         return (
           <ScoreEntryAccordion
             key={s.id}
@@ -118,11 +111,6 @@ export function HoleEditPane({
             onPressTee={
               onPressTeeForScorer ? () => onPressTeeForScorer(s.id) : undefined
             }
-            holeContext={{
-              par: holeStats.par,
-              handicapIndex: holeStats.handicapIndex,
-              yardage: 'yardage' in holeStats ? holeStats.yardage : undefined,
-            }}
             holeNumber={hole.number}
             par={hole.par}
             strokes={strokes}

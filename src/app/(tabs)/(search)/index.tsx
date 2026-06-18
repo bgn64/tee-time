@@ -36,6 +36,7 @@ export default function SearchScreen() {
   const {
     searchProfiles,
     friends,
+    incomingRequests,
     outgoingRequests,
     hydrated
   } = useFriends();
@@ -123,7 +124,7 @@ export default function SearchScreen() {
   const trimmed = query.trim();
   const isSearching = trimmed.length >= MIN_QUERY_LEN;
   const showNoResults = isSearching && !loading && !error && results.length === 0;
-  const requestCount = outgoingRequests.length;
+  const incomingRequestCount = incomingRequests.length;
 
   return (
     <ScrollView
@@ -132,7 +133,6 @@ export default function SearchScreen() {
       keyboardShouldPersistTaps="handled">
       <GlassSurface strong glow style={styles.searchField}>
         <Ionicons name="search" size={18} color={colors.cyan} />
-        <Text style={styles.searchAt}>@</Text>
         <TextInput
           style={styles.searchInput}
           value={query}
@@ -176,7 +176,11 @@ export default function SearchScreen() {
       ) : (
         <>
           <SectionLabel
-            right={requestCount > 0 ? <Text style={styles.sectionMeta}>{requestCount} pending</Text> : null}>
+            right={
+              incomingRequestCount > 0
+                ? <Text style={styles.sectionMeta}>{incomingRequestCount} incoming</Text>
+                : null
+            }>
             Requests
           </SectionLabel>
           <IncomingRequestsBanner />
@@ -222,7 +226,7 @@ export default function SearchScreen() {
           ) : null}
           {friendRows.map((row) => {
             const meta = row.together > 0
-              ? `${row.displayName} · ${row.together} ${row.together === 1 ? 'round' : 'rounds'} together`
+              ? `${row.displayName} · ${row.together} ${row.together === 1 ? 'round' : 'rounds'}`
               : row.displayName;
             return (
               <Pressable
@@ -274,11 +278,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 14,
       height: 52,
       marginBottom: 8
-    },
-    searchAt: {
-      color: colors.textMuted,
-      fontWeight: '800',
-      fontSize: 16
     },
     searchInput: {
       flex: 1,
