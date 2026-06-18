@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<!--
+  Gallery index for the bias-free style explorations.
+  Each direction is a self-contained mockup driven only by the backend data
+  model (handles, avatar colors, courses, stroke/scramble, per-hole scores,
+  FIR/GIR/putts, likes & comments) — not by the current front-end.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tee Time — Style Explorations</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#16181d;
+    background:#0e1014;background-image:radial-gradient(900px 500px at 80% -10%,#1d2740,transparent 60%)}
+  .wrap{max-width:1180px;margin:0 auto;padding:54px 24px 90px}
+  header{color:#eef2f7;margin-bottom:8px}
+  header h1{font-size:30px;margin:0 0 8px;letter-spacing:-.5px}
+  header p{margin:0;color:#9aa6b6;max-width:760px;line-height:1.55;font-size:15px}
+  header .meta{margin-top:14px;font-size:12px;color:#6f7d90;letter-spacing:.3px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:22px;margin-top:30px}
+  .card{background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 20px 50px -30px #000;display:flex;flex-direction:column}
+  .prev{position:relative;height:300px;overflow:hidden;border-bottom:1px solid #eceef2;background:#111}
+  .prev iframe{position:absolute;top:0;left:0;width:1000px;height:820px;border:0;transform:scale(.36);transform-origin:top left}
+  .prev a.hit{position:absolute;inset:0;z-index:2}
+  .body{padding:16px 18px 18px}
+  .num{font-size:11px;font-weight:700;letter-spacing:2px;color:#aeb6c2}
+  .body h2{margin:3px 0 6px;font-size:19px;letter-spacing:-.3px}
+  .body p{margin:0 0 14px;color:#5c6470;font-size:13.5px;line-height:1.5}
+  .sw{display:flex;gap:6px;margin-bottom:14px}
+  .sw i{width:20px;height:20px;border-radius:6px;display:block;box-shadow:0 0 0 1px #0000000f inset}
+  .open{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:#0a6b3b;text-decoration:none}
+  .open:after{content:"→"}
+  footer{color:#6f7d90;font-size:12.5px;margin-top:40px;line-height:1.6}
+  code{background:#1a1f2b;color:#c6d2e2;padding:2px 6px;border-radius:5px;font-size:12px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Tee Time — five ways it could look</h1>
+      <p>Five bias-free visual directions for the golf app, each a self-contained mobile mockup of the
+      two signature screens: the social <b>Feed</b> and the live <b>Scoring</b> view. Every screen is driven
+      only by the backend data model — handles &amp; avatar colors, course snapshots, stroke vs. scramble,
+      per-hole scores, FIR / GIR / putts stats, and likes &amp; comments — with no reference to the current UI.</p>
+      <div class="meta">Tap a preview to open it full-size. Built to render offline (system font stacks, inline SVG).</div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="prev"><iframe src="01-editorial.html" scrolling="no" loading="lazy"></iframe><a class="hit" href="01-editorial.html" title="Open"></a></div>
+        <div class="body"><div class="num">01</div><h2>Editorial</h2>
+          <p>A golf-magazine in your pocket: warm paper, a serif voice, hairline rules and printed-page calm. Scores set like a headline.</p>
+          <div class="sw"><i style="background:#f1e9dc"></i><i style="background:#211d16"></i><i style="background:#b1461d"></i><i style="background:#2f5d3a"></i><i style="background:#9c7b3f"></i></div>
+          <a class="open" href="01-editorial.html">Open direction</a></div>
+      </div>
+
+      <div class="card">
+        <div class="prev"><iframe src="02-scoreboard.html" scrolling="no" loading="lazy"></iframe><a class="hit" href="02-scoreboard.html" title="Open"></a></div>
+        <div class="body"><div class="num">02</div><h2>Scoreboard</h2>
+          <p>Brutalist sport: near-black canvas, high-vis chartreuse, heavy caps and monospaced tabular digits. Reads like a stadium board.</p>
+          <div class="sw"><i style="background:#0b0b0c"></i><i style="background:#e2ff32"></i><i style="background:#37e6c8"></i><i style="background:#ff5a3c"></i><i style="background:#f4f4f0"></i></div>
+          <a class="open" href="02-scoreboard.html">Open direction</a></div>
+      </div>
+
+      <div class="card">
+        <div class="prev"><iframe src="03-heritage.html" scrolling="no" loading="lazy"></iframe><a class="hit" href="03-heritage.html" title="Open"></a></div>
+        <div class="body"><div class="num">03</div><h2>Heritage</h2>
+          <p>The members’ clubhouse: gold detailing on racing green, a monogram crest, classic serif. Formal, timeless, a touch ceremonial.</p>
+          <div class="sw"><i style="background:#0f3d2e"></i><i style="background:#f6f1e3"></i><i style="background:#b08a45"></i><i style="background:#7d3140"></i><i style="background:#caa860"></i></div>
+          <a class="open" href="03-heritage.html">Open direction</a></div>
+      </div>
+
+      <div class="card">
+        <div class="prev"><iframe src="04-aurora-glass.html" scrolling="no" loading="lazy"></iframe><a class="hit" href="04-aurora-glass.html" title="Open"></a></div>
+        <div class="body"><div class="num">04</div><h2>Aurora Glass</h2>
+          <p>A premium night-mode fitness app: frosted glass panels, neon lime &amp; cyan glow, a progress dial and oversized numerics. Expanded to six screens — feed, scoring, round detail, new round, friends &amp; profile.</p>
+          <div class="sw"><i style="background:#070a12"></i><i style="background:#b6ff3b"></i><i style="background:#39e6c6"></i><i style="background:#9d7bff"></i><i style="background:#1a2740"></i></div>
+          <a class="open" href="04-aurora-glass.html">Open direction</a></div>
+      </div>
+
+      <div class="card">
+        <div class="prev"><iframe src="05-swiss.html" scrolling="no" loading="lazy"></iframe><a class="hit" href="05-swiss.html" title="Open"></a></div>
+        <div class="body"><div class="num">05</div><h2>Swiss</h2>
+          <p>International typographic style: stark white, a strict grid, one red accent and ruthless restraint. The numbers do the talking.</p>
+          <div class="sw"><i style="background:#ffffff"></i><i style="background:#0a0a0a"></i><i style="background:#e8002d"></i><i style="background:#e6e6e6"></i><i style="background:#8c8c8c"></i></div>
+          <a class="open" href="05-swiss.html">Open direction</a></div>
+      </div>
+    </div>
+
+    <footer>
+      Files live in <code>mockups/explorations/</code>. Sample data is illustrative (Torrey Pines South, @marcus
+      scramble at −1 thru 12; @priya 82, @deshawn 76). These are throwaway design probes — none of them touch
+      or reference the existing app code.
+    </footer>
+  </div>
+</body>
+</html>

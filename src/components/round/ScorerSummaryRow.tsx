@@ -3,17 +3,11 @@
  * [hero score]` row used wherever a scorer needs a one-line header.
  *
  * Used by:
- *   - SummaryTabContent (one per scorer; meta line shows total tee
- *     yardage)
- *   - HolesTabContent (viewing; meta line shows per-hole context —
+ *   - HoleDetailSheet (viewing; meta line shows per-hole context —
  *     yardage · Par · Hcp — when `holeContext` is set)
- *   - ScoreEntryAccordion (Holes scoring; same per-hole context as
- *     the viewing surface, so the surfaces look identical)
- *
- * Pulling this row into a shared component is what keeps the
- * scoring and viewing Holes surfaces visually in sync — earlier they
- * each owned their own header (`ScorerRow` and `HoleContextSummary`),
- * which drifted apart in font, score size, and tee-display style.
+ *   - ScoreEntryAccordion (Holes scoring / edit; passes a short
+ *     `subtitleOverride` status — "to play" — instead of repeating
+ *     the course context the hole hero already shows)
  *
  * Pure presentational; the parent resolves the scorer's tee + hole
  * context + computes the running/final scoreText + tone.
@@ -69,6 +63,15 @@ type Props = {
    * becomes the tappable tee-change affordance.
    */
   holeContext?: HoleContext;
+  /**
+   * Replaces the tee / hole-context meta line entirely when set. The
+   * scoring + edit surfaces pass a short per-hole status here ("to
+   * play" when unscored) instead of repeating the course context the
+   * hole hero already shows above. `null` renders no meta line at all;
+   * `undefined` (the default) leaves the tee/hole-context behaviour for
+   * the viewing surfaces untouched.
+   */
+  subtitleOverride?: string | null;
 };
 
 export function ScorerSummaryRow({
@@ -80,6 +83,7 @@ export function ScorerSummaryRow({
   scoreSub,
   onPressTee,
   holeContext,
+  subtitleOverride,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -185,6 +189,16 @@ export function ScorerSummaryRow({
     );
   }
 
+  // The scoring / edit surfaces pass a per-hole status that supersedes
+  // the tee + hole-context line (the hole hero already shows the
+  // course context above, so repeating it per scorer is redundant).
+  const metaNode =
+    subtitleOverride !== undefined
+      ? subtitleOverride
+        ? <Text style={styles.statusText}>{subtitleOverride}</Text>
+        : null
+      : teeChip;
+
   return (
     <View style={styles.row}>
       <TeamAvatarCluster
@@ -196,7 +210,7 @@ export function ScorerSummaryRow({
         <Text style={styles.handle} numberOfLines={2}>
           {joinHandles(members)}
         </Text>
-        {teeChip}
+        {metaNode}
       </View>
       <View style={styles.scoreCol}>
         <Text
@@ -235,6 +249,12 @@ function makeStyles(colors: ThemeColors) {
       fontSize: 14,
       fontWeight: '800',
       color: colors.textTitle,
+    },
+    statusText: {
+      marginTop: 4,
+      fontSize: 11.5,
+      fontWeight: '600',
+      color: colors.textMuted,
     },
     teeChip: {
       marginTop: 4,

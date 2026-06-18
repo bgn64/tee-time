@@ -47,6 +47,7 @@ export type ProfileSummary = {
   handle: string;
   displayName: string;
   avatarColor: string;
+  createdAt?: string | null;
 };
 
 /**

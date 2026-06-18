@@ -33,6 +33,7 @@ import {
 } from 'react-native';
 
 import { ScoringRoundView } from '@/components/round/ScoringRoundView';
+import { PhoneFrame } from '@/components/aurora';
 import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
 import { useRoundDetail } from '@/library/golf/useRoundDetail';
 import { useRound } from '@/library/golf/RoundContext';
@@ -147,14 +148,16 @@ export default function EditRoundScreen() {
         }}
       />
 
-      <ScoringRoundView
-        round={round}
-        profileRoutePrefix="/(tabs)/(score)/profile"
-        currentHoleNumber={currentHoleNumber}
-        onChangeCurrentHole={setCurrentHoleNumber}
-        onChangeScore={handleChangeScore}
-        onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
-      />
+      <PhoneFrame>
+        <ScoringRoundView
+          round={round}
+          profileRoutePrefix="/(tabs)/(score)/profile"
+          currentHoleNumber={currentHoleNumber}
+          onChangeCurrentHole={setCurrentHoleNumber}
+          onChangeScore={handleChangeScore}
+          onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
+        />
+      </PhoneFrame>
 
       <TeePickerSheet
         visible={teeEditTarget != null}
@@ -194,7 +197,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: 'transparent',
     },
     fallback: {
       flex: 1,
@@ -202,7 +205,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       justifyContent: 'center',
       padding: 24,
       gap: 8,
-      backgroundColor: colors.background,
+      backgroundColor: 'transparent',
     },
     fallbackText: {
       color: colors.textBody,
@@ -223,13 +226,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     backCta: {
       marginTop: 14,
-      backgroundColor: colors.primary,
+      backgroundColor: colors.lime,
       paddingHorizontal: 18,
       paddingVertical: 10,
       borderRadius: 999,
     },
     backCtaText: {
-      color: '#fff',
+      color: colors.onNeon,
       fontWeight: '800',
       fontSize: 13,
       letterSpacing: 0.4,
@@ -240,7 +243,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginRight: 2,
     },
     headerDoneText: {
-      color: colors.primary,
+      color: colors.lime,
       fontSize: 15,
       fontWeight: '800',
     },

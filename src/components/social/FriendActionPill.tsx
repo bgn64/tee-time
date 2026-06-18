@@ -249,46 +249,55 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     anchor: { alignSelf: 'center' },
     pill: {
-      paddingVertical: 10,
-      paddingHorizontal: 22,
-      borderRadius: 24,
-      minWidth: 160,
+      paddingVertical: 9,
+      paddingHorizontal: 14,
+      borderRadius: 14,
+      minWidth: 112,
       alignItems: 'center',
       justifyContent: 'center'
     },
-    pillStranger: { backgroundColor: colors.primary },
-    pillOutgoing: {
-      backgroundColor: colors.cardBg,
+    pillStranger: {
+      backgroundColor: colors.lime,
       borderWidth: 1,
-      borderColor: colors.border
+      borderColor: colors.lime,
+      shadowColor: colors.lime,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.35,
+      shadowRadius: 16,
+      elevation: 5
+    },
+    pillOutgoing: {
+      backgroundColor: colors.glassFill2,
+      borderWidth: 1,
+      borderColor: colors.glassStroke
     },
     // Outlined green pill: signals "you're connected" without
     // competing visually with the bright "+ Add Friend" CTA, so the
     // friend ↔ stranger transition is unmistakable.
     pillFriend: {
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill2,
       borderWidth: 1,
-      borderColor: colors.primary
+      borderColor: colors.lime
     },
     pillPressed: { opacity: 0.7 },
     pillLabel: {
-      fontSize: 14,
+      fontSize: 12,
       fontWeight: '800',
       letterSpacing: 0.3
     },
-    pillLabelOnFill: { color: '#ffffff' },
+    pillLabelOnFill: { color: colors.onNeon },
     pillLabelOnSurface: { color: colors.textTitle },
-    pillLabelOnFriendSurface: { color: colors.primary },
+    pillLabelOnFriendSurface: { color: colors.lime },
     backdrop: {
       flex: 1,
       backgroundColor: 'rgba(0,0,0,0.001)'
     },
     popover: {
       position: 'absolute',
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill2,
       borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 10,
+      borderColor: colors.glassStroke,
+      borderRadius: 14,
       paddingVertical: 6,
       minWidth: 160,
       shadowColor: '#000',
@@ -302,7 +311,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 14,
       borderRadius: 6
     },
-    menuItemPressed: { backgroundColor: colors.chipBg },
+    menuItemPressed: { backgroundColor: colors.glassFill2 },
     menuItemText: {
       fontSize: 13,
       fontWeight: '700'

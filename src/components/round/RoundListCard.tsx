@@ -1,52 +1,32 @@
 /**
- * RoundListCard — at-a-glance card used by the home feed.
- *
- * Edge-to-edge tabbed surface:
- *
- *   1. `<CourseBanner>` — a deterministically generated course banner
- *      (gradient + motif, seeded per course) titled Instagram-style:
- *      the round owner's @handle on top, course · location beneath, and
- *      the small-caps meta (completed/live + relative time). A ⋯ overflow
- *      opens an anchored popover for round actions (View details; plus
- *      Edit, owner-only on completed rounds). Replaces the former
- *      `<EditorialHeader>`.
- *   2. `<SwipeableCardContent>` — a horizontally-swipeable band. Panes:
- *      Summary, then the scorecard split into Front 9 / Back 9 sections
- *      (a single Scorecard pane for one-nine rounds). Constant height
- *      (locked to the tallest pane), minimal dots, desktop-only hover
- *      edge arrows. When the round has tracked stats, scorecard hole
- *      numbers are pills and a caption opens the per-hole
- *      `<HoleDetailSheet>`; with no stats the numbers are plain text.
- *   3. `<RoundActionBar>` — Like + Comments (uniform on every round;
- *      Edit lives in the banner's ⋯ menu). Comments-tap opens the
- *      `<CommentsSheet>` modal hosted by this card.
- *
- * The card is intentionally NOT tappable as a whole. Everything is
- * shown inline now — the previous "tap to view details" hover affordance
- * was retired so the cards behave like static social-feed posts. Likes,
- * comments, and the banner ⋯ menu are the interactive surfaces; tabs are
- * used in place to read details.
+ * RoundListCard — static at-a-glance card used by the home feed.
  */
 
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { GlassCard, ProgressDial } from '@/components/aurora';
 import { CommentsSheet } from './CommentsSheet';
 import { CourseBanner } from './CourseBanner';
 import type { OverflowItem } from './HeaderOverflowMenu';
-import { HoleDetailSheet } from './HoleDetailSheet';
 import { RoundActionBar } from './RoundActionBar';
-import { SummaryTabContent } from './SummaryTabContent';
-import { SwipeableCardContent, type SwipePane } from './SwipeableCardContent';
-import { HorizontalScorecard } from '@/components/scoring/HorizontalScorecard';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import {
+  aggregateBinary,
+  aggregateInteger,
+} from '@/library/golf/aggregateHoleDetails';
+import { getStat } from '@/library/golf/builtInStats';
+import {
   formatRelativeTime,
+  formatScore,
+  getScorerProgress,
   holesInRange,
+  scorerIdForUser,
 } from '@/library/golf/scoring';
+import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
-import { useRoundStatEngagement } from '@/library/golf/useRoundStatEngagement';
+import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useAccount } from '@/library/social/AccountContext';
 import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -55,18 +35,7 @@ import type { Round } from '@/types/golf';
 
 type Props = {
   round: Round;
-  /**
-   * Route prefix for this card's detail screen, e.g.
-   * `/(tabs)/(home)/round` on the home feed or
-   * `/(tabs)/(score)/previous` on the Previous-rounds list. The "View
-   * details" overflow item pushes `${detailRoutePrefix}/${round.id}`.
-   */
   detailRoutePrefix: string;
-  /**
-   * Route prefix for the owner's profile in this card's tab stack, e.g.
-   * `/(tabs)/(home)/profile`. Tapping the header avatar/@handle pushes
-   * `${profileRoutePrefix}/${ownerUserId}` so it stays in this tab.
-   */
   profileRoutePrefix: string;
 };
 
@@ -85,15 +54,9 @@ export function RoundListCard({
   const { likedByMe, count: likeCount, toggle: toggleLike } = useRoundLikes(
     round.id
   );
-  const engagement = useRoundStatEngagement(round.id);
+  const { rows: detailsRows } = useRoundHoleDetails(round.id);
+  const scorers = useRoundScorers(round);
   const [sheetVisible, setSheetVisible] = useState(false);
-  const [holeSheetOpen, setHoleSheetOpen] = useState(false);
-  const [initialHole, setInitialHole] = useState(1);
-
-  function openHoleSheet(holeNumber: number) {
-    setInitialHole(holeNumber);
-    setHoleSheetOpen(true);
-  }
 
   const isInProgress = !round.completedAt;
   const timeText = formatRelativeTime(
@@ -106,25 +69,11 @@ export function RoundListCard({
   const onPressOwner = ownerUserId
     ? () => router.push(`${profileRoutePrefix}/${ownerUserId}` as never)
     : undefined;
-  // Edit affordance is owner-only for completed rounds. In-progress
-  // rounds resume editing via the scoring tab, not via the card.
   const isOwner =
     !!account?.userId && account.userId === (round.ownerUserId ?? '');
   const canEdit = isOwner && !isInProgress;
 
-  // Round-level actions live in the banner's ⋯ menu (not the footer, so
-  // the action bar stays uniform). "View details" opens the full
-  // round-detail screen (every card); Edit is owner-only on completed
-  // rounds. In-progress rounds resume editing via the scoring tab.
-  const overflowActions: OverflowItem[] = [
-    {
-      key: 'view',
-      label: 'View details',
-      icon: 'open-outline',
-      onPress: () =>
-        router.push(`${detailRoutePrefix}/${round.id}` as never),
-    },
-  ];
+  const overflowActions: OverflowItem[] = [];
   if (canEdit) {
     overflowActions.push({
       key: 'edit',
@@ -135,115 +84,207 @@ export function RoundListCard({
     });
   }
 
-  // Per-hole detail is only worth surfacing when the round actually has
-  // tracked stats — otherwise the sheet has nothing extra to show. With no
-  // stats the hole numbers render as plain (non-tappable) text and no
-  // caption is shown.
-  const hasStats = engagement.hasAny;
-  const onPressHole = hasStats ? openHoleSheet : undefined;
-
-  function holeCaption(holeNumber: number) {
-    if (!hasStats) return undefined;
-    return (
-      <Text style={styles.captionText}>
-        Tap a hole for detail — or start at{' '}
-        <Text
-          style={styles.captionLink}
-          onPress={() => openHoleSheet(holeNumber)}
-          accessibilityRole="button"
-          accessibilityLabel={`Open hole ${holeNumber} detail`}>
-          Hole {holeNumber}
-        </Text>
-        .
-      </Text>
-    );
-  }
-
-  // Split the scorecard into Front 9 / Back 9 content sections when the
-  // round spans both nines — keeps each feed card shorter. One-nine rounds
-  // (or 9-hole courses) get a single scorecard pane.
-  const hasBackNine = round.course.holes.some((h) => h.number > 9);
-  const splitNines = round.holeRange === 'all' && hasBackNine;
-
-  const panes: SwipePane[] = [
-    {
-      key: 'summary',
-      label: 'Summary',
-      content: <SummaryTabContent round={round} />,
-    },
-  ];
-
-  if (splitNines) {
-    const frontFirst =
-      holesInRange(round.course.holes, 'front9')[0]?.number ?? 1;
-    const backFirst =
-      holesInRange(round.course.holes, 'back9')[0]?.number ?? 10;
-    panes.push(
-      {
-        key: 'front',
-        label: 'Front 9',
-        content: (
-          <HorizontalScorecard
-            round={round}
-            layout="single"
-            range="front9"
-            onPressHoleDetail={onPressHole}
-            detailCaption={holeCaption(frontFirst)}
-          />
-        ),
-      },
-      {
-        key: 'back',
-        label: 'Back 9',
-        content: (
-          <HorizontalScorecard
-            round={round}
-            layout="single"
-            range="back9"
-            onPressHoleDetail={onPressHole}
-            detailCaption={holeCaption(backFirst)}
-          />
-        ),
+  const ruleLabel = round.scoringRule === 'scramble' ? 'Scramble' : 'Stroke';
+  const ownerKey = round.ownerUserId ? `user:${round.ownerUserId}` : null;
+  const coPlayers = useMemo(() => {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    for (const s of scorers) {
+      for (const m of s.members) {
+        if (ownerKey && m.id === ownerKey) continue;
+        if (seen.has(m.id)) continue;
+        seen.add(m.id);
+        names.push(m.handle ? `@${m.handle}` : m.name);
       }
-    );
-  } else {
-    const first =
-      holesInRange(round.course.holes, round.holeRange)[0]?.number ?? 1;
-    panes.push({
-      key: 'scorecard',
-      label: 'Scorecard',
-      content: (
-        <HorizontalScorecard
-          round={round}
-          layout="single"
-          range={round.holeRange}
-          onPressHoleDetail={onPressHole}
-          detailCaption={holeCaption(first)}
-        />
-      ),
-    });
-  }
+    }
+    return names;
+  }, [scorers, ownerKey]);
+  const withText =
+    coPlayers.length > 0
+      ? ` · with ${coPlayers.slice(0, 2).join(', ')}${
+          coPlayers.length > 2 ? ` +${coPlayers.length - 2}` : ''
+        }`
+      : '';
+  const descriptor = `${ruleLabel}${withText}`;
+
+  const visibleHoles = useMemo(
+    () => holesInRange(round.course.holes, round.holeRange),
+    [round.course.holes, round.holeRange]
+  );
+  const primaryScorerId =
+    (round.ownerUserId ? scorerIdForUser(round, round.ownerUserId) : undefined) ??
+    scorers[0]?.id;
+  const primaryScorer = scorers.find((s) => s.id === primaryScorerId);
+  const progress = getScorerProgress(round, primaryScorerId);
+  const hasScores = progress.thruCount > 0;
+  const totalHoles = visibleHoles.length || 18;
+  const scoreText = hasScores ? formatScore(progress.relativeScore) : 'E';
+  const progressColor = !hasScores
+    ? colors.cyan
+    : progress.relativeScore > 0
+      ? colors.accent
+      : progress.relativeScore < 0
+        ? colors.lime
+        : colors.cyan;
+  const teeMeta = primaryScorer?.tee?.name
+    ? `${primaryScorer.tee.name} tees`
+    : null;
+  const courseMeta = [
+    teeMeta,
+    hasScores
+      ? `thru ${progress.thruCount} of ${totalHoles}`
+      : `${totalHoles} holes`,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const legend = useMemo(() => {
+    if (!primaryScorerId) return [];
+    const fir = getStat('fir');
+    const gir = getStat('gir');
+    const putts = getStat('putts');
+    const items: { key: string; label: string; value: string; color: string }[] = [];
+    if (fir?.type === 'binary') {
+      const agg = aggregateBinary(detailsRows, primaryScorerId, fir, visibleHoles);
+      if (agg.denom > 0) {
+        items.push({
+          key: 'fir',
+          label: 'Fairways',
+          value: `${agg.num}/${agg.denom}`,
+          color: colors.lime,
+        });
+      }
+    }
+    if (gir?.type === 'binary') {
+      const agg = aggregateBinary(detailsRows, primaryScorerId, gir, visibleHoles);
+      if (agg.denom > 0) {
+        items.push({
+          key: 'gir',
+          label: 'Greens',
+          value: `${agg.num}/${agg.denom}`,
+          color: colors.cyan,
+        });
+      }
+    }
+    if (putts?.type === 'integer') {
+      const agg = aggregateInteger(detailsRows, primaryScorerId, putts, visibleHoles);
+      if (agg.taggedCount > 0) {
+        items.push({
+          key: 'putts',
+          label: 'Putts',
+          value: String(agg.sum),
+          color: colors.violet,
+        });
+      }
+    }
+    return items;
+  }, [
+    colors.cyan,
+    colors.lime,
+    colors.violet,
+    detailsRows,
+    primaryScorerId,
+    visibleHoles,
+  ]);
+
+  const stripHoles = visibleHoles.slice(0, 9);
+  const scoreByHole = useMemo(() => {
+    const map = new Map<number, number>();
+    if (!primaryScorerId) return map;
+    for (const score of round.scores) {
+      if (score.scorerId === primaryScorerId) {
+        map.set(score.holeNumber, score.strokes);
+      }
+    }
+    return map;
+  }, [primaryScorerId, round.scores]);
+  const openRound = () => router.push(`${detailRoutePrefix}/${round.id}` as never);
 
   return (
-    <View style={styles.card}>
+    <GlassCard padded={false} strong glow={isInProgress} style={styles.card}>
       <CourseBanner
         handle={ownerProfile?.handle}
         displayName={ownerProfile?.displayName}
         avatarColor={ownerProfile?.avatarColor}
         avatarSeed={round.ownerUserId}
         courseName={round.course.name}
+        subtitle={descriptor}
         timeText={timeText}
         isLive={isInProgress}
         onPressOwner={onPressOwner}
         overflowActions={overflowActions}
       />
-      <SwipeableCardContent panes={panes} />
+      <Pressable
+        onPress={openRound}
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${round.course.name} round`}>
+        <View style={styles.body}>
+          <Text style={styles.courseTitle} numberOfLines={2}>
+            {round.course.name}
+          </Text>
+          <Text style={styles.courseMeta} numberOfLines={1}>
+            {courseMeta}
+          </Text>
+          <View style={styles.ringRow}>
+            <ProgressDial
+              value={scoreText}
+              label="TO PAR"
+              fraction={progress.thruCount / totalHoles}
+              size={96}
+              progressColor={progressColor}
+            />
+            {legend.length > 0 ? (
+              <View style={styles.legend}>
+                {legend.map((item) => (
+                  <View key={item.key} style={styles.legendRow}>
+                    <View
+                      style={[
+                        styles.legendPill,
+                        { backgroundColor: item.color },
+                      ]}
+                    />
+                    <Text style={styles.legendLabel}>{item.label}</Text>
+                    <Text style={styles.legendValue}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.holes}>
+            {stripHoles.map((hole) => {
+              const strokes = scoreByHole.get(hole.number);
+              const birdie = typeof strokes === 'number' && strokes < hole.par;
+              return (
+                <View
+                  key={hole.number}
+                  style={[
+                    styles.holeCell,
+                    birdie ? styles.holeCellBirdie : null,
+                  ]}>
+                  <Text
+                    style={[
+                      styles.holeStrokes,
+                      birdie ? styles.holeStrokesBirdie : null,
+                      typeof strokes !== 'number'
+                        ? styles.holeStrokesEmpty
+                        : null,
+                    ]}>
+                    {typeof strokes === 'number' ? strokes : '–'}
+                  </Text>
+                  <Text style={styles.holeNumber}>{hole.number}</Text>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      </Pressable>
       <RoundActionBar
         liked={likedByMe}
         likeCount={likeCount}
         commentCount={commentCount}
         onToggleLike={toggleLike}
         onOpenComments={() => setSheetVisible(true)}
+        onOpenRound={openRound}
       />
       <CommentsSheet
         visible={sheetVisible}
@@ -252,35 +293,102 @@ export function RoundListCard({
         commentCount={commentCount}
         onClose={() => setSheetVisible(false)}
       />
-      <HoleDetailSheet
-        round={round}
-        visible={holeSheetOpen}
-        initialHole={initialHole}
-        onClose={() => setHoleSheetOpen(false)}
-      />
-    </View>
+    </GlassCard>
   );
 }
 
 function makeStyles(colors: ThemeColors) {
   return StyleSheet.create({
     card: {
-      backgroundColor: colors.cardBg,
-      // Edge-to-edge — no border, soft drop shadow only. The full-width
-      // shadow extends to the screen edges so the card lifts off the
-      // page background without a hard rectangle outline.
-      ...colors.shadowCard,
-      marginBottom: 14,
+      marginBottom: 16,
     },
-    captionText: {
-      fontSize: 13,
-      lineHeight: 19,
+    body: {
+      paddingHorizontal: 18,
+      paddingBottom: 14,
+    },
+    courseTitle: {
+      marginTop: 1,
+      color: colors.textTitle,
+      fontSize: 19,
+      fontWeight: '900',
+      letterSpacing: -0.2,
+    },
+    courseMeta: {
+      marginTop: 2,
+      color: colors.textMuted,
+      fontSize: 11.5,
+      fontWeight: '600',
+    },
+    ringRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+      marginVertical: 16,
+    },
+    legend: {
+      flex: 1,
+      minWidth: 0,
+    },
+    legendRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginVertical: 5,
+    },
+    legendPill: {
+      width: 9,
+      height: 9,
+      borderRadius: 3,
+    },
+    legendLabel: {
+      color: colors.textMuted,
+      fontSize: 12.5,
+      fontWeight: '600',
+    },
+    legendValue: {
+      color: colors.textTitle,
+      fontSize: 12.5,
+      fontWeight: '800',
+      fontVariant: ['tabular-nums'],
+    },
+    holes: {
+      flexDirection: 'row',
+      gap: 5,
+      marginTop: 1,
+      marginBottom: 2,
+    },
+    holeCell: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      borderRadius: 9,
+      backgroundColor: colors.glassFill2,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: 'transparent',
+    },
+    holeCellBirdie: {
+      backgroundColor: colors.glowLime,
+      borderColor: 'rgba(182, 255, 59, 0.32)',
+    },
+    holeStrokes: {
+      color: colors.textTitle,
+      fontSize: 12.5,
+      fontWeight: '800',
+      fontVariant: ['tabular-nums'],
+    },
+    holeStrokesBirdie: {
+      color: colors.lime,
+    },
+    holeStrokesEmpty: {
       color: colors.textMuted,
     },
-    captionLink: {
-      color: colors.primaryDark,
+    holeNumber: {
+      marginTop: 1,
+      color: colors.textMuted,
+      fontSize: 8.5,
       fontWeight: '800',
+      fontVariant: ['tabular-nums'],
     },
   });
 }
-

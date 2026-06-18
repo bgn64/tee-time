@@ -1,12 +1,9 @@
 /**
- * Rounds tab stack (folder name kept as `(score)` for now; tab label
- * is "Rounds").
+ * Score tab stack (folder name kept as `(score)`).
  *
- * Hub-led structure:
- *   index           — three-action hub (New round · Continue · Previous)
- *   new/index       — course picker (step 1 of the new-round flow)
- *   players         — step 2 of new-round flow
- *   format          — step 3 of new-round flow
+ * Score-tab structure:
+ *   index           — single New round form
+ *   new/index       — course picker
  *   scoring         — live scoring (locked once a round is in flight)
  *   previous/index  — completed-rounds list (absorbed from old Rounds tab)
  *   previous/[id]   — round detail (read-only)
@@ -46,12 +43,13 @@ export default function ScoreLayout() {
       screenOptions={{
         headerShown: true,
         header: (props) => <AppHeader {...props} />,
-        contentStyle: { backgroundColor: colors.background }
+        headerStyle: { backgroundColor: 'transparent' },
+        headerTintColor: colors.textTitle,
+        headerShadowVisible: false,
+        contentStyle: { backgroundColor: 'transparent' }
       }}>
-      <Stack.Screen name="index" options={{ title: 'Rounds' }} />
-      <Stack.Screen name="new/index" options={{ title: 'New round' }} />
-      <Stack.Screen name="players" options={{ title: 'Players' }} />
-      <Stack.Screen name="format" options={{ title: 'Format' }} />
+      <Stack.Screen name="index" options={{ title: 'New round' }} />
+      <Stack.Screen name="new/index" options={{ title: 'Choose course' }} />
       <Stack.Screen name="scoring" options={{ gestureEnabled: false }} />
       <Stack.Screen name="previous/index" options={{ title: 'Previous rounds' }} />
       <Stack.Screen name="previous/[id]" options={{ title: 'Round' }} />

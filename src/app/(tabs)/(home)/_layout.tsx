@@ -29,6 +29,8 @@
 import { Stack } from 'expo-router';
 
 import { AppHeader } from '@/components/AppHeader';
+import { HeaderAvatar } from '@/components/HeaderAvatar';
+import { ScreenBackground } from '@/components/aurora';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 export const unstable_settings = {
@@ -38,14 +40,22 @@ export const unstable_settings = {
 export default function HomeLayout() {
   const { colors } = useTheme();
   return (
-    <Stack
-      screenOptions={{
-        header: (props) => <AppHeader {...props} />,
-        contentStyle: { backgroundColor: colors.background }
-      }}>
-      <Stack.Screen name="index" options={{ title: 'Home' }} />
-      <Stack.Screen name="round/[id]" options={{ title: 'Round' }} />
-      <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
-    </Stack>
+    <ScreenBackground>
+      <Stack
+        screenOptions={{
+          header: (props) => <AppHeader {...props} />,
+          headerStyle: { backgroundColor: 'transparent' },
+          headerTintColor: colors.textTitle,
+          headerShadowVisible: false,
+          contentStyle: { backgroundColor: 'transparent' }
+        }}>
+        <Stack.Screen
+          name="index"
+          options={{ title: 'Tee·Time', headerRight: () => <HeaderAvatar /> }}
+        />
+        <Stack.Screen name="round/[id]" options={{ title: 'Round' }} />
+        <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
+      </Stack>
+    </ScreenBackground>
   );
 }

@@ -14,6 +14,7 @@
 import { useMemo } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { GlassSurface, NumericText } from '@/components/aurora';
 import { ScoreMark } from './ScoreMark';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -51,7 +52,7 @@ export function HoleJumpSheet({
           onPress={onClose}
           accessibilityLabel="Dismiss hole picker"
         />
-        <View style={styles.sheet}>
+        <GlassSurface strong glow style={styles.sheet}>
           <View style={styles.handleWrap}>
             <View style={styles.handle} />
           </View>
@@ -76,13 +77,13 @@ export function HoleJumpSheet({
                   onPress={() => onPick(hole.number)}
                   accessibilityRole="button"
                   accessibilityLabel={`Jump to hole ${hole.number}`}>
-                  <Text
+                  <NumericText
                     style={[
                       styles.cellHole,
                       isCurrent ? styles.cellHoleCurrent : null,
                     ]}>
                     Hole {hole.number}
-                  </Text>
+                  </NumericText>
                   <View style={styles.cellScoreWrap}>
                     <ScoreMark
                       strokes={strokes}
@@ -94,7 +95,7 @@ export function HoleJumpSheet({
               );
             })}
           </View>
-        </View>
+        </GlassSurface>
       </View>
     </Modal>
   );
@@ -111,9 +112,10 @@ function makeStyles(colors: ThemeColors) {
       backgroundColor: 'rgba(0,0,0,0.32)',
     },
     sheet: {
-      backgroundColor: colors.cardBg,
       borderTopLeftRadius: 22,
       borderTopRightRadius: 22,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
       paddingBottom: 24,
       maxHeight: '85%',
     },
@@ -171,10 +173,13 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 8,
       borderRadius: 12,
       backgroundColor: colors.chipBg,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
       gap: 6,
     },
     cellCurrent: {
-      backgroundColor: colors.primary,
+      backgroundColor: colors.glowLime,
+      borderColor: colors.lime,
     },
     cellHole: {
       fontSize: 11,
@@ -183,7 +188,7 @@ function makeStyles(colors: ThemeColors) {
       letterSpacing: 0.4,
     },
     cellHoleCurrent: {
-      color: colors.cardBg,
+      color: colors.lime,
     },
     cellScoreWrap: {
       alignItems: 'center',

@@ -26,6 +26,8 @@ import {
   View
 } from 'react-native';
 import { RoundDetailView } from '@/components/round/RoundDetailView';
+import { PHONE_MAX_WIDTH } from '@/components/aurora';
+import { HeaderOverflowMenu } from '@/components/round/HeaderOverflowMenu';
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
 import { useRefresh } from '@/library/data/useRefresh';
 import { useRoundDetail } from '@/library/golf/useRoundDetail';
@@ -55,6 +57,27 @@ export default function HomeRoundDetailScreen() {
   }, [id, router]);
 
   const { round, isLoading } = useRoundDetail(id ?? null);
+  const headerRight = React.useCallback(
+    () => (
+      <HeaderOverflowMenu
+        items={[
+          {
+            key: 'refresh',
+            label: 'Refresh round',
+            icon: 'refresh-outline',
+            onPress: () => void refresh(),
+          },
+          {
+            key: 'home',
+            label: 'Back to Home',
+            icon: 'home-outline',
+            onPress: () => router.replace('/(tabs)/(home)' as never),
+          },
+        ]}
+      />
+    ),
+    [refresh, router]
+  );
 
   // Diagnostic — logs round-completion transitions so we can rule
   // out (or in) a correlation between the round flipping to
@@ -114,7 +137,7 @@ export default function HomeRoundDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: round.course.name }} />
+      <Stack.Screen options={{ title: round.course.name, headerRight }} />
       <PullToRefreshScrollView
         onRefresh={refresh}
         style={styles.container}
@@ -132,9 +155,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background
+      backgroundColor: 'transparent'
     },
     content: {
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
       padding: 14,
       paddingBottom: 40
     },
@@ -144,7 +170,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       justifyContent: 'center',
       padding: 24,
       gap: 8,
-      backgroundColor: colors.background
+      backgroundColor: 'transparent'
     },
     fallbackText: {
       color: colors.textBody,
@@ -165,13 +191,13 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     backCta: {
       marginTop: 14,
-      backgroundColor: colors.primary,
+      backgroundColor: colors.lime,
       paddingHorizontal: 18,
       paddingVertical: 10,
       borderRadius: 999
     },
     backCtaText: {
-      color: '#fff',
+      color: colors.onNeon,
       fontWeight: '800',
       fontSize: 13,
       letterSpacing: 0.4

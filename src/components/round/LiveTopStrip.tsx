@@ -63,7 +63,7 @@ export function LiveTopStrip({ style }: Props) {
 
   return (
     <LinearGradient
-      colors={[colors.primaryDark, colors.primary, colors.primaryDark]}
+      colors={[colors.cyan, colors.lime, colors.violet]}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 0 }}
       style={[styles.strip, style]}
@@ -89,7 +89,7 @@ function makeStyles(colors: ThemeColors) {
     strip: {
       height: 6,
       overflow: 'hidden',
-      backgroundColor: colors.primary,
+      backgroundColor: colors.lime,
     },
     shine: {
       position: 'absolute',

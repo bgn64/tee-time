@@ -3,25 +3,22 @@
  * Holes tab. (Name is historical; there is no longer an accordion.)
  * Everything renders inline:
  *
- *   [ScorerSummaryRow with per-hole context + per-hole hero score]
- *   [ScoreChipRow]
- *   [HoleDetailRow × N]   one per stat that's enabled for this
- *                         round AND applies to this hole's par.
- *                         Only renders when the scorer is in the
- *                         round's `trackedScorerIds`.
+ *   [ScorerSummaryRow with per-hole status + per-hole hero score]
+ *   [ScoreChipRow stepper]
+ *   [EditableHoleStats]   compact "Stats" chip row — one tappable
+ *                         chip per stat that's enabled for this round
+ *                         AND applies to this hole's par. Only renders
+ *                         when the scorer is in the round's
+ *                         `trackedScorerIds`.
  *   [Whose shots]         scramble only.
  */
 
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-import { HoleDetailRow } from './HoleDetailRow';
+import { EditableHoleStats } from './EditableHoleStats';
 import { ScoreChipRow } from './ScoreChipRow';
-import {
-  ScorerSummaryRow,
-  type HoleContext,
-  type ScoreTone,
-} from './ScorerSummaryRow';
+import { ScorerSummaryRow, type ScoreTone } from './ScorerSummaryRow';
 import { ShotPicker } from '@/components/scoring/ShotPicker';
 import { type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import type {
@@ -45,13 +42,6 @@ type Props = {
   scoreSub?: string;
   tee?: Tee;
   onPressTee?: () => void;
-  /**
-   * Per-hole context (yardage · par · hcp) for the meta line under
-   * the name. Wired by `ScoringHolesBody` from the focused hole's
-   * row + the scorer's tee, so the editing surface looks identical
-   * to the viewing surface (`HolesTabContent`).
-   */
-  holeContext?: HoleContext;
 
   // Score-chip props (current hole context)
   holeNumber: number;
@@ -61,9 +51,9 @@ type Props = {
 
   /**
    * Stats that apply to this scorer + hole (filtered upstream by
-   * the round's enabled set + hole par). Renders one `HoleDetailRow`
-   * per entry, in registry order. Empty array hides the entire
-   * stat section.
+   * the round's enabled set + hole par). Rendered as the compact
+   * `EditableHoleStats` chip row, in registry order. Empty array
+   * hides the entire stat section.
    */
   applicableStats: readonly StatDefinition[];
   /** Per-stat values for this (scorer, hole) tuple. */
@@ -87,9 +77,6 @@ export function ScoreEntryAccordion({
   scoreTone,
   scoreSub,
   tee,
-  onPressTee,
-  holeContext,
-  holeNumber,
   par,
   strokes,
   onChange,
@@ -121,13 +108,10 @@ export function ScoreEntryAccordion({
         scoreText={scoreText}
         tone={scoreTone}
         scoreSub={scoreSub}
-        onPressTee={onPressTee}
-        holeContext={holeContext}
+        subtitleOverride={strokes == null ? 'to play' : null}
       />
       {onChange ? (
         <ScoreChipRow
-          scorerName={name}
-          holeNumber={holeNumber}
           par={par}
           strokes={strokes}
           onChange={onChange}
@@ -135,18 +119,13 @@ export function ScoreEntryAccordion({
       ) : null}
       {showStatSection ? (
         <View style={styles.statSection}>
-          {hasStats
-            ? applicableStats.map((stat) => (
-                <HoleDetailRow
-                  key={stat.key}
-                  stat={stat}
-                  value={values[stat.key] ?? null}
-                  onChange={(next) =>
-                    onChangeStat?.(stat.key, next)
-                  }
-                />
-              ))
-            : null}
+          {hasStats && onChangeStat ? (
+            <EditableHoleStats
+              stats={applicableStats}
+              values={values}
+              onChangeStat={onChangeStat}
+            />
+          ) : null}
           {showShotPicker ? (
             <View style={styles.shotsGroup}>
               <Text style={styles.shotsLabel}>WHOSE SHOTS</Text>
@@ -171,10 +150,10 @@ function makeStyles(colors: ThemeColors) {
       paddingBottom: 14,
       gap: 12,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
+      borderTopColor: colors.glassStroke,
     },
     statSection: {
-      gap: 8,
+      gap: 10,
     },
     shotsGroup: {
       marginTop: 4,

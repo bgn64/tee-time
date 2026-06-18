@@ -23,10 +23,12 @@ import { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ScorerRow } from './ScorerRow';
+import { GlassCard } from '@/components/aurora';
 import { findTee } from '@/library/golf/courseHelpers';
 import { formatScore, playerProgress } from '@/library/golf/scoring';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useTheme } from '@/library/theme/ThemeContext';
+import { auroraAvatarColor } from '@/library/social/avatarColors';
 import type { AvatarMember } from '@/components/scoring/TeamAvatarCluster';
 import type { Round, Tee } from '@/types/golf';
 
@@ -53,7 +55,6 @@ export function ScorerStack({
   isEditing,
   currentHoleNumber,
   onChangeScore,
-  onPressTeeForScorer,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -79,7 +80,7 @@ export function ScorerStack({
           return {
             id: pid,
             name: r?.displayName || 'Player',
-            color: r?.avatarColor || colors.primary,
+            color: r?.avatarColor ? auroraAvatarColor(r.avatarColor) : colors.primary,
           };
         });
         return { id: team.id, name: team.name, members };
@@ -88,7 +89,7 @@ export function ScorerStack({
     return (round.playerIds ?? []).map((pid) => {
       const r = resolver.get(pid);
       const name = r?.displayName || 'Player';
-      const color = r?.avatarColor || colors.primary;
+      const color = r?.avatarColor ? auroraAvatarColor(r.avatarColor) : colors.primary;
       return {
         id: pid,
         name,
@@ -115,7 +116,7 @@ export function ScorerStack({
   }
 
   return (
-    <View style={styles.card}>
+    <GlassCard style={styles.card}>
       {scorers.map((s, i) => {
         const progress = playerProgress(round, s.id);
         const hasScores = progress.thru > 0;
@@ -157,11 +158,6 @@ export function ScorerStack({
               runningTone={tone}
               thruText={thruText}
               tee={resolveScorerTee(s.id)}
-              onPressTee={
-                isEditing && onPressTeeForScorer
-                  ? () => onPressTeeForScorer(s.id)
-                  : undefined
-              }
               isEditing={isEditing}
               holeNumber={currentHoleNumber ?? 0}
               par={currentHole?.par ?? 0}
@@ -175,22 +171,19 @@ export function ScorerStack({
           </View>
         );
       })}
-    </View>
+    </GlassCard>
   );
 }
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     card: {
-      backgroundColor: colors.cardBg,
-      borderRadius: 14,
-      borderWidth: 1,
-      borderColor: colors.border,
+      borderRadius: 18,
       padding: 10,
     },
     sep: {
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.border,
+      borderTopColor: colors.glassStroke,
       marginTop: 3,
       paddingTop: 3,
     },

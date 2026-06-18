@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<!--
+  Exploration 02 — "Scoreboard"
+  Brutalist sport aesthetic: near-black canvas, high-visibility chartreuse,
+  heavy grotesk caps, tabular monospaced digits, thick rules. Reads like a
+  stadium scoreboard / run-club app. Same backend model as 01.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tee Time — Scoreboard</title>
+<style>
+  :root{
+    --bg:#0b0b0c; --panel:#141417; --line:#26262b; --ink:#f4f4f0; --muted:#8a8a93;
+    --hi:#e2ff32; --red:#ff5a3c; --cy:#37e6c8;
+    --mono:ui-monospace,"SF Mono","Roboto Mono",Menlo,Consolas,monospace;
+    --grot:"Arial Black","Helvetica Neue",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#000;font-family:system-ui,sans-serif;color:var(--ink)}
+  .stage{display:flex;flex-wrap:wrap;gap:46px;justify-content:center;padding:56px 24px 80px}
+  .cap{width:100%;text-align:center;color:#9a9a9a;font-family:var(--mono);font-size:12px;letter-spacing:1px;margin:0 0 8px}
+  .phone{width:384px;height:812px;background:var(--bg);border-radius:40px;overflow:hidden;
+    display:flex;flex-direction:column;box-shadow:0 0 0 11px #1c1c1f,0 0 0 12px #000,0 40px 80px -28px #000}
+  .bar{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .dot{display:flex;gap:5px}.dot i{width:6px;height:6px;border-radius:50%;background:#444;display:block}
+  .screen{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .scrim{flex:1;overflow:hidden}
+
+  .top{display:flex;align-items:center;justify-content:space-between;padding:8px 22px 16px}
+  .logo{font-family:var(--grot);font-weight:900;font-size:20px;letter-spacing:-1px;text-transform:uppercase}
+  .logo b{color:var(--hi)}
+  .ch{font-family:var(--mono);font-size:11px;color:var(--muted);border:1px solid var(--line);padding:5px 9px;border-radius:20px}
+
+  .label{font-family:var(--mono);font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--muted);padding:0 22px;margin:6px 0 10px;display:flex;justify-content:space-between}
+  .label b{color:var(--hi)}
+
+  .board{margin:0 16px 16px;background:var(--panel);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+  .bhead{display:flex;align-items:center;gap:11px;padding:15px 16px;border-bottom:1px solid var(--line)}
+  .av{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-family:var(--grot);font-weight:900;color:#000;font-size:15px}
+  .hand{font-family:var(--grot);font-weight:900;font-size:15px;letter-spacing:-.3px;text-transform:uppercase}
+  .sub{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.5px;margin-top:2px}
+  .livep{margin-left:auto;display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;letter-spacing:2px;color:#000;background:var(--red);padding:5px 9px;border-radius:6px;font-weight:700}
+  .livep b{width:6px;height:6px;border-radius:50%;background:#000;display:block;animation:b .9s steps(2) infinite}
+  @keyframes b{50%{opacity:0}}
+
+  .bmain{display:flex;align-items:stretch}
+  .bscore{flex:0 0 142px;padding:16px;border-right:1px solid var(--line);text-align:center;display:flex;flex-direction:column;justify-content:center}
+  .bscore .v{font-family:var(--mono);font-size:62px;font-weight:700;line-height:.9;color:var(--hi);letter-spacing:-3px}
+  .bscore .u{font-family:var(--mono);font-size:10px;letter-spacing:3px;color:var(--muted);margin-top:8px;text-transform:uppercase}
+  .bgrid{flex:1;display:grid;grid-template-columns:repeat(3,1fr);align-content:center;gap:1px;background:var(--line)}
+  .cell{background:var(--panel);padding:13px 6px;text-align:center}
+  .cell .n{font-family:var(--mono);font-size:19px;font-weight:700}
+  .cell .n.hi{color:var(--cy)}
+  .cell .k{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;color:var(--muted);text-transform:uppercase;margin-top:3px}
+  .strip{display:flex;border-top:1px solid var(--line)}
+  .strip div{flex:1;text-align:center;padding:9px 0;font-family:var(--mono);font-size:13px;border-right:1px solid var(--line);font-weight:700}
+  .strip div:last-child{border-right:0}
+  .strip div small{display:block;font-size:8px;color:var(--muted);font-weight:400}
+  .strip div.bird{color:var(--hi)}
+  .bfoot{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line);align-items:center}
+  .react{font-family:var(--mono);font-size:12px;color:var(--ink);display:flex;align-items:center;gap:7px;background:#1d1d21;border:1px solid var(--line);padding:7px 11px;border-radius:8px}
+  .react.liked{color:var(--hi);border-color:#43471e;background:#23260f}
+  .open{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--hi);letter-spacing:1px}
+
+  .mini{margin:0 16px 12px;display:flex;align-items:center;gap:13px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 15px}
+  .mini .v{font-family:var(--mono);font-size:26px;font-weight:700;min-width:58px}
+  .mini .v small{font-size:11px;color:var(--muted)}
+  .mini .c{font-family:var(--grot);font-weight:900;font-size:13px;text-transform:uppercase;letter-spacing:-.2px}
+  .mini .m{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:3px}
+  .mini .lk{margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+  .tabs{display:flex;background:#000;border-top:1px solid var(--line)}
+  .tabs a{flex:1;text-align:center;padding:12px 0 24px;font-family:var(--mono);font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);text-decoration:none}
+  .tabs a .ic{display:block;font-size:16px;margin-bottom:5px;color:#55555c}
+  .tabs a.on{color:var(--hi)}.tabs a.on .ic{color:var(--hi)}
+
+  /* scoring */
+  .sb{margin:6px 16px 0;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+  .sb .c{font-family:var(--grot);font-weight:900;font-size:18px;text-transform:uppercase;letter-spacing:-.4px}
+  .sb .m{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:1px;margin-top:4px}
+  .holebar{display:flex;align-items:center;gap:14px;margin:18px 16px 6px}
+  .holebar .hn{font-family:var(--mono);font-weight:700;font-size:54px;color:var(--hi);line-height:.85;letter-spacing:-3px}
+  .holebar .par{font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:1px;line-height:1.5}
+  .holebar .tot{margin-left:auto;text-align:right;font-family:var(--mono)}
+  .holebar .tot b{font-size:30px;font-weight:700;color:var(--cy)}
+  .holebar .tot span{display:block;font-size:9px;letter-spacing:2px;color:var(--muted)}
+  .prow{display:flex;align-items:center;gap:12px;margin:0 16px;padding:15px 0;border-bottom:1px solid var(--line)}
+  .prow .hand2{font-family:var(--grot);font-weight:900;font-size:14px;text-transform:uppercase}
+  .prow .s2{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
+  .stp{margin-left:auto;display:flex;align-items:center;gap:0;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .stp button{width:42px;height:44px;background:#1d1d21;border:0;color:var(--ink);font-size:22px;font-family:var(--mono);cursor:pointer}
+  .stp .v{width:46px;text-align:center;font-family:var(--mono);font-weight:700;font-size:24px;background:#000}
+  .tg{display:flex;gap:9px;flex-wrap:wrap;margin:16px 16px 4px}
+  .tog{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:10px 13px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--muted);display:flex;gap:8px;align-items:center}
+  .tog b{font-weight:700}
+  .tog.yes{border-color:#43471e;background:#23260f;color:var(--hi)}
+  .tog.nope{border-color:#4a241c;background:#260f0c;color:var(--red)}
+  .nv{display:flex;gap:10px;margin:18px 16px}
+  .nv button{flex:1;padding:16px;border-radius:11px;border:1px solid var(--line);background:var(--panel);color:var(--ink);font-family:var(--grot);font-weight:900;font-size:13px;text-transform:uppercase;letter-spacing:.5px;cursor:pointer}
+  .nv button.go{background:var(--hi);color:#000;border-color:var(--hi)}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <p class="cap">// EXPLORATION 02 — "SCOREBOARD": stadium contrast, monospaced digits, sport-app urgency</p>
+
+    <!-- FEED -->
+    <div class="phone"><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><div class="logo">TEE<b>·</b>TIME</div><div class="ch">3 friends live</div></div>
+        <div class="label"><span>The Feed</span><b>LIVE</b></div>
+
+        <div class="board">
+          <div class="bhead"><span class="av" style="background:#7cb342">M</span>
+            <div><div class="hand">@marcus</div><div class="sub">TORREY PINES — SOUTH · SCRAMBLE</div></div>
+            <span class="livep"><b></b>LIVE</span></div>
+          <div class="bmain">
+            <div class="bscore"><div class="v">−1</div><div class="u">thru 12</div></div>
+            <div class="bgrid">
+              <div class="cell"><div class="n hi">9/14</div><div class="k">FIR</div></div>
+              <div class="cell"><div class="n hi">11/18</div><div class="k">GIR</div></div>
+              <div class="cell"><div class="n">27</div><div class="k">PUTTS</div></div>
+              <div class="cell"><div class="n">2</div><div class="k">BIRDIE</div></div>
+              <div class="cell"><div class="n">1</div><div class="k">EAGLE</div></div>
+              <div class="cell"><div class="n">0</div><div class="k">O.B.</div></div>
+            </div>
+          </div>
+          <div class="strip">
+            <div>4<small>H1</small></div><div class="bird">3<small>H2</small></div><div>4<small>H3</small></div>
+            <div>5<small>H4</small></div><div>4<small>H5</small></div><div class="bird">2<small>H6</small></div>
+            <div>4<small>H7</small></div><div>5<small>H8</small></div><div>3<small>H9</small></div>
+          </div>
+          <div class="bfoot">
+            <span class="react liked">♥ 8</span><span class="react">▢ 3</span>
+            <span class="open">VIEW CARD →</span>
+          </div>
+        </div>
+
+        <div class="label" style="margin-top:6px"><span>Final · today</span></div>
+        <div class="mini"><div class="v">82<small>+10</small></div>
+          <div><div class="c">Aldwood Links</div><div class="m">@priya · STROKE · 18</div></div>
+          <span class="lk">♥ 12</span></div>
+        <div class="mini"><div class="v">76<small>+4</small></div>
+          <div><div class="c">Bethpage Black</div><div class="m">@deshawn · STROKE · CAREER LOW</div></div>
+          <span class="lk">♥ 21</span></div>
+      </div>
+      <div class="tabs"><a class="on"><span class="ic">▦</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Find</a><a><span class="ic">◉</span>You</a></div></div>
+    </div>
+
+    <!-- SCORING -->
+    <div class="phone"><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><div class="logo">SCORING</div><div class="ch">AUTOSAVE ●</div></div>
+        <div class="sb"><div class="c">Torrey Pines — South</div><div class="m">SCRAMBLE · BLUE 6,602Y · @marcus + @priya</div></div>
+        <div class="holebar"><span class="hn">07</span>
+          <span class="par">PAR 4<br>412 YDS<br>HCP 5</span>
+          <span class="tot"><b>−1</b><span>RUNNING</span></span></div>
+        <div class="prow"><span class="av" style="background:#7cb342">M</span>
+          <div><div class="hand2">@marcus</div><div class="s2">DRIVE · 286Y</div></div>
+          <div class="stp"><button>−</button><span class="v">4</span><button>+</button></div></div>
+        <div class="prow"><span class="av" style="background:#5c6bc0">P</span>
+          <div><div class="hand2">@priya</div><div class="s2">APPROACH · 8I</div></div>
+          <div class="stp"><button>−</button><span class="v">5</span><button>+</button></div></div>
+        <div class="label" style="margin-top:16px"><span>Stats · hole 7</span></div>
+        <div class="tg">
+          <span class="tog yes"><b>✓</b>FAIRWAY</span><span class="tog nope"><b>✗</b>GREEN</span>
+          <span class="tog"><b>2</b>PUTTS</span><span class="tog"><b>0</b>O.B.</span></div>
+        <div class="nv"><button>‹ PREV</button><button class="go">NEXT ›</button></div>
+      </div>
+      <div class="tabs"><a><span class="ic">▦</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Find</a><a><span class="ic">◉</span>You</a></div></div>
+    </div>
+  </div>
+</body>
+</html>

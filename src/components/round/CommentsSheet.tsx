@@ -87,10 +87,12 @@ function makeStyles(colors: ThemeColors) {
     },
     backdrop: {
       ...StyleSheet.absoluteFill,
-      backgroundColor: 'rgba(0,0,0,0.32)',
+      backgroundColor: 'rgba(0,0,0,0.46)',
     },
     sheet: {
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill2,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
       borderTopLeftRadius: 22,
       borderTopRightRadius: 22,
       maxHeight: '85%',
@@ -105,7 +107,7 @@ function makeStyles(colors: ThemeColors) {
       width: 40,
       height: 5,
       borderRadius: 3,
-      backgroundColor: colors.border,
+      backgroundColor: colors.glassStroke,
     },
     head: {
       flexDirection: 'row',
@@ -113,7 +115,7 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 18,
       paddingBottom: 12,
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.hairline,
+      borderBottomColor: colors.glassStroke,
     },
     title: {
       fontSize: 16,

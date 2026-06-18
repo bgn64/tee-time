@@ -1,31 +1,9 @@
 /**
- * ProfileScreen — read-only profile body shared by every entry
- * point that displays a single user (search/profile, score/profile,
- * you/profile, you/index).
- *
- * Layout (mostly identical regardless of viewer):
- *
- *   · Avatar circle + display name + @handle
- *   · FriendActionPill (hidden when viewing your own profile)
- *   · Stats card:
- *       OWN:    [Friends N] (tappable when onPressFriends given)
- *             + [Rounds played N]
- *       OTHER:  [Rounds together N]   (count is computed entirely
- *                                       from scorecards already
- *                                       synced to your device — see
- *                                       useScorecardStats for the
- *                                       accuracy ceiling)
- *   · Sign-out button (own only)
- *
- * `onPressFriends` is provided by the You-tab landing so the
- * Friends stat drills to `(you)/friends`. Other consumers leave it
- * undefined and the count renders non-interactive (or is hidden, see
- * below — currently we hide non-self friend counts entirely because
- * other users' friendships aren't synced and the count would always
- * be 0).
+ * ProfileScreen — shared Aurora profile body for every social entry point.
  */
 
 import React from 'react';
+import { router } from 'expo-router';
 import {
   ActivityIndicator,
   Pressable,
@@ -34,39 +12,96 @@ import {
   View
 } from 'react-native';
 
-import { signOut } from '@/library/supabase/auth';
+import { Avatar, GlassCard, NeonButton, NumericText, PHONE_MAX_WIDTH, SectionLabel, StatTile } from '@/components/aurora';
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
 import { useRefresh } from '@/library/data/useRefresh';
-import { useRequiredAccount } from '@/library/social/AccountContext';
-import { useFriends, useProfile } from '@/library/social/FriendsContext';
+import { holesInRange, scoreForRoundsList, scorerIdForUser, formatRelativeTime, formatScore } from '@/library/golf/scoring';
+import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
+import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useScorecardStats } from '@/library/golf/useScorecardStats';
+import { userParticipantKey } from '@/library/golf/participantKey';
+import { useRequiredAccount } from '@/library/social/AccountContext';
+import { useProfile } from '@/library/social/FriendsContext';
+import { signOut } from '@/library/supabase/auth';
 import { useTheme } from '@/library/theme/ThemeContext';
+import type { Round } from '@/types/golf';
 import { FriendActionPill } from './FriendActionPill';
 
 type Props = {
   userId: string;
-  /** Provided by the You-tab landing so the Friends stat is tappable.
-   * Other entry points omit this; the stat then renders non-interactive
-   * (only relevant on own profile — others' friend count is hidden). */
-  onPressFriends?: () => void;
 };
 
-export function ProfileScreen({ userId, onPressFriends }: Props) {
+type RoundMetric = {
+  round: Round;
+  total: number;
+  relative: number;
+  holeCount: number;
+  holesScored: number;
+};
+
+export function ProfileScreen({ userId }: Props) {
   const { colors } = useTheme();
   const account = useRequiredAccount();
   const { profile, loading } = useProfile(userId);
-  const { friends } = useFriends();
   const { roundsPlayed, roundsTogether } = useScorecardStats();
+  const { rounds } = useCompletedRounds();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const refresh = useRefresh();
+  const handleEditProfile = React.useCallback(() => {
+    // TODO: open the edit-profile flow when that route exists.
+  }, []);
 
   const isOwn = userId === account.userId;
+  const targetKey = userParticipantKey(userId);
   const togetherCount = isOwn ? 0 : roundsTogether(userId);
+
+  const roundMetrics = React.useMemo(() => {
+    const scoped = isOwn
+      ? rounds
+      : rounds.filter((round) => round.playerIds.includes(targetKey));
+    return scoped
+      .map((round) => buildRoundMetric(round, isOwn ? account.userId : userId))
+      .filter((metric): metric is RoundMetric => !!metric)
+      .sort((a, b) => {
+        const at = new Date(a.round.completedAt ?? a.round.startedAt).getTime();
+        const bt = new Date(b.round.completedAt ?? b.round.startedAt).getTime();
+        return bt - at;
+      });
+  }, [rounds, isOwn, targetKey, account.userId, userId]);
+
+  // Conservative gate for the headline stats: only full 18-hole
+  // stroke-play rounds where every hole was scored, compared by
+  // relative-to-par so courses with slightly different pars stay
+  // comparable. Looser rounds are deferred until there's real data.
+  const eligibleMetrics = React.useMemo(
+    () => roundMetrics.filter(isStatEligible),
+    [roundMetrics]
+  );
+
+  const scoringAverage = React.useMemo(() => {
+    if (eligibleMetrics.length === 0) return '—';
+    const sum = eligibleMetrics.reduce((acc, metric) => acc + metric.relative, 0);
+    return formatRelativeAverage(sum / eligibleMetrics.length);
+  }, [eligibleMetrics]);
+
+  const personalBest = React.useMemo(() => {
+    if (eligibleMetrics.length === 0) return '—';
+    return formatScore(Math.min(...eligibleMetrics.map((metric) => metric.relative)));
+  }, [eligibleMetrics]);
+
+  const handicapIndex = React.useMemo(
+    () => formatHandicapIndex(eligibleMetrics),
+    [eligibleMetrics]
+  );
+
+  const recentRounds = roundMetrics.slice(0, 3);
 
   if (loading && !profile) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator color={colors.primary} />
+        <GlassCard strong glow style={styles.loadingCard}>
+          <ActivityIndicator color={colors.lime} />
+        </GlassCard>
       </View>
     );
   }
@@ -74,188 +109,337 @@ export function ProfileScreen({ userId, onPressFriends }: Props) {
   if (!profile) {
     return (
       <View style={[styles.container, styles.centered]}>
-        <Text style={styles.notFoundIcon}>👤</Text>
-        <Text style={styles.notFoundTitle}>Profile not found</Text>
-        <Text style={styles.notFoundBody}>
-          They may have deleted their account or never finished signing up.
-        </Text>
+        <GlassCard strong glow style={styles.notFoundCard}>
+          <Text style={styles.notFoundIcon}>👤</Text>
+          <Text style={styles.notFoundTitle}>Profile not found</Text>
+          <Text style={styles.notFoundBody}>
+            They may have deleted their account or never finished signing up.
+          </Text>
+        </GlassCard>
       </View>
     );
   }
 
-  return (
-    <PullToRefreshScrollView onRefresh={refresh} style={styles.container}>
-      <View style={styles.body}>
-        <View style={[styles.avatar, { backgroundColor: profile.avatarColor }]}>
-          <Text style={styles.avatarText}>
-            {profile.displayName[0]?.toUpperCase() ?? '?'}
-          </Text>
-        </View>
-        <Text style={styles.name}>{profile.displayName}</Text>
-        <Text style={styles.handle}>@{profile.handle}</Text>
+  const joinedYear = formatJoinedYear(isOwn ? account.createdAt : profile.createdAt);
+  const handleText = joinedYear ? `@${profile.handle} · joined ${joinedYear}` : `@${profile.handle}`;
 
-        {!isOwn && (
+  return (
+    <PullToRefreshScrollView
+      onRefresh={refresh}
+      style={styles.container}
+      contentContainerStyle={styles.content}>
+      <View style={styles.profileHead}>
+        <Avatar
+          initial={profile.displayName || profile.handle}
+          color={isOwn ? undefined : profile.avatarColor}
+          gradient={isOwn ? [colors.lime, colors.cyan] : undefined}
+          size={78}
+          style={styles.profileAvatar}
+        />
+        <Text style={styles.name}>{profile.displayName}</Text>
+        <Text style={styles.handle}>{handleText}</Text>
+
+        {isOwn ? (
+          <NeonButton
+            label="Edit profile"
+            variant="ghost"
+            size="sm"
+            style={styles.editBtn}
+            onPress={handleEditProfile}
+          />
+        ) : (
           <View style={styles.pillRow}>
             <FriendActionPill target={profile} />
           </View>
         )}
+      </View>
 
-        {/* Stats card — two cells for own profile, one for others. */}
-        <View style={styles.statsCard}>
-          {isOwn ? (
-            <>
-              <StatCell
-                styles={styles}
-                colors={colors}
-                value={String(friends.length)}
-                label="FRIENDS"
-                onPress={onPressFriends}
-              />
-              <View style={styles.statsDivider} />
-              <StatCell
-                styles={styles}
-                colors={colors}
-                value={String(roundsPlayed)}
-                label="ROUNDS PLAYED"
-              />
-            </>
-          ) : (
-            <StatCell
-              styles={styles}
-              colors={colors}
-              value={String(togetherCount)}
-              label="ROUNDS TOGETHER"
-            />
-          )}
-        </View>
-
-        {isOwn && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.signOutBtn,
-              pressed && styles.signOutBtnPressed
-            ]}
-            onPress={() => {
-              void signOut();
-            }}>
-            <Text style={styles.signOutBtnText}>Sign out</Text>
-          </Pressable>
+      <View style={styles.tilesGrid}>
+        {isOwn ? (
+          <>
+            <StatTile value={roundsPlayed} label="Rounds played" tone="lime" style={styles.tile} />
+            <StatTile value={scoringAverage} label="Scoring average" style={styles.tile} />
+            <StatTile value={personalBest} label="Personal best" tone="cyan" style={styles.tile} />
+            <StatTile value={handicapIndex} label="Handicap index" style={styles.tile} />
+          </>
+        ) : (
+          <>
+            <StatTile value={togetherCount} label="Rounds together" tone="lime" style={styles.tile} />
+            <StatTile value={recentRounds.length} label="Recent together" tone="cyan" style={styles.tile} />
+          </>
         )}
       </View>
+
+      <SectionLabel
+        right={
+          isOwn ? (
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => router.push('/(tabs)/(score)/previous' as never)}
+              hitSlop={8}
+              style={({ pressed }) => (pressed ? styles.linkPressed : null)}>
+              <Text style={styles.sectionLink}>All rounds ›</Text>
+            </Pressable>
+          ) : null
+        }>
+        {isOwn ? 'Recent rounds' : 'Recent rounds together'}
+      </SectionLabel>
+      {recentRounds.length === 0 ? (
+        <GlassCard style={styles.emptyRounds}>
+          <Text style={styles.emptyText}>
+            {isOwn ? 'No completed rounds yet.' : 'No shared completed rounds yet.'}
+          </Text>
+        </GlassCard>
+      ) : (
+        recentRounds.map((metric) => (
+          <RecentRoundRow key={metric.round.id} metric={metric} styles={styles} />
+        ))
+      )}
+
+      {isOwn ? (
+        <NeonButton
+          label="Sign out"
+          variant="ghost"
+          style={styles.signOutBtn}
+          onPress={() => {
+            void signOut();
+          }}
+        />
+      ) : null}
     </PullToRefreshScrollView>
   );
 }
 
-type StatCellProps = {
-  styles: ReturnType<typeof makeStyles>;
-  colors: ReturnType<typeof useTheme>['colors'];
-  value: string;
-  label: string;
-  onPress?: () => void;
-};
+type ProfileStyles = ReturnType<typeof makeStyles>;
 
-function StatCell({ styles, colors, value, label, onPress }: StatCellProps) {
-  if (onPress) {
-    return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${label.toLowerCase()}: ${value}`}
-        onPress={onPress}
-        style={({ pressed }) => [styles.statCell, pressed && { backgroundColor: colors.chipBg }]}>
-        <Text style={styles.statNumber}>{value}</Text>
-        <Text style={styles.statLabel}>{label}</Text>
-      </Pressable>
-    );
-  }
+function RecentRoundRow({ metric, styles }: { metric: RoundMetric; styles: ProfileStyles }) {
+  const { count: likeCount } = useRoundLikes(metric.round.id);
+
   return (
-    <View style={styles.statCell}>
-      <Text style={styles.statNumber}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
+    <GlassCard padded={false} style={styles.roundRow}>
+      <View style={styles.roundScore}>
+        <NumericText style={styles.roundTotal}>{metric.total}</NumericText>
+        <NumericText style={styles.roundRelative}>{formatScore(metric.relative)}</NumericText>
+      </View>
+      <View style={styles.roundBody}>
+        <Text style={styles.courseName} numberOfLines={1}>
+          {metric.round.course.name}
+        </Text>
+        <Text style={styles.roundMeta} numberOfLines={1}>
+          {metric.round.scoringRule} · {holesInRange(metric.round.course.holes, metric.round.holeRange).length} ·{' '}
+          {formatRelativeTime(metric.round.completedAt ?? metric.round.startedAt)}
+        </Text>
+      </View>
+      <Text style={styles.likeCount}>♥ {likeCount}</Text>
+    </GlassCard>
   );
+}
+
+function buildRoundMetric(round: Round, metricUserId: string): RoundMetric | null {
+  const scorerId = scorerIdForUser(round, metricUserId);
+  if (!scorerId) return null;
+  const allowed = new Set(
+    holesInRange(round.course.holes, round.holeRange).map((hole) => hole.number)
+  );
+  const scoredHoles = new Set<number>();
+  let total = 0;
+  for (const score of round.scores) {
+    if (score.scorerId !== scorerId || !allowed.has(score.holeNumber)) continue;
+    if (score.strokes <= 0 || scoredHoles.has(score.holeNumber)) continue;
+    scoredHoles.add(score.holeNumber);
+    total += score.strokes;
+  }
+  if (total <= 0) return null;
+  return {
+    round,
+    total,
+    relative: scoreForRoundsList(round, metricUserId),
+    holeCount: allowed.size,
+    holesScored: scoredHoles.size
+  };
+}
+
+function formatJoinedYear(createdAt?: string | null): string | null {
+  if (!createdAt) return null;
+  const year = new Date(createdAt).getFullYear();
+  return Number.isFinite(year) ? String(year) : null;
+}
+
+function formatHandicapIndex(eligibleMetrics: RoundMetric[]): string {
+  const differentials = eligibleMetrics
+    .map((metric) => metric.relative)
+    .filter((relative) => Number.isFinite(relative))
+    .sort((a, b) => a - b);
+
+  if (differentials.length === 0) return '—';
+
+  const bestCount = Math.max(1, Math.min(8, Math.ceil(differentials.length * 0.4)));
+  const bestAverage =
+    differentials.slice(0, bestCount).reduce((sum, relative) => sum + relative, 0) / bestCount;
+  const index = bestAverage * 0.96;
+
+  if (index < 0) return `+${Math.abs(index).toFixed(1)}`;
+  return index.toFixed(1);
+}
+
+/**
+ * Conservative gate for the headline profile stats (scoring average,
+ * personal best, handicap index): only full 18-hole stroke-play rounds
+ * where every hole was scored. Looser formats — 9-hole, scramble,
+ * partial cards — are intentionally excluded until there's enough real
+ * data to handle them well.
+ */
+function isStatEligible(metric: RoundMetric): boolean {
+  return (
+    metric.round.scoringRule === 'stroke' &&
+    metric.holeCount === 18 &&
+    metric.holesScored === metric.holeCount
+  );
+}
+
+/** Signed one-decimal to-par average, e.g. "+2.7" / "−1.3" / "E". */
+function formatRelativeAverage(avg: number): string {
+  const rounded = Math.round(avg * 10) / 10;
+  if (rounded === 0) return 'E';
+  const magnitude = Math.abs(rounded).toFixed(1);
+  return rounded > 0 ? `+${magnitude}` : `−${magnitude}`;
 }
 
 function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
-    container: { flex: 1, backgroundColor: colors.background },
-    centered: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-    body: {
-      paddingTop: 24,
-      paddingBottom: 24,
-      paddingHorizontal: 24,
-      alignItems: 'center'
+    container: {
+      flex: 1,
+      backgroundColor: 'transparent'
     },
-    avatar: {
-      width: 78,
-      height: 78,
-      borderRadius: 39,
+    content: {
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
+      padding: 20,
+      paddingBottom: 48
+    },
+    centered: {
       alignItems: 'center',
       justifyContent: 'center',
-      marginBottom: 14
+      padding: 24
     },
-    avatarText: { color: '#ffffff', fontWeight: '800', fontSize: 32 },
-    name: {
-      fontSize: 20,
-      fontWeight: '800',
-      color: colors.textTitle
-    },
-    handle: {
-      fontSize: 13,
-      color: colors.textMuted,
-      marginTop: 2
-    },
-    pillRow: { marginTop: 18 },
-    statsCard: {
-      marginTop: 20,
-      backgroundColor: colors.cardBg,
-      borderColor: colors.border,
-      borderWidth: 1,
-      borderRadius: 14,
-      flexDirection: 'row',
-      alignSelf: 'stretch',
-      overflow: 'hidden'
-    },
-    statsDivider: {
-      width: StyleSheet.hairlineWidth,
-      backgroundColor: colors.border
-    },
-    statCell: {
-      flex: 1,
-      paddingVertical: 14,
-      paddingHorizontal: 8,
+    loadingCard: {
+      minWidth: 120,
       alignItems: 'center'
     },
-    statNumber: {
-      fontSize: 22,
-      fontWeight: '800',
-      color: colors.textTitle
+    profileHead: {
+      alignItems: 'center',
+      paddingTop: 12,
+      paddingBottom: 4
     },
-    statLabel: {
-      fontSize: 10,
-      fontWeight: '800',
-      letterSpacing: 0.8,
+    profileAvatar: {
+      marginBottom: 12
+    },
+    name: {
+      color: colors.textTitle,
+      fontSize: 22,
+      fontWeight: '700',
+      textAlign: 'center'
+    },
+    handle: {
+      marginTop: 3,
       color: colors.textMuted,
-      marginTop: 2
+      fontSize: 13,
+      fontWeight: '600'
+    },
+    editBtn: {
+      marginTop: 13,
+      borderRadius: 20
+    },
+    pillRow: {
+      marginTop: 16
+    },
+    tilesGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10
+    },
+    tile: {
+      flexBasis: '47%',
+      flexGrow: 1,
+      minWidth: 138
+    },
+    sectionLink: {
+      color: colors.cyan,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.5
+    },
+    linkPressed: {
+      opacity: 0.7
+    },
+    roundRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 13,
+      paddingHorizontal: 15,
+      paddingVertical: 13,
+      marginBottom: 11,
+      borderRadius: 18
+    },
+    roundScore: {
+      minWidth: 54
+    },
+    roundTotal: {
+      color: colors.textTitle,
+      fontSize: 24,
+      fontWeight: '900'
+    },
+    roundRelative: {
+      color: colors.cyan,
+      fontSize: 11,
+      fontWeight: '700'
+    },
+    roundBody: {
+      flex: 1,
+      minWidth: 0
+    },
+    courseName: {
+      color: colors.textTitle,
+      fontSize: 14,
+      fontWeight: '900'
+    },
+    roundMeta: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '700',
+      marginTop: 3,
+      textTransform: 'lowercase'
+    },
+    likeCount: {
+      marginLeft: 'auto',
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: '700'
+    },
+    emptyRounds: {
+      alignItems: 'center'
+    },
+    emptyText: {
+      color: colors.textMuted,
+      fontSize: 13,
+      textAlign: 'center'
     },
     signOutBtn: {
-      marginTop: 28,
-      paddingHorizontal: 18,
-      paddingVertical: 10,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: colors.border
+      marginTop: 18,
+      alignSelf: 'center'
     },
-    signOutBtnPressed: { opacity: 0.7 },
-    signOutBtnText: {
-      fontSize: 12,
-      fontWeight: '800',
-      letterSpacing: 0.3,
-      color: colors.textMuted
+    notFoundCard: {
+      alignItems: 'center',
+      maxWidth: 320
     },
-    notFoundIcon: { fontSize: 36, marginBottom: 8 },
+    notFoundIcon: {
+      fontSize: 36,
+      marginBottom: 8
+    },
     notFoundTitle: {
       fontSize: 18,
-      fontWeight: '800',
+      fontWeight: '900',
       color: colors.textTitle,
       marginBottom: 6
     },

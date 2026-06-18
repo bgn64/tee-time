@@ -15,6 +15,7 @@
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { Avatar, GlassSurface, NumericText } from '@/components/aurora';
 import { TeamAvatarCluster, type AvatarMember } from './TeamAvatarCluster';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
@@ -80,25 +81,17 @@ export function ShotPicker({
               }>
               <View
                 style={[styles.shotNum, isEmpty ? styles.shotNumEmpty : null]}>
-                <Text
+                <NumericText
                   style={[
                     styles.shotNumText,
                     isEmpty ? styles.shotNumTextEmpty : null,
                   ]}>
                   {i + 1}
-                </Text>
+                </NumericText>
               </View>
               {member ? (
                 <>
-                  <View
-                    style={[
-                      styles.avatar,
-                      { backgroundColor: member.color },
-                    ]}>
-                    <Text style={styles.avatarText}>
-                      {member.name.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
+                  <Avatar initial={member.name} color={member.color} size={20} circle />
                   <Text style={styles.label} numberOfLines={1}>
                     {member.name.split(' ')[0]}
                   </Text>
@@ -123,7 +116,7 @@ export function ShotPicker({
             onPress={() => setPickerIndex(null)}
             accessibilityLabel="Dismiss member picker"
           />
-          <View style={styles.sheet}>
+          <GlassSurface strong glow style={styles.sheet}>
             <View style={styles.handleWrap}>
               <View style={styles.handle} />
             </View>
@@ -160,7 +153,7 @@ export function ShotPicker({
                 </Pressable>
               );
             })}
-          </View>
+          </GlassSurface>
         </View>
       </Modal>
     </>
@@ -182,7 +175,9 @@ function makeStyles(colors: ThemeColors) {
       paddingRight: 9,
       paddingVertical: 3,
       borderRadius: 999,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill2,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
     },
     pillEmpty: {
       backgroundColor: 'transparent',
@@ -196,7 +191,9 @@ function makeStyles(colors: ThemeColors) {
       borderRadius: 9,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.night,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
     },
     shotNumEmpty: {
       backgroundColor: 'transparent',
@@ -210,18 +207,6 @@ function makeStyles(colors: ThemeColors) {
     },
     shotNumTextEmpty: {
       color: colors.textMuted,
-    },
-    avatar: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    avatarText: {
-      color: '#fff',
-      fontSize: 10,
-      fontWeight: '900',
     },
     label: {
       fontSize: 11.5,
@@ -246,9 +231,10 @@ function makeStyles(colors: ThemeColors) {
       backgroundColor: 'rgba(0,0,0,0.32)',
     },
     sheet: {
-      backgroundColor: colors.cardBg,
       borderTopLeftRadius: 22,
       borderTopRightRadius: 22,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
       paddingBottom: 24,
     },
     handleWrap: {
@@ -294,7 +280,7 @@ function makeStyles(colors: ThemeColors) {
       paddingVertical: 12,
     },
     memberRowActive: {
-      backgroundColor: 'rgba(47,125,75,0.10)',
+      backgroundColor: colors.glowLime,
     },
     memberLabel: {
       flex: 1,
@@ -303,13 +289,13 @@ function makeStyles(colors: ThemeColors) {
       color: colors.textTitle,
     },
     memberLabelActive: {
-      color: colors.primaryDark,
+      color: colors.lime,
       fontWeight: '900',
     },
     check: {
       fontSize: 14,
       fontWeight: '900',
-      color: colors.primaryDark,
+      color: colors.lime,
     },
   });
 }

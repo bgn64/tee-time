@@ -1,6 +1,8 @@
 import { Tabs } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { StyleSheet } from 'react-native';
 
+import { PHONE_MAX_WIDTH } from '@/components/aurora';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { AccountProvider } from '@/library/social/AccountContext';
 import { FriendsProvider } from '@/library/social/FriendsContext';
@@ -23,23 +25,39 @@ export default function TabLayout() {
               tabBarActiveTintColor: colors.tabBarActive,
               tabBarInactiveTintColor: colors.tabBarInactive,
               headerStyle: {
-                backgroundColor: colors.tabBar
+                backgroundColor: 'transparent'
               },
               headerShadowVisible: false,
               headerTintColor: colors.textTitle,
               tabBarStyle: {
+                width: '100%',
+                maxWidth: PHONE_MAX_WIDTH,
+                alignSelf: 'center',
                 backgroundColor: colors.tabBar,
-                borderTopColor: colors.border
+                borderTopColor: colors.glassStroke,
+                borderTopWidth: StyleSheet.hairlineWidth,
+                elevation: 0,
+                shadowOpacity: 0
               },
-              sceneStyle: { backgroundColor: colors.background }
+              sceneStyle: { backgroundColor: 'transparent' }
             }}>
             <Tabs.Screen
               name="(home)"
               options={{
-                title: 'Home',
+                title: 'Feed',
                 headerShown: false,
                 tabBarIcon: ({ color, focused }) => (
                   <Ionicons name={focused ? 'home-sharp' : 'home-outline'} color={color} size={24} />
+                )
+              }}
+            />
+            <Tabs.Screen
+              name="(score)"
+              options={{
+                title: 'Score',
+                headerShown: false,
+                tabBarIcon: ({ color }) => (
+                  <Ionicons name="add" color={color} size={30} />
                 )
               }}
             />
@@ -51,20 +69,6 @@ export default function TabLayout() {
                 tabBarIcon: ({ color, focused }) => (
                   <Ionicons
                     name={focused ? 'search' : 'search-outline'}
-                    color={color}
-                    size={24}
-                  />
-                )
-              }}
-            />
-            <Tabs.Screen
-              name="(score)"
-              options={{
-                title: 'Rounds',
-                headerShown: false,
-                tabBarIcon: ({ color, focused }) => (
-                  <Ionicons
-                    name={focused ? 'golf' : 'golf-outline'}
                     color={color}
                     size={24}
                   />

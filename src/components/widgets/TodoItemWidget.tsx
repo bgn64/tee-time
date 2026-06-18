@@ -40,20 +40,25 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 12,
+      paddingVertical: 13,
       paddingHorizontal: 16,
-      backgroundColor: colors.cardBg,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
-      gap: 12
+      backgroundColor: colors.glassFill,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+      borderRadius: 18,
+      gap: 12,
+      marginBottom: 10
     },
     checkbox: {
-      padding: 2
+      padding: 2,
+      borderRadius: 12,
+      backgroundColor: colors.glowLime
     },
     description: {
       flex: 1,
       fontSize: 16,
-      color: colors.textTitle
+      color: colors.textTitle,
+      fontWeight: '600'
     },
     completedText: {
       textDecorationLine: 'line-through',

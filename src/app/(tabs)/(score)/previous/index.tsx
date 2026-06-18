@@ -51,6 +51,7 @@ import {
   type RoundsRangeFilter
 } from '@/components/rounds/RoundsFilterSheet';
 import { SortDropdown, type SortOption } from '@/components/rounds/SortDropdown';
+import { PHONE_MAX_WIDTH } from '@/components/aurora';
 import { RoundListCard } from '@/components/round/RoundListCard';
 import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
 import { collectParticipantSnapshots, useParticipantResolver } from '@/library/golf/useParticipantResolver';
@@ -363,12 +364,15 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background
+      backgroundColor: 'transparent'
     },
     scroll: {
       flex: 1
     },
     scrollContent: {
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
       paddingHorizontal: 20,
       paddingTop: 12,
       paddingBottom: 32,
@@ -379,9 +383,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.glassStroke,
       borderRadius: 999,
       paddingHorizontal: 14,
       paddingVertical: 8
@@ -415,16 +419,16 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 14,
       paddingVertical: 8,
       borderRadius: 999,
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill,
       borderWidth: 1,
-      borderColor: colors.border
+      borderColor: colors.glassStroke
     },
     pillActive: {
-      backgroundColor: colors.primary,
-      borderColor: colors.primary
+      backgroundColor: colors.lime,
+      borderColor: colors.lime
     },
     pillFocused: {
-      borderColor: colors.primary
+      borderColor: colors.lime
     },
     pillText: {
       fontSize: 12.5,
@@ -432,14 +436,14 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textTitle
     },
     pillTextActive: {
-      color: '#ffffff'
+      color: colors.onNeon
     },
     pillChev: {
       fontSize: 10,
       color: colors.textMuted
     },
     pillChevActive: {
-      color: '#ffffff'
+      color: colors.onNeon
     },
 
     chipRow: {
@@ -455,9 +459,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 9,
       paddingVertical: 5,
       borderRadius: 999,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill2,
       borderWidth: 1,
-      borderColor: colors.border
+      borderColor: colors.glassStroke
     },
     activeChipText: {
       fontSize: 11.5,
@@ -480,9 +484,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
 
     card: {
-      backgroundColor: colors.cardBg,
+      backgroundColor: colors.glassFill,
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.glassStroke,
       borderLeftWidth: 3,
       borderRadius: 12,
       paddingHorizontal: 14,
@@ -521,9 +525,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 8,
       paddingVertical: 2,
       borderRadius: 999,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill2,
       borderWidth: 1,
-      borderColor: colors.border
+      borderColor: colors.glassStroke
     },
     overflowChipText: {
       fontSize: 10.5,
@@ -539,9 +543,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 7,
       paddingVertical: 3,
       borderRadius: 5,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill2,
       borderWidth: 1,
-      borderColor: colors.border
+      borderColor: colors.glassStroke
     },
     tagText: {
       fontSize: 9.5,
@@ -560,7 +564,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.accent
     },
     scoreUnder: {
-      color: colors.primary
+      color: colors.lime
     },
 
     loading: {
@@ -595,10 +599,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 18,
       paddingVertical: 10,
       borderRadius: 10,
-      backgroundColor: colors.primary
+      backgroundColor: colors.lime
     },
     ctaText: {
-      color: '#ffffff',
+      color: colors.onNeon,
       fontWeight: '800',
       fontSize: 13
     }

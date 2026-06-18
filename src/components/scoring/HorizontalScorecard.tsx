@@ -42,6 +42,7 @@ import { holesInRange } from '@/library/golf/scoring';
 import { assignTeeColors } from '@/library/golf/teeColor';
 import { getHoleStats, groupTeesByParHcp } from '@/library/golf/teeGrouping';
 import { useRoundParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { auroraAvatarColor } from '@/library/social/avatarColors';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Hole, HoleRange, Round, Tee } from '@/types/golf';
@@ -288,7 +289,7 @@ function ScorecardGrid({
           return {
             id: pid,
             name: r?.displayName || 'Player',
-            color: r?.avatarColor || colors.primary,
+            color: r?.avatarColor ? auroraAvatarColor(r.avatarColor) : colors.primary,
             handle: r?.handle,
           };
         });
@@ -314,7 +315,7 @@ function ScorecardGrid({
     return (round.playerIds ?? []).map((pid) => {
       const r = resolver.get(pid);
       const name = r?.displayName || 'Player';
-      const color = r?.avatarColor || colors.primary;
+      const color = r?.avatarColor ? auroraAvatarColor(r.avatarColor) : colors.primary;
       const teeId = round.participants.find(
         (p) => p.participantKey === pid
       )?.teeId;
@@ -802,8 +803,8 @@ function makeStyles(colors: ThemeColors, fit = false) {
   return StyleSheet.create({
     wrap: {
       paddingHorizontal: 14,
-      paddingTop: 8,
-      paddingBottom: 6,
+      paddingTop: 10,
+      paddingBottom: 8,
     },
     controlsRow: {
       paddingBottom: 8,
@@ -811,9 +812,9 @@ function makeStyles(colors: ThemeColors, fit = false) {
     rowHead: {
       flexDirection: 'row',
       alignItems: 'center',
-      borderBottomWidth: 1.5,
-      borderBottomColor: colors.textTitle,
-      paddingBottom: 2,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: colors.glassStroke,
+      paddingBottom: 4,
     },
     rowYds: {
       flexDirection: 'row',
@@ -831,7 +832,7 @@ function makeStyles(colors: ThemeColors, fit = false) {
       flexDirection: 'row',
       alignItems: 'center',
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: colors.hairline,
+      borderTopColor: colors.glassStroke,
     },
     cellLabel: {
       width: labelW,
@@ -845,7 +846,7 @@ function makeStyles(colors: ThemeColors, fit = false) {
     cellLabelText: {
       fontSize: 10.5,
       fontWeight: '900',
-      color: colors.textMuted,
+      color: colors.cyan,
       letterSpacing: 0.4,
     },
     cellYdsLabel: {
@@ -872,25 +873,27 @@ function makeStyles(colors: ThemeColors, fit = false) {
     cellHeadText: {
       fontSize: 11,
       fontWeight: '900',
-      color: colors.textTitle,
+      color: colors.textBody,
       letterSpacing: 0.4,
     },
     cellHeadCurrent: {
-      color: colors.primaryDark,
+      color: colors.lime,
     },
     cellHeadPill: {
       minWidth: 20,
       height: 18,
       paddingHorizontal: 5,
       borderRadius: 999,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glowCyan,
+      borderWidth: 1,
+      borderColor: colors.cyan,
       alignItems: 'center',
       justifyContent: 'center',
     },
     cellHeadPillText: {
       fontSize: 10.5,
       fontWeight: '900',
-      color: colors.textTitle,
+      color: colors.cyan,
       letterSpacing: 0.2,
     },
     caption: {
@@ -923,7 +926,7 @@ function makeStyles(colors: ThemeColors, fit = false) {
     cellParText: {
       fontSize: 13,
       fontWeight: '800',
-      color: colors.textTitle,
+      color: colors.textBody,
     },
     cellHcp: {
       ...holeSize,
@@ -947,7 +950,7 @@ function makeStyles(colors: ThemeColors, fit = false) {
     cellRelText: {
       fontSize: 11,
       fontWeight: '900',
-      color: colors.textTitle,
+      color: colors.lime,
     },
     cellTot: {
       // TOT column: wider to fit "7250" totals without bulging
@@ -955,14 +958,16 @@ function makeStyles(colors: ThemeColors, fit = false) {
       // because their values cap around 3500. Layered last in the
       // style array so it overrides the base cell's width.
       width: totW,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill,
+      borderRadius: 10,
     },
     cellTotOutIn: {
       width: totOutInW,
-      backgroundColor: colors.chipBg,
+      backgroundColor: colors.glassFill,
+      borderRadius: 10,
     },
     cellDivergent: {
-      color: colors.divergent,
+      color: colors.cyan,
     },
     teeDot: {
       width: 9,
@@ -985,7 +990,7 @@ function makeStyles(colors: ThemeColors, fit = false) {
     scorerHandle: {
       fontSize: 11,
       fontWeight: '800',
-      color: colors.textTitle,
+      color: colors.textBody,
     },
     scrollContent: {
       // Center the table when it fits the viewport (i.e. Front/Back

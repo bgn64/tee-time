@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<!--
+  Exploration 04 — "Aurora Glass"
+  Premium dark fitness-tech aesthetic: deep night gradient, frosted glass
+  panels (backdrop-blur), neon lime + cyan accents, soft glows, big rounded
+  forms, tabular numerics. Same backend model as the others.
+  Expanded to six screens: Feed, Live Scoring, Round Detail (full scorecard
+  + comments), New Round setup, Friends/Search (requests), and Profile.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tee Time — Aurora Glass</title>
+<style>
+  :root{
+    --ink:#eaf2ee; --muted:#93a3b3; --lime:#b6ff3b; --cy:#39e6c6; --vio:#9d7bff;
+    --glass:rgba(255,255,255,.06); --glass2:rgba(255,255,255,.09);
+    --stroke:rgba(255,255,255,.12);
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --num:"SF Pro Display",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--sans);color:var(--ink);
+    background:#05070c;}
+  .stage{display:flex;flex-wrap:wrap;gap:46px;justify-content:center;padding:56px 24px 80px;
+    background:radial-gradient(1200px 600px at 20% -10%,#13283a 0,#05070c 55%),radial-gradient(900px 500px at 100% 10%,#231a44 0,transparent 50%)}
+  .cap{width:100%;text-align:center;color:#7f8ea0;font-size:13px;margin:0 0 8px;letter-spacing:.3px}
+  .phone{width:384px;height:812px;border-radius:46px;overflow:hidden;display:flex;flex-direction:column;position:relative;
+    background:linear-gradient(180deg,#0c1018,#0a0e16);
+    box-shadow:0 0 0 11px #0e1118,0 0 0 12px #1c2230,0 40px 90px -30px #000,0 0 60px -10px #1e3a5544}
+  .glow{position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(380px 220px at 78% 6%,#b6ff3b22,transparent 60%),radial-gradient(420px 260px at 10% 30%,#39e6c61f,transparent 60%)}
+  .bar{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:12px;color:var(--muted);position:relative;z-index:2}
+  .dot{display:flex;gap:5px}.dot i{width:6px;height:6px;border-radius:50%;background:#3a4658;display:block}
+  .screen{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:2}
+  .scrim{flex:1;overflow:hidden;padding:0 18px}
+
+  .top{display:flex;align-items:center;justify-content:space-between;padding:6px 6px 14px}
+  .top h1{font-size:18px;font-weight:700;letter-spacing:.4px;margin:0}
+  .top h1 i{color:var(--lime);font-style:normal}
+  .me{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--cy),var(--vio));display:grid;place-items:center;font-weight:700;font-size:13px;color:#08121a}
+
+  .card{background:var(--glass);border:1px solid var(--stroke);border-radius:24px;padding:18px;margin-bottom:14px;
+    backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 1px 0 #ffffff12 inset,0 20px 40px -28px #000}
+  .row{display:flex;align-items:center;gap:11px}
+  .av{width:40px;height:40px;border-radius:14px;display:grid;place-items:center;font-weight:700;font-size:15px;color:#08121a}
+  .hand{font-size:14px;font-weight:600}
+  .sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .live{margin-left:auto;display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:1.5px;color:#08121a;background:var(--lime);padding:5px 10px;border-radius:20px;box-shadow:0 0 18px -2px #b6ff3b88}
+  .live b{width:6px;height:6px;border-radius:50%;background:#08121a;display:block;animation:p 1.2s infinite}
+  @keyframes p{50%{opacity:.3}}
+  .course{font-size:19px;font-weight:700;margin:14px 0 2px;letter-spacing:.2px}
+  .csub{font-size:11px;color:var(--muted)}
+  .ring{display:flex;align-items:center;gap:16px;margin:16px 0}
+  .ring .dial{width:96px;height:96px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;
+    background:conic-gradient(var(--lime) 0 67%,#ffffff14 67% 100%);}
+  .ring .dial .inner{width:78px;height:78px;border-radius:50%;background:#0c121b;display:grid;place-items:center;text-align:center}
+  .ring .dial .v{font-family:var(--num);font-size:30px;font-weight:800;color:var(--lime);line-height:1;font-variant-numeric:tabular-nums}
+  .ring .dial .u{font-size:9px;color:var(--muted);letter-spacing:2px;margin-top:3px}
+  .ring .legend div{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin:5px 0}
+  .ring .legend b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .pill{width:9px;height:9px;border-radius:3px;display:inline-block}
+  .holes{display:flex;gap:5px;margin:6px 0 2px}
+  .holes div{flex:1;text-align:center;font-size:12px;padding:8px 0;border-radius:9px;background:var(--glass2);font-variant-numeric:tabular-nums;color:var(--ink)}
+  .holes div small{display:block;font-size:8px;color:var(--muted)}
+  .holes div.b{background:#b6ff3b1f;color:var(--lime);box-shadow:0 0 0 1px #b6ff3b40 inset}
+  .foot{display:flex;gap:10px;align-items:center;margin-top:16px}
+  .react{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);background:var(--glass2);border:1px solid var(--stroke);padding:8px 12px;border-radius:14px}
+  .react.liked{color:#08121a;background:var(--lime);border-color:transparent}
+  .react svg{vertical-align:-2px}
+  .openb{margin-left:auto;font-size:12px;color:var(--cy);font-weight:600}
+
+  .mini{display:flex;align-items:center;gap:13px;background:var(--glass);border:1px solid var(--stroke);border-radius:18px;padding:13px 15px;margin-bottom:11px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .mini .v{font-family:var(--num);font-size:24px;font-weight:800;min-width:54px;font-variant-numeric:tabular-nums}
+  .mini .v small{font-size:11px;color:var(--cy);font-weight:600}
+  .mini .c{font-size:14px;font-weight:600}
+  .mini .m{font-size:11px;color:var(--muted);margin-top:2px}
+  .mini .lk{margin-left:auto;font-size:12px;color:var(--muted)}
+
+  .resume{display:flex;align-items:center;gap:12px;background:linear-gradient(90deg,#b6ff3b1f,transparent);border:1px solid #b6ff3b44;border-radius:18px;padding:12px 14px;margin-bottom:14px}
+  .resume .pl{width:34px;height:34px;border-radius:11px;background:var(--lime);color:#08121a;display:grid;place-items:center;font-size:14px;flex:0 0 auto;box-shadow:0 0 18px -3px #b6ff3b88}
+  .resume .rt{font-size:14px;font-weight:700}
+  .resume .rs{font-size:11px;color:var(--muted);margin-top:2px}
+  .resume .chev{margin-left:auto;color:var(--lime);font-size:18px}
+
+  .tabs{display:flex;background:rgba(8,11,17,.7);border-top:1px solid var(--stroke);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+  .tabs a{flex:1;text-align:center;padding:11px 0 24px;font-size:10px;color:var(--muted);text-decoration:none}
+  .tabs a .ic{display:block;font-size:17px;margin-bottom:5px}
+  .tabs a.on{color:var(--lime)}
+
+  /* scoring */
+  .sb{background:var(--glass);border:1px solid var(--stroke);border-radius:22px;padding:16px 18px;margin-bottom:14px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  .sb .c{font-size:17px;font-weight:700}
+  .sb .m{font-size:11px;color:var(--muted);margin-top:4px}
+  .holehero{display:flex;align-items:center;gap:16px;margin:4px 0 14px;padding:0 4px}
+  .holehero .hn{font-family:var(--num);font-size:60px;font-weight:800;line-height:.85;
+    background:linear-gradient(180deg,#fff,#9fb6c9);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .holehero .meta{font-size:12px;color:var(--muted);line-height:1.6}
+  .holehero .tot{margin-left:auto;text-align:right}
+  .holehero .tot b{font-family:var(--num);font-size:30px;font-weight:800;color:var(--lime)}
+  .holehero .tot span{display:block;font-size:9px;letter-spacing:2px;color:var(--muted)}
+  .prow{display:flex;align-items:center;gap:12px;background:var(--glass);border:1px solid var(--stroke);border-radius:18px;padding:12px 14px;margin-bottom:10px}
+  .stp{margin-left:auto;display:flex;align-items:center;gap:0;background:#0a0f17;border:1px solid var(--stroke);border-radius:14px;overflow:hidden}
+  .stp button{width:42px;height:44px;background:transparent;border:0;color:var(--ink);font-size:20px;cursor:pointer}
+  .stp .v{width:44px;text-align:center;font-family:var(--num);font-weight:800;font-size:22px;color:var(--lime);font-variant-numeric:tabular-nums}
+  .stp .v.empty{color:var(--muted)}
+  .tg{display:flex;gap:9px;flex-wrap:wrap;margin:6px 0 2px}
+  .tog{font-size:12px;padding:10px 13px;border-radius:14px;border:1px solid var(--stroke);background:var(--glass);color:var(--muted);display:flex;gap:8px;align-items:center}
+  .tog b{font-weight:700;font-variant-numeric:tabular-nums}
+  .tog.yes{border-color:#b6ff3b55;background:#b6ff3b14;color:var(--lime)}
+  .tog.no{border-color:#ff6b6b55;background:#ff6b6b12;color:#ff8e8e}
+  .nv{display:flex;gap:11px;margin-top:16px}
+  .nv button{flex:1;padding:15px;border-radius:16px;border:1px solid var(--stroke);background:var(--glass2);color:var(--ink);font-size:14px;font-weight:600;cursor:pointer}
+  .nv button.go{background:var(--lime);color:#08121a;border-color:transparent;box-shadow:0 0 24px -4px #b6ff3b88}
+  .finish{width:100%;margin-top:12px;padding:15px;border-radius:16px;border:1px solid #b6ff3b66;background:#b6ff3b14;color:var(--lime);font-size:14px;font-weight:700;cursor:pointer}
+  .abandon{text-align:center;margin-top:11px;font-size:12px;font-weight:600;color:#ff8e8e}
+  .label{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:14px 4px 10px}
+  .label .r{float:right;letter-spacing:.5px;text-transform:none;color:var(--cy)}
+
+  /* ---------- expanded screens ---------- */
+  /* round-detail banner */
+  .banner{background:var(--glass);border:1px solid var(--stroke);border-radius:22px;padding:16px 18px;margin-bottom:13px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  .course2{font-size:19px;font-weight:700;margin:13px 0 2px}
+  .csub2{font-size:11px;color:var(--muted)}
+  .hero2{display:flex;align-items:center;gap:14px;margin-top:14px;padding-top:14px;border-top:1px solid var(--stroke)}
+  .hero2 .big{font-family:var(--num);font-size:46px;font-weight:800;color:var(--lime);line-height:.82;font-variant-numeric:tabular-nums}
+  .hero2 .biglab{font-size:11px;color:var(--muted);line-height:1.5}
+  .hero2 .quick{margin-left:auto;display:flex;gap:8px}
+  .qd{text-align:center;background:var(--glass2);border:1px solid var(--stroke);border-radius:12px;padding:8px 10px;min-width:52px}
+  .qd b{display:block;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+  .qd span{font-size:9px;color:var(--muted);letter-spacing:1px}
+
+  /* scorecard */
+  .scard{background:var(--glass);border:1px solid var(--stroke);border-radius:20px;padding:14px 12px;margin-bottom:13px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  .sgrid{display:grid;grid-template-columns:30px repeat(9,1fr);align-items:center}
+  .sgrid>div{text-align:center;padding:4px 0;font-size:12px;font-variant-numeric:tabular-nums}
+  .sgrid .rl{text-align:left;font-size:9px;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+  .sgrid .hn{font-size:9px;color:var(--muted)}
+  .sgrid .pr{color:var(--muted)}
+  .pip{display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;font-size:12px;font-weight:700;margin:0 auto}
+  .pip.par{color:var(--ink)}
+  .pip.bird{color:var(--lime);box-shadow:0 0 0 1.5px #b6ff3b66 inset}
+  .pip.eagle{color:#08121a;background:var(--lime)}
+  .pip.bog{color:#ffc08a;box-shadow:0 0 0 1.5px #ffb27a55 inset}
+  .sdiv{height:1px;background:var(--stroke);margin:7px 0}
+  .stot{display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:10px;border-top:1px solid var(--stroke);font-size:12px;color:var(--muted)}
+  .stot b{color:var(--ink);font-size:13px}
+  .stot .tp{color:var(--lime);font-weight:700}
+
+  /* comments */
+  .cmt{display:flex;gap:10px;margin:12px 0}
+  .cmt .ca{width:30px;height:30px;border-radius:10px;flex:0 0 auto;display:grid;place-items:center;font-size:12px;font-weight:700;color:#08121a}
+  .cbub{background:var(--glass2);border:1px solid var(--stroke);border-radius:5px 14px 14px 14px;padding:9px 12px}
+  .cwho{font-size:12px;font-weight:600}.cwho span{color:var(--muted);font-weight:400;margin-left:6px;font-size:11px}
+  .ctx{font-size:13px;color:#d6dee8;margin-top:3px;line-height:1.4}
+  .composer{display:flex;gap:9px;align-items:center;margin-top:10px}
+  .composer .inp{flex:1;background:var(--glass2);border:1px solid var(--stroke);border-radius:20px;padding:11px 14px;color:var(--muted);font-size:13px}
+  .composer .send{width:42px;height:42px;border-radius:50%;background:var(--lime);color:#08121a;display:grid;place-items:center;font-size:18px;flex:0 0 auto;box-shadow:0 0 20px -4px #b6ff3b88}
+
+  /* new round form */
+  .field{background:var(--glass2);border:1px solid var(--stroke);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:12px;margin-bottom:11px}
+  .field .ic2{font-size:16px;color:var(--cy)}
+  .field .lab{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+  .field .val{font-size:14px;font-weight:600;margin-top:2px}
+  .field .chev{margin-left:auto;color:var(--muted);font-size:18px}
+  .choice{display:flex;gap:9px;margin-bottom:13px}
+  .opt{flex:1;text-align:center;background:var(--glass);border:1px solid var(--stroke);border-radius:14px;padding:13px 8px;color:var(--muted)}
+  .opt b{display:block;font-size:14px;color:var(--ink);font-weight:700}
+  .opt small{font-size:10px}
+  .opt.sel{border-color:#b6ff3b66;background:#b6ff3b14}
+  .opt.sel b{color:var(--lime)}
+  .psel{display:flex;align-items:center;gap:11px;padding:10px 2px;border-bottom:1px solid var(--stroke)}
+  .psel .you{font-size:10px;color:var(--cy);margin-left:6px}
+  .check{margin-left:auto;width:24px;height:24px;border-radius:50%;border:1.5px solid var(--stroke);display:grid;place-items:center;font-size:13px;color:transparent;flex:0 0 auto}
+  .check.on{background:var(--lime);border-color:transparent;color:#08121a}
+  .addp{display:flex;align-items:center;gap:11px;padding:11px 2px;color:var(--cy);font-size:13px;font-weight:600}
+  .addp .pl{width:30px;height:30px;border-radius:10px;border:1px dashed var(--stroke);display:grid;place-items:center;color:var(--muted)}
+  .start{width:100%;margin-top:16px;padding:16px;border-radius:16px;border:0;background:var(--lime);color:#08121a;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 0 28px -4px #b6ff3b88}
+
+  /* friends + search */
+  .search{display:flex;align-items:center;gap:10px;background:var(--glass2);border:1px solid var(--stroke);border-radius:16px;padding:12px 14px;margin-bottom:4px;color:var(--muted)}
+  .search input{all:unset;flex:1;font-size:14px;color:var(--ink)}
+  .req{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--stroke)}
+  .reqb{margin-left:auto;display:flex;gap:7px}
+  .bmini{font-size:12px;font-weight:600;padding:8px 13px;border-radius:11px;border:1px solid var(--stroke);background:var(--glass2);color:var(--ink);cursor:pointer}
+  .bmini.acc{background:var(--lime);color:#08121a;border-color:transparent}
+  .bmini.pend{color:var(--muted)}
+  .frow{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--stroke)}
+  .frow .go2{margin-left:auto;font-size:12px;color:var(--cy);font-weight:600}
+
+  /* profile */
+  .phead{text-align:center;padding:12px 0 4px}
+  .pav{width:78px;height:78px;border-radius:26px;margin:0 auto 12px;display:grid;place-items:center;font-size:30px;font-weight:800;color:#08121a;box-shadow:0 0 44px -8px #b6ff3b77}
+  .pname{font-size:22px;font-weight:700}
+  .phandle{font-size:13px;color:var(--muted);margin-top:2px}
+  .editbtn{margin-top:13px;display:inline-block;font-size:12px;font-weight:600;color:var(--ink);background:var(--glass2);border:1px solid var(--stroke);padding:8px 16px;border-radius:20px}
+  .ptiles{display:grid;grid-template-columns:repeat(2,1fr);gap:11px;margin:16px 0}
+  .ptile{background:var(--glass);border:1px solid var(--stroke);border-radius:16px;padding:14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .ptile b{font-family:var(--num);font-size:25px;font-weight:800;font-variant-numeric:tabular-nums}
+  .ptile b.lime{color:var(--lime)}.ptile b.cy{color:var(--cy)}
+  .ptile span{display:block;font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:.4px}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <p class="cap">Exploration 04 — “Aurora Glass”, expanded to six screens. Row 1 · Browse &amp; play: the Feed and the live Scoring card.</p>
+
+    <!-- FEED -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>Tee<i>·</i>Time</h1><div class="me">B</div></div>
+
+        <div class="resume"><span class="pl">▶</span>
+          <div><div class="rt">Continue your round</div><div class="rs">Cedar Ridge G.C. · thru 7</div></div>
+          <span class="chev">›</span></div>
+
+        <div class="card">
+          <div class="row"><span class="av" style="background:#7cb342">M</span>
+            <div><div class="hand">@marcus</div><div class="sub">Scramble · with @priya, @deshawn</div></div>
+            <span class="live"><b></b>LIVE</span></div>
+          <div class="course">Torrey Pines — South</div><div class="csub">Blue tees · thru 12 of 18</div>
+          <div class="ring">
+            <div class="dial"><div class="inner"><div class="v">−1</div><div class="u">TO PAR</div></div></div>
+            <div class="legend">
+              <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>9/14</b></div>
+              <div><span class="pill" style="background:var(--cy)"></span>Greens <b>11/18</b></div>
+              <div><span class="pill" style="background:var(--vio)"></span>Putts <b>27</b></div>
+            </div>
+          </div>
+          <div class="holes">
+            <div>4<small>1</small></div><div class="b">3<small>2</small></div><div>4<small>3</small></div>
+            <div>5<small>4</small></div><div>4<small>5</small></div><div class="b">2<small>6</small></div>
+            <div>4<small>7</small></div><div>5<small>8</small></div><div>3<small>9</small></div>
+          </div>
+          <div class="foot">
+            <span class="react liked"><svg width="14" height="14" viewBox="0 0 24 24" fill="#08121a"><path d="M12 21s-7-4.5-9.3-8.4C1 9.6 2.4 6.5 5.5 6.5c1.9 0 3.1 1 4.5 2.6 1.4-1.6 2.6-2.6 4.5-2.6 3.1 0 4.5 3.1 2.8 6.1C19 16.5 12 21 12 21z"/></svg>8</span>
+            <span class="react">💬 3</span><span class="openb">Open round →</span></div>
+        </div>
+
+        <div class="label">Completed today</div>
+        <div class="mini"><div class="v">82<small> +10</small></div>
+          <div><div class="c">Aldwood Links</div><div class="m">@priya · stroke · 18 holes</div></div><span class="lk">♥ 12</span></div>
+        <div class="mini"><div class="v">76<small> +4</small></div>
+          <div><div class="c">Bethpage Black</div><div class="m">@deshawn · career low</div></div><span class="lk">♥ 21</span></div>
+      </div>
+      <div class="tabs"><a class="on"><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- SCORING -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>Scoring</h1><div class="me" style="background:var(--glass2);color:var(--muted)">⋯</div></div>
+        <div class="sb"><div class="c">Torrey Pines — South</div><div class="m">Scramble · Blue 6,602y · autosaving ●</div></div>
+        <div class="holehero"><span class="hn">13</span>
+          <span class="meta">Par 4<br>438 yds<br>Hcp 3</span>
+          <span class="tot"><b>−1</b><span>RUNNING</span></span></div>
+        <div class="prow"><span class="av" style="background:#7cb342">M</span>
+          <div><div class="hand">@marcus</div><div class="sub">drive · 286y</div></div>
+          <div class="stp"><button>−</button><span class="v">4</span><button>+</button></div></div>
+        <div class="prow"><span class="av" style="background:#5c6bc0">P</span>
+          <div><div class="hand">@priya</div><div class="sub">to play</div></div>
+          <div class="stp"><button>−</button><span class="v empty">–</span><button>+</button></div></div>
+        <div class="label">Stats · hole 13</div>
+        <div class="tg"><span class="tog yes"><b>✓</b>Fairway</span><span class="tog"><b>–</b>Green</span>
+          <span class="tog"><b>–</b>Putts</span><span class="tog"><b>0</b>OB</span></div>
+        <div class="nv"><button>‹ Prev</button><button class="go">Next ›</button></div>
+        <button class="finish">Finish round ›</button>
+        <div class="abandon">Abandon round</div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <p class="cap" style="margin-top:34px">Row 2 · The round in full, and starting a new one.</p>
+
+    <!-- ROUND DETAIL -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>‹&nbsp;Round</h1><div class="me" style="background:var(--glass2);color:var(--muted)">⋯</div></div>
+        <div class="banner">
+          <div class="row"><span class="av" style="background:#7cb342">M</span>
+            <div><div class="hand">@marcus</div><div class="sub">Scramble · @priya, @deshawn</div></div>
+            <span class="live"><b></b>LIVE</span></div>
+          <div class="course2">Torrey Pines — South</div><div class="csub2">Blue tees · 6,602y · thru 12 of 18</div>
+          <div class="hero2"><span class="big">−1</span><span class="biglab">to par<br>thru 12</span>
+            <div class="quick"><div class="qd"><b>9/14</b><span>FIR</span></div><div class="qd"><b>11/18</b><span>GIR</span></div></div></div>
+        </div>
+        <div class="scard">
+          <div class="sgrid">
+            <div class="rl">Hole</div><div class="hn">1</div><div class="hn">2</div><div class="hn">3</div><div class="hn">4</div><div class="hn">5</div><div class="hn">6</div><div class="hn">7</div><div class="hn">8</div><div class="hn">9</div>
+            <div class="rl">Par</div><div class="pr">4</div><div class="pr">4</div><div class="pr">3</div><div class="pr">5</div><div class="pr">4</div><div class="pr">4</div><div class="pr">4</div><div class="pr">4</div><div class="pr">3</div>
+            <div class="rl">Team</div><div><span class="pip par">4</span></div><div><span class="pip bird">3</span></div><div><span class="pip bog">4</span></div><div><span class="pip par">5</span></div><div><span class="pip par">4</span></div><div><span class="pip eagle">2</span></div><div><span class="pip par">4</span></div><div><span class="pip bog">5</span></div><div><span class="pip par">3</span></div>
+          </div>
+          <div class="sdiv"></div>
+          <div class="sgrid">
+            <div class="rl">Hole</div><div class="hn">10</div><div class="hn">11</div><div class="hn">12</div><div class="hn">13</div><div class="hn">14</div><div class="hn">15</div><div class="hn">16</div><div class="hn">17</div><div class="hn">18</div>
+            <div class="rl">Par</div><div class="pr">4</div><div class="pr">3</div><div class="pr">4</div><div class="pr">4</div><div class="pr">5</div><div class="pr">4</div><div class="pr">3</div><div class="pr">4</div><div class="pr">5</div>
+            <div class="rl">Team</div><div><span class="pip par">4</span></div><div><span class="pip par">3</span></div><div><span class="pip par">4</span></div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div>
+          </div>
+          <div class="stot"><span>Out <b>34</b> · In <b>—</b></span><span class="tp">−1 · thru 12</span></div>
+        </div>
+        <div class="label">Comments<span class="r">3</span></div>
+        <div class="cmt"><span class="ca" style="background:#ff7043">D</span>
+          <div class="cbub"><div class="cwho">@deshawn<span>now</span></div><div class="ctx">That eagle on 6 was unreal 🦅</div></div></div>
+        <div class="cmt"><span class="ca" style="background:#5c6bc0">P</span>
+          <div class="cbub"><div class="cwho">@priya<span>2m</span></div><div class="ctx">Marcus striped the drive, I just tapped it in 😅</div></div></div>
+        <div class="cmt"><span class="ca" style="background:#7cb342">M</span>
+          <div class="cbub"><div class="cwho">@marcus<span>1m</span></div><div class="ctx">team effort 💪 back 9 incoming</div></div></div>
+        <div class="composer"><div class="inp">Add a comment…</div><div class="send">↑</div></div>
+      </div>
+      <div class="tabs"><a class="on"><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- NEW ROUND -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>New round</h1><div class="me" style="background:var(--glass2);color:var(--muted)">✕</div></div>
+        <div class="label">Course</div>
+        <div class="field"><span class="ic2">⛳</span>
+          <div><div class="lab">Selected course</div><div class="val">Torrey Pines — South</div></div>
+          <span class="chev">›</span></div>
+        <div class="label">Format</div>
+        <div class="choice">
+          <div class="opt"><b>Stroke</b><small>solo / individual</small></div>
+          <div class="opt sel"><b>Scramble</b><small>teams · best ball</small></div>
+        </div>
+        <div class="field"><span class="ic2">⚑</span>
+          <div><div class="lab">Tees</div><div class="val">Blue · 6,602 yds</div></div>
+          <span class="chev">›</span></div>
+        <div class="label">Players<span class="r">3 selected</span></div>
+        <div class="psel"><span class="av" style="background:#7cb342">M</span>
+          <div><div class="hand">@marcus<span class="you">YOU</span></div><div class="sub">host</div></div>
+          <span class="check on">✓</span></div>
+        <div class="psel"><span class="av" style="background:#5c6bc0">P</span>
+          <div><div class="hand">@priya</div><div class="sub">friend</div></div><span class="check on">✓</span></div>
+        <div class="psel"><span class="av" style="background:#ff7043">D</span>
+          <div><div class="hand">@deshawn</div><div class="sub">friend</div></div><span class="check on">✓</span></div>
+        <div class="psel"><span class="av" style="background:#26a69a">G</span>
+          <div><div class="hand">Dad</div><div class="sub">guest · custom player</div></div><span class="check">✓</span></div>
+        <div class="addp"><span class="pl">＋</span>Add custom player</div>
+        <div class="label">Track stats</div>
+        <div class="tg">
+          <span class="tog yes"><b>✓</b>Fairways</span><span class="tog yes"><b>✓</b>Greens</span>
+          <span class="tog yes"><b>✓</b>Putts</span><span class="tog"><b>＋</b>Penalties</span><span class="tog"><b>＋</b>Sand</span></div>
+        <button class="start">Start round ›</button>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <p class="cap" style="margin-top:34px">Row 3 · Your people, and your locker.</p>
+
+    <!-- FRIENDS / SEARCH -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>Friends</h1><div class="me" style="background:linear-gradient(135deg,#39e6c6,#9d7bff)">B</div></div>
+        <div class="search"><span>⌕</span><input value="" placeholder="Search @handle" /></div>
+        <div class="label">Requests<span class="r">2 incoming</span></div>
+        <div class="req"><span class="av" style="background:#42a5f5">J</span>
+          <div><div class="hand">@jordan</div><div class="sub">wants to connect</div></div>
+          <div class="reqb"><span class="bmini acc">Accept</span><span class="bmini">Decline</span></div></div>
+        <div class="req"><span class="av" style="background:#ab47bc">S</span>
+          <div><div class="hand">@sam</div><div class="sub">2 mutual friends</div></div>
+          <div class="reqb"><span class="bmini acc">Accept</span><span class="bmini">Decline</span></div></div>
+        <div class="req"><span class="av" style="background:#26a69a">T</span>
+          <div><div class="hand">@taylor</div><div class="sub">you sent a request</div></div>
+          <div class="reqb"><span class="bmini pend">Requested</span></div></div>
+        <div class="label">Your friends<span class="r">12</span></div>
+        <div class="frow"><span class="av" style="background:#5c6bc0">P</span>
+          <div><div class="hand">@priya</div><div class="sub">Priya N. · 31 rounds</div></div><span class="go2">View ›</span></div>
+        <div class="frow"><span class="av" style="background:#ff7043">D</span>
+          <div><div class="hand">@deshawn</div><div class="sub">DeShawn W. · 58 rounds</div></div><span class="go2">View ›</span></div>
+        <div class="frow"><span class="av" style="background:#7cb342">M</span>
+          <div><div class="hand">@marcus</div><div class="sub">Marcus L. · live now</div></div><span class="go2">View ›</span></div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- PROFILE -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>You</h1><div class="me" style="background:var(--glass2);color:var(--muted)">⚙</div></div>
+        <div class="phead">
+          <div class="pav" style="background:linear-gradient(135deg,var(--lime),var(--cy))">B</div>
+          <div class="pname">Ben Garrison</div><div class="phandle">@bengolf · joined 2026</div>
+          <div class="editbtn">Edit profile</div>
+        </div>
+        <div class="ptiles">
+          <div class="ptile"><b class="lime">48</b><span>Rounds played</span></div>
+          <div class="ptile"><b>84.2</b><span>Scoring average</span></div>
+          <div class="ptile"><b class="cy">76</b><span>Personal best</span></div>
+          <div class="ptile"><b>12.3</b><span>Handicap index</span></div>
+        </div>
+        <div class="label">Recent rounds<span class="r">All rounds ›</span></div>
+        <div class="mini"><div class="v">78<small> +6</small></div>
+          <div><div class="c">Pebble Creek</div><div class="m">stroke · 18 · 2 days ago</div></div><span class="lk">♥ 9</span></div>
+        <div class="mini"><div class="v">81<small> +9</small></div>
+          <div><div class="c">Aldwood Links</div><div class="m">scramble · 18 · last week</div></div><span class="lk">♥ 14</span></div>
+        <div class="mini"><div class="v">76<small> +4</small></div>
+          <div><div class="c">Bethpage Black</div><div class="m">stroke · 18 · personal best</div></div><span class="lk">♥ 27</span></div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a class="on"><span class="ic">◔</span>You</a></div></div>
+    </div>
+  </div>
+</body>
+</html>

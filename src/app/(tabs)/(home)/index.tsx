@@ -22,22 +22,28 @@
 
 import React from 'react';
 import { useRouter } from 'expo-router';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  View
+  View,
 } from 'react-native';
 
+import { GlassCard, NeonButton, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
+import { CompletedRoundRow } from '@/components/round/CompletedRoundRow';
 import { RoundListCard } from '@/components/round/RoundListCard';
 import { IncomingRequestsBanner } from '@/components/social/IncomingRequestsBanner';
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
 import { useRefresh } from '@/library/data/useRefresh';
+import { useRound } from '@/library/golf/RoundContext';
+import { getScorerProgress, scorerIdForUser } from '@/library/golf/scoring';
 import { useFeedRounds } from '@/library/golf/useFeedRounds';
 import { useFriends } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
+import type { Round } from '@/types/golf';
 
 export default function HomeFeedScreen() {
   const { colors } = useTheme();
@@ -47,6 +53,7 @@ export default function HomeFeedScreen() {
 
   const { friends, hydrated: friendsHydrated } = useFriends();
   const { liveRounds, completedRounds, isLoading: feedLoading } = useFeedRounds();
+  const { currentRound, userId } = useRound();
 
   const feedRounds = React.useMemo(
     () => [...liveRounds, ...completedRounds],
@@ -64,9 +71,9 @@ export default function HomeFeedScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.contentEmpty}>
         <IncomingRequestsBanner style={styles.banner} />
-        <View style={styles.empty}>
+        <GlassCard strong glow style={styles.empty}>
           <ActivityIndicator color={colors.primary} />
-        </View>
+        </GlassCard>
       </ScrollView>
     );
   }
@@ -75,14 +82,14 @@ export default function HomeFeedScreen() {
   // friends NOR any own completed rounds to show. The feed includes
   // own completed rounds, so a friendless user with a finished round
   // still sees their own card and skips this CTA.
-  if (friends.length === 0 && feedRounds.length === 0) {
+  if (friends.length === 0 && feedRounds.length === 0 && !currentRound) {
     return (
       <PullToRefreshScrollView
         onRefresh={refresh}
         style={styles.scroll}
         contentContainerStyle={styles.contentEmpty}>
         <IncomingRequestsBanner style={styles.banner} />
-        <View style={styles.empty}>
+        <GlassCard strong glow style={styles.empty}>
           <Text style={styles.emptyIcon}>👥</Text>
           <Text style={styles.emptyTitle}>Find friends to see their rounds</Text>
           <Text style={styles.emptyBody}>
@@ -90,24 +97,25 @@ export default function HomeFeedScreen() {
             them. Their rounds — and your own completed rounds —
             will show up here.
           </Text>
-          <Pressable
+          <NeonButton
+            label="+  Find friends"
+            size="sm"
             style={styles.primaryCta}
-            onPress={() => router.push('/(tabs)/(search)' as never)}>
-            <Text style={styles.primaryCtaText}>+  Find friends</Text>
-          </Pressable>
-        </View>
+            onPress={() => router.push('/(tabs)/(search)' as never)}
+          />
+        </GlassCard>
       </PullToRefreshScrollView>
     );
   }
 
-  if (feedRounds.length === 0) {
+  if (feedRounds.length === 0 && !currentRound) {
     return (
       <PullToRefreshScrollView
         onRefresh={refresh}
         style={styles.scroll}
         contentContainerStyle={styles.contentEmpty}>
         <IncomingRequestsBanner style={styles.banner} />
-        <View style={styles.empty}>
+        <GlassCard strong glow style={styles.empty}>
           <Text style={styles.emptyIcon}>⛳</Text>
           <Text style={styles.emptyTitle}>No rounds yet</Text>
           <Text style={styles.emptyBody}>
@@ -116,7 +124,7 @@ export default function HomeFeedScreen() {
             <Text style={styles.emptyBodyEm}>Score</Text> tab; finished
             rounds will show up here.
           </Text>
-        </View>
+        </GlassCard>
       </PullToRefreshScrollView>
     );
   }
@@ -127,15 +135,82 @@ export default function HomeFeedScreen() {
       style={styles.scroll}
       contentContainerStyle={styles.content}>
       <IncomingRequestsBanner style={styles.banner} />
-      {feedRounds.map((round) => (
-        <RoundListCard
-          key={round.id}
-          round={round}
-          detailRoutePrefix="/(tabs)/(home)/round"
-          profileRoutePrefix="/(tabs)/(home)/profile"
-        />
-      ))}
+      <ContinueRoundBanner round={currentRound} userId={userId} />
+
+      {liveRounds.length > 0 ? (
+        <>
+          {liveRounds.map((round) => (
+            <RoundListCard
+              key={round.id}
+              round={round}
+              detailRoutePrefix="/(tabs)/(home)/round"
+              profileRoutePrefix="/(tabs)/(home)/profile"
+            />
+          ))}
+        </>
+      ) : null}
+
+      {completedRounds.length > 0 ? (
+        <>
+          <SectionLabel>Completed today</SectionLabel>
+          {completedRounds.map((round) => (
+            <CompletedRoundRow
+              key={round.id}
+              round={round}
+              onPress={() =>
+                router.push(`/(tabs)/(home)/round/${round.id}` as never)
+              }
+            />
+          ))}
+        </>
+      ) : null}
     </PullToRefreshScrollView>
+  );
+}
+
+function ContinueRoundBanner({
+  round,
+  userId,
+}: {
+  round: Round | null;
+  userId: string | null;
+}) {
+  const { colors } = useTheme();
+  const styles = React.useMemo(() => makeStyles(colors), [colors]);
+  const router = useRouter();
+
+  if (!round) return null;
+
+  const scorerId = userId
+    ? scorerIdForUser(round, userId)
+    : round.ownerUserId
+      ? scorerIdForUser(round, round.ownerUserId)
+      : undefined;
+  const { thruCount } = getScorerProgress(round, scorerId);
+
+  return (
+    <Pressable
+      style={styles.resumeFrame}
+      onPress={() => router.push('/(tabs)/(score)/scoring' as never)}
+      accessibilityRole="button"
+      accessibilityLabel="Continue your round">
+      <LinearGradient
+        colors={[colors.glowLime, 'rgba(182, 255, 59, 0)']}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={styles.resume}>
+        <View style={styles.resumePlay}>
+          <Text style={styles.resumePlayText}>▶</Text>
+        </View>
+        <View style={styles.resumeText}>
+          <Text style={styles.resumeTitle}>Continue your round</Text>
+          <Text style={styles.resumeSubtitle} numberOfLines={1}>
+            {round.course.name} · thru {thruCount}
+          </Text>
+        </View>
+        <Text style={styles.resumeChevron}>›</Text>
+      </LinearGradient>
+    </Pressable>
   );
 }
 
@@ -143,13 +218,20 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     scroll: {
       flex: 1,
-      backgroundColor: colors.background
+      backgroundColor: 'transparent'
     },
     content: {
-      padding: 14,
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
+      paddingHorizontal: 14,
+      paddingTop: 12,
       paddingBottom: 40
     },
     contentEmpty: {
+      width: '100%',
+      maxWidth: PHONE_MAX_WIDTH,
+      alignSelf: 'center',
       padding: 20,
       paddingBottom: 40,
       flexGrow: 1
@@ -157,11 +239,67 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     banner: {
       marginBottom: 14
     },
+    resumeFrame: {
+      marginBottom: 14,
+      borderRadius: 18,
+      borderWidth: 1,
+      borderColor: 'rgba(182, 255, 59, 0.27)',
+      overflow: 'hidden',
+    },
+    resume: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
+    resumePlay: {
+      width: 34,
+      height: 34,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.lime,
+      shadowColor: colors.lime,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.45,
+      shadowRadius: 12,
+      elevation: 4,
+    },
+    resumePlayText: {
+      color: colors.onNeon,
+      fontSize: 13,
+      fontWeight: '900',
+      marginLeft: 1,
+    },
+    resumeText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    resumeTitle: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: colors.textTitle,
+    },
+    resumeSubtitle: {
+      marginTop: 2,
+      fontSize: 11.5,
+      fontWeight: '600',
+      color: colors.textMuted,
+    },
+    resumeChevron: {
+      marginLeft: 'auto',
+      color: colors.lime,
+      fontSize: 22,
+      fontWeight: '700',
+    },
     empty: {
       alignItems: 'center',
-      paddingTop: 40,
-      paddingHorizontal: 16,
-      gap: 10
+      justifyContent: 'center',
+      paddingVertical: 28,
+      paddingHorizontal: 18,
+      gap: 10,
+      marginTop: 24
     },
     emptyIcon: {
       fontSize: 38,
@@ -170,7 +308,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     emptyTitle: {
       fontSize: 14.5,
       fontWeight: '800',
-      color: colors.textTitle,
+      color: colors.lime,
       textAlign: 'center'
     },
     emptyBody: {
@@ -187,19 +325,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     codeChip: {
       fontFamily: 'SpaceMono',
       fontSize: 11,
-      color: colors.primary
+      color: colors.cyan
     },
     primaryCta: {
       marginTop: 10,
-      paddingHorizontal: 18,
-      paddingVertical: 10,
-      borderRadius: 10,
-      backgroundColor: colors.primary
-    },
-    primaryCtaText: {
-      color: '#ffffff',
-      fontWeight: '800',
-      fontSize: 13
+      alignSelf: 'center'
     }
   });
 }

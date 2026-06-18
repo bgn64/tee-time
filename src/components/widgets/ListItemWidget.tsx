@@ -47,16 +47,24 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     row: {
       flexDirection: 'row',
       alignItems: 'center',
-      paddingVertical: 12,
+      paddingVertical: 13,
       paddingHorizontal: 16,
-      backgroundColor: colors.cardBg,
-      borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: colors.border,
-      gap: 12
+      backgroundColor: colors.glassFill,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+      borderRadius: 18,
+      gap: 12,
+      marginBottom: 10
     },
     iconWrap: {
-      width: 32,
-      alignItems: 'center'
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.glowCyan,
+      borderWidth: 1,
+      borderColor: colors.glassStroke
     },
     textWrap: {
       flex: 1
@@ -64,7 +72,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     name: {
       fontSize: 16,
       color: colors.textTitle,
-      fontWeight: '600'
+      fontWeight: '700'
     },
     subtitle: {
       fontSize: 13,

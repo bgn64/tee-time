@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<!--
+  Exploration 01 — "Editorial"
+  A golf-magazine aesthetic: warm paper, serif headlines, hairline rules,
+  generous whitespace, a single burnt-orange accent + fairway green for
+  under-par. Self-contained; system font stacks only (offline-safe).
+  Content is driven by the real backend model: handle/avatar_color,
+  course_snapshot.name, scoring_rule, per-hole scorecard_scores, FIR/GIR/
+  putts hole_details, round_likes / comments.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tee Time — Editorial</title>
+<style>
+  :root{
+    --paper:#f1e9dc; --card:#fbf7ef; --ink:#211d16; --muted:#766a58;
+    --line:#d9cdb8; --accent:#b1461d; --green:#2f5d3a; --gold:#9c7b3f;
+    --serif:Georgia,"Iowan Old Style","Times New Roman",serif;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-font-smoothing:antialiased}
+  body{margin:0;background:#e3d8c4;font-family:var(--sans);color:var(--ink);
+    background-image:radial-gradient(#00000008 1px,transparent 1px);background-size:4px 4px;}
+  .stage{display:flex;flex-wrap:wrap;gap:48px;justify-content:center;padding:56px 24px 80px;}
+  .cap{width:100%;text-align:center;font-family:var(--serif);font-style:italic;color:#5b5142;margin:0 0 8px;font-size:15px;letter-spacing:.2px}
+  .phone{width:384px;height:812px;background:var(--paper);border-radius:42px;
+    box-shadow:0 2px 0 #fff6 inset,0 40px 80px -30px #00000066,0 0 0 11px #20211f,0 0 0 13px #3a3a37;
+    overflow:hidden;display:flex;flex-direction:column;position:relative}
+  .bar{height:46px;display:flex;align-items:center;justify-content:space-between;padding:0 26px;font-size:13px;color:#3c3526;font-variant-numeric:tabular-nums}
+  .dots{display:flex;gap:5px;align-items:center}
+  .dots i{width:6px;height:6px;border-radius:50%;background:#3c352688;display:block}
+  .screen{flex:1;overflow:hidden;display:flex;flex-direction:column}
+  .scrim{flex:1;overflow:hidden;padding:0 24px}
+
+  /* masthead */
+  .mast{padding:6px 0 12px;border-bottom:2px solid var(--ink)}
+  .mast h1{font-family:var(--serif);font-weight:700;font-size:30px;letter-spacing:6px;margin:0;text-transform:uppercase;text-align:center}
+  .mast .sub{display:flex;justify-content:space-between;font-family:var(--serif);font-style:italic;font-size:11px;color:var(--muted);margin-top:4px}
+  .kicker{font-family:var(--sans);font-size:10px;letter-spacing:3px;text-transform:uppercase;color:var(--accent);font-weight:700;margin:18px 0 10px}
+
+  /* lead card */
+  .lead .course{font-family:var(--serif);font-size:25px;line-height:1.08;margin:2px 0 0}
+  .by{display:flex;align-items:center;gap:9px;margin-top:12px}
+  .av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;font-size:13px;font-family:var(--serif)}
+  .hand{font-size:13px;color:var(--ink);font-weight:600}
+  .meta{font-size:11px;color:var(--muted)}
+  .live{display:inline-flex;align-items:center;gap:5px;font-size:10px;letter-spacing:1.5px;color:var(--accent);font-weight:700;text-transform:uppercase}
+  .live b{width:7px;height:7px;border-radius:50%;background:var(--accent);display:block;animation:p 1.4s infinite}
+  @keyframes p{50%{opacity:.25}}
+  .scorerow{display:flex;align-items:flex-end;gap:14px;margin:18px 0 6px}
+  .big{font-family:var(--serif);font-size:74px;line-height:.8;letter-spacing:-2px}
+  .big.under{color:var(--green)}
+  .thru{font-family:var(--serif);font-style:italic;color:var(--muted);font-size:16px;padding-bottom:8px}
+  .tag{margin-left:auto;align-self:center;font-size:10px;letter-spacing:2px;text-transform:uppercase;border:1px solid var(--ink);padding:5px 10px;border-radius:2px}
+  .rule{height:1px;background:var(--line);margin:16px 0}
+  .holes{display:grid;grid-template-columns:repeat(9,1fr);gap:0;border:1px solid var(--line);border-radius:3px;overflow:hidden}
+  .holes div{padding:6px 0;text-align:center;font-variant-numeric:tabular-nums;border-right:1px solid var(--line)}
+  .holes div:last-child{border-right:0}
+  .holes .h{font-size:9px;color:var(--muted);background:#efe7d6}
+  .holes .s{font-family:var(--serif);font-size:15px}
+  .holes .s.b{color:var(--accent);font-weight:700}
+  .stats{display:flex;gap:18px;margin-top:14px;font-family:var(--serif)}
+  .stat .n{font-size:18px}.stat .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+  .foot{display:flex;gap:20px;align-items:center;margin-top:16px;color:var(--muted);font-size:13px}
+  .foot svg{vertical-align:-3px;margin-right:6px}
+  .foot .read{margin-left:auto;font-family:var(--serif);font-style:italic;color:var(--accent)}
+
+  /* secondary */
+  .item{display:flex;gap:14px;padding:18px 0;border-top:1px solid var(--line)}
+  .item .num{font-family:var(--serif);font-size:30px;color:var(--gold);min-width:54px;text-align:center;line-height:1}
+  .item .c{font-family:var(--serif);font-size:17px;margin:0}
+  .item .m{font-size:11px;color:var(--muted);margin-top:3px}
+  .item .e{margin-top:7px;font-size:12px;color:var(--muted)}
+
+  /* tabs */
+  .tabs{display:flex;border-top:2px solid var(--ink);background:var(--paper)}
+  .tabs a{flex:1;text-align:center;padding:12px 0 22px;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);text-decoration:none;font-weight:600}
+  .tabs a.on{color:var(--ink)}
+  .tabs a .ic{display:block;margin:0 auto 5px}
+
+  /* scoring screen */
+  .sbanner{padding:18px 0 14px;border-bottom:2px solid var(--ink)}
+  .sbanner .c{font-family:var(--serif);font-size:23px;margin:0}
+  .sbanner .m{font-size:11px;color:var(--muted);margin-top:4px;letter-spacing:.5px}
+  .holehead{display:flex;align-items:baseline;gap:12px;margin:20px 0 4px}
+  .holehead .hn{font-family:var(--serif);font-size:46px;line-height:.9}
+  .holehead .par{font-family:var(--serif);font-style:italic;color:var(--muted);font-size:15px}
+  .holehead .tot{margin-left:auto;text-align:right}
+  .holehead .tot .n{font-family:var(--serif);font-size:30px;color:var(--green)}
+  .holehead .tot .l{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted)}
+  .prow{display:flex;align-items:center;gap:12px;padding:16px 0;border-top:1px solid var(--line)}
+  .prow .hand{font-size:14px}.prow .sub{font-size:11px;color:var(--muted)}
+  .step{margin-left:auto;display:flex;align-items:center;gap:14px}
+  .step button{width:38px;height:38px;border-radius:50%;border:1px solid var(--ink);background:transparent;font-size:20px;color:var(--ink);cursor:pointer;display:grid;place-items:center;font-family:var(--serif)}
+  .step .v{font-family:var(--serif);font-size:30px;min-width:30px;text-align:center}
+  .toggles{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 4px}
+  .chip{font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:8px 12px;border:1px solid var(--line);border-radius:2px;color:var(--muted);display:flex;gap:7px;align-items:center}
+  .chip.on{border-color:var(--green);color:var(--green);background:#2f5d3a12}
+  .chip.no{border-color:var(--accent);color:var(--accent)}
+  .chip b{font-family:var(--serif);font-size:14px}
+  .navh{display:flex;gap:12px;margin-top:22px}
+  .navh button{flex:1;padding:14px;border:1px solid var(--ink);background:transparent;font-family:var(--serif);font-size:14px;letter-spacing:1px;border-radius:2px;cursor:pointer}
+  .navh button.pri{background:var(--ink);color:var(--paper)}
+</style>
+</head>
+<body>
+  <div class="stage">
+    <p class="cap">Exploration 01 — “Editorial”: warm paper, serif voice, a printed-magazine calm. Feed (left) &amp; Live Scoring (right).</p>
+
+    <!-- FEED -->
+    <div class="phone"><div class="bar"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="mast"><h1>Tee&nbsp;Time</h1><div class="sub"><span>The Clubhouse Edition</span><span>Sat · June 17</span></div></div>
+
+        <div class="kicker">Live on the course</div>
+        <div class="lead">
+          <div class="live"><b></b>Playing now · thru 12</div>
+          <h2 class="course">Torrey Pines — South</h2>
+          <div class="by"><span class="av" style="background:#7cb342">M</span>
+            <div><div class="hand">@marcus</div><div class="meta">Scramble · with @priya, @deshawn</div></div></div>
+          <div class="scorerow"><span class="big under">−1</span><span class="thru">through twelve</span>
+            <span class="tag">Scramble</span></div>
+          <div class="holes">
+            <div class="h">1</div><div class="h">2</div><div class="h">3</div><div class="h">4</div><div class="h">5</div><div class="h">6</div><div class="h">7</div><div class="h">8</div><div class="h">9</div>
+            <div class="s">4</div><div class="s b">3</div><div class="s">4</div><div class="s">5</div><div class="s">4</div><div class="s b">2</div><div class="s">4</div><div class="s">5</div><div class="s">3</div>
+          </div>
+          <div class="stats">
+            <div class="stat"><div class="n">9/14</div><div class="l">Fairways</div></div>
+            <div class="stat"><div class="n">11/18</div><div class="l">Greens</div></div>
+            <div class="stat"><div class="n">27</div><div class="l">Putts</div></div>
+          </div>
+          <div class="foot">
+            <span><svg width="16" height="16" viewBox="0 0 24 24" fill="#b1461d"><path d="M12 21s-7-4.5-9.3-8.4C1 9.6 2.4 6.5 5.5 6.5c1.9 0 3.1 1 4.5 2.6 1.4-1.6 2.6-2.6 4.5-2.6 3.1 0 4.5 3.1 2.8 6.1C19 16.5 12 21 12 21z"/></svg>8</span>
+            <span><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#766a58" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-5.2A8 8 0 1 1 21 12z"/></svg>3</span>
+            <span class="read">Open round →</span>
+          </div>
+        </div>
+
+        <div class="kicker" style="margin-top:24px">Earlier today</div>
+        <div class="item"><div class="num">82</div>
+          <div><h3 class="c">Aldwood Links</h3><div class="m">@priya · stroke · +10 · 18 holes</div>
+            <div class="e">♥ 12 · 5 notes · 14/18 GIR</div></div></div>
+        <div class="item"><div class="num">76</div>
+          <div><h3 class="c">Bethpage Black</h3><div class="m">@deshawn · stroke · +4 · 18 holes</div>
+            <div class="e">♥ 21 · 8 notes · career low</div></div></div>
+      </div>
+      <div class="tabs">
+        <a class="on"><span class="ic">▤</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a>
+      </div></div>
+    </div>
+
+    <!-- SCORING -->
+    <div class="phone"><div class="bar"><span>9:41</span><span class="dots"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="sbanner"><h2 class="c">Torrey Pines — South</h2><div class="m">SCRAMBLE · BLUE TEES · 6,602 YARDS</div></div>
+        <div class="holehead"><span class="hn">7</span><span class="par">Par 4 · 412y · Hcp 5</span>
+          <span class="tot"><div class="n">−1</div><div class="l">thru 6</div></span></div>
+        <div class="rule"></div>
+        <div class="prow"><span class="av" style="background:#7cb342">M</span>
+          <div><div class="hand">@marcus</div><div class="sub">tee shot · drive</div></div>
+          <div class="step"><button>−</button><span class="v">4</span><button>+</button></div></div>
+        <div class="prow"><span class="av" style="background:#5c6bc0">P</span>
+          <div><div class="hand">@priya</div><div class="sub">approach · 8 iron</div></div>
+          <div class="step"><button>−</button><span class="v">5</span><button>+</button></div></div>
+
+        <div class="kicker" style="margin-top:20px">Tracked stats · this hole</div>
+        <div class="toggles">
+          <span class="chip on"><b>✓</b>Fairway</span>
+          <span class="chip no"><b>✗</b>Green</span>
+          <span class="chip"><b>2</b>Putts</span>
+          <span class="chip"><b>0</b>Penalties</span>
+        </div>
+        <div class="navh"><button>‹ Hole 6</button><button class="pri">Hole 8 ›</button></div>
+      </div>
+      <div class="tabs">
+        <a><span class="ic">▤</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a>
+      </div></div>
+    </div>
+  </div>
+</body>
+</html>

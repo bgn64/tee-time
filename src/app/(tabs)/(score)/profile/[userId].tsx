@@ -26,7 +26,7 @@ export default function ScoreProfileRoute() {
 
   if (!userId) {
     return (
-      <View style={[styles.fallback, { backgroundColor: colors.background }]}>
+      <View style={styles.fallback}>
         <Text style={{ color: colors.textBody }}>Missing user id.</Text>
       </View>
     );

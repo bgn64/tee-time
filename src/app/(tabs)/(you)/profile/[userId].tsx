@@ -1,8 +1,7 @@
 /**
  * Profile route inside the You stack.
  *
- * Mounted when the user taps a friend in `/(you)/friends` or any
- * other future drill-in inside the You tab. Thin wrapper around the
+ * Mounted for future drill-ins inside the You tab. Thin wrapper around the
  * shared `<ProfileScreen>` — same body as `(search)/profile/[uid]`
  * and `(score)/profile/[uid]`. Sets the header title to the
  * resolved displayName once available.
@@ -24,7 +23,7 @@ export default function YouProfileRoute() {
 
   if (!userId) {
     return (
-      <View style={[styles.fallback, { backgroundColor: colors.background }]}>
+      <View style={styles.fallback}>
         <Text style={{ color: colors.textBody }}>Missing user id.</Text>
       </View>
     );

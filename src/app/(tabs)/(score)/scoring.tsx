@@ -5,17 +5,18 @@
  * State ② of the four-state round-detail model (in-progress +
  * editing). Composes:
  *
- *   - Native stack header with the destructive "Abandon round" tucked
- *     into a ⋯ overflow (headerRight). Back arrow reaches the hub
- *     naturally because format.tsx's Start handler calls
- *     navigation.reset to make the stack [hub, scoring] regardless of
- *     entry path.
+ *   - Native stack header with the destructive "Abandon round" in a ⋯
+ *     overflow (headerRight); the same action is also offered as an
+ *     inline link under the Finish button (mockup parity). Back arrow
+ *     reaches the hub naturally because players.tsx's Start handler
+ *     calls navigation.reset to make the stack [hub, scoring]
+ *     regardless of entry path.
  *   - <ScoringRoundView> — the shared edge-to-edge editing surface:
- *     CourseBanner + per-hole swipeable editing pager + footer
- *     (Scorecard sheet button · Finish primary · Like/Comments). The
- *     SUMMARY section and the Front/Back range pill were removed in the
- *     redesign.
- *   - Modals: ConfirmAbandonSheet, TeePickerSheet.
+ *     compact course info bar + per-hole editor + Finish primary +
+ *     inline Abandon link.
+ *     The SUMMARY section, scorecard button, and social action bar were
+ *     removed in the redesign.
+ *   - Modals: ConfirmAbandonSheet.
  *
  * This screen owns the RoundContext write-handler wiring
  * (setCustomHoleScore, setParticipantTees, etc), the modal stack, and
@@ -34,7 +35,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
 
 import { ConfirmAbandonSheet } from '@/components/scoring/ConfirmAbandonSheet';
-import { TeePickerSheet } from '@/components/scoring/TeePickerSheet';
+import { PhoneFrame } from '@/components/aurora';
 import { HeaderOverflowMenu } from '@/components/round/HeaderOverflowMenu';
 import { ScoringRoundView } from '@/components/round/ScoringRoundView';
 import { useRound } from '@/library/golf/RoundContext';
@@ -55,14 +56,11 @@ export default function ScoringScreen() {
     currentHoleHydrated,
     setCustomHoleScore,
     setCurrentHole,
-    setParticipantTee,
-    setParticipantTees,
     completeCurrentRound,
     abandonCurrentRound,
   } = useRound();
 
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
-  const [teeEditTarget, setTeeEditTarget] = useState<string | null>(null);
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   // Per-hole-details rows + participant resolver are read here so
@@ -124,7 +122,7 @@ export default function ScoringScreen() {
   // dismissAll) to avoid POP_TO_TOP on a freshly-loaded stack with no
   // entries beneath.
   //
-  // Mount-grace window: format.tsx's "Start round" handler navigates to
+  // Mount-grace window: players.tsx's "Start round" handler navigates to
   // scoring immediately after startRound's local write resolves. There's
   // a brief tick between that write landing and RoundProvider surfacing
   // the new currentRound. Without the grace window, scoring would mount,
@@ -152,7 +150,7 @@ export default function ScoringScreen() {
 
   if (!roundHydrated || !currentHoleHydrated) {
     return (
-      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+      <View style={styles.centered}>
         <ActivityIndicator color={colors.primary} />
       </View>
     );
@@ -165,9 +163,6 @@ export default function ScoringScreen() {
     (h) => h.number === round.currentHoleNumber
   );
   if (!currentHole) return null;
-
-  const isScramble =
-    round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
 
   // Score-change handler wired into the pager. Just upserts the score
   // for the given hole; no longer auto-advances after entry.
@@ -183,7 +178,7 @@ export default function ScoringScreen() {
     <View style={styles.container}>
       <Stack.Screen
         options={{
-          title: 'Round',
+          title: 'Scoring',
           headerRight: () => (
             <HeaderOverflowMenu
               items={[
@@ -200,16 +195,19 @@ export default function ScoringScreen() {
         }}
       />
 
-      <ScoringRoundView
-        round={round}
-        profileRoutePrefix="/(tabs)/(score)/profile"
-        currentHoleNumber={currentHole.number}
-        onChangeCurrentHole={(n) => void setCurrentHole(n)}
-        onChangeScore={handleChangeScore}
-        onPressTeeForScorer={(scorerId) => setTeeEditTarget(scorerId)}
-        primaryLabel="Finish round"
-        onPrimary={() => void handleFinish()}
-      />
+      <PhoneFrame>
+        <ScoringRoundView
+          round={round}
+          profileRoutePrefix="/(tabs)/(score)/profile"
+          currentHoleNumber={currentHole.number}
+          onChangeCurrentHole={(n) => void setCurrentHole(n)}
+          onChangeScore={handleChangeScore}
+          primaryLabel="Finish round ›"
+          onPrimary={() => void handleFinish()}
+          secondaryLabel="Abandon round"
+          onSecondary={() => setAbandonConfirmVisible(true)}
+        />
+      </PhoneFrame>
 
       <ConfirmAbandonSheet
         visible={abandonConfirmVisible}
@@ -224,58 +222,6 @@ export default function ScoringScreen() {
           }, 0);
         }}
       />
-
-      <TeePickerSheet
-        visible={teeEditTarget != null}
-        scorerName={(() => {
-          if (!teeEditTarget) return '';
-          if (isScramble) {
-            const team = round.teams?.find((t) => t.id === teeEditTarget);
-            return team?.name ?? '';
-          }
-          // Stroke: scorerId IS the participantKey; the picker title is
-          // informational, so we leave it blank rather than resolving.
-          return '';
-        })()}
-        tees={round.course.tees ?? []}
-        selectedTeeId={(() => {
-          if (!teeEditTarget) return undefined;
-          if (isScramble) {
-            const team = round.teams?.find((t) => t.id === teeEditTarget);
-            const firstMember = team?.playerIds[0];
-            if (!firstMember) return undefined;
-            const p = round.participants.find(
-              (q) => q.participantKey === firstMember
-            );
-            return p?.teeId;
-          }
-          const p = round.participants.find(
-            (q) => q.participantKey === teeEditTarget
-          );
-          return p?.teeId;
-        })()}
-        onCancel={() => setTeeEditTarget(null)}
-        onPick={(teeId) => {
-          if (teeEditTarget) {
-            if (isScramble) {
-              // Fan out to every team member so the whole team continues
-              // to share a tee. Single batched UPDATE so the JSON
-              // snapshot lands atomically (looping setParticipantTee would
-              // silently drop earlier updates because each call uses the
-              // same render-time participants snapshot).
-              const team = round.teams?.find((t) => t.id === teeEditTarget);
-              const updates = (team?.playerIds ?? []).map((pid) => ({
-                participantKey: pid,
-                teeId,
-              }));
-              void setParticipantTees(updates);
-            } else {
-              void setParticipantTee(teeEditTarget, teeId);
-            }
-          }
-          setTeeEditTarget(null);
-        }}
-      />
     </View>
   );
 }
@@ -284,7 +230,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: colors.background,
+      backgroundColor: 'transparent',
     },
     centered: {
       flex: 1,

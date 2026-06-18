@@ -1,6 +1,7 @@
 import React from 'react';
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { GlassCard, GlassSurface, NeonButton } from '@/components/aurora';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 interface NameInputModalProps {
@@ -65,27 +66,27 @@ function NameInputModalBody({
 
   return (
     <View style={styles.backdrop}>
-      <View style={styles.card}>
+      <GlassCard strong glow style={styles.card}>
         <Text style={styles.title}>{title}</Text>
-        <TextInput
-          style={styles.input}
-          placeholder={placeholder}
-          placeholderTextColor={colors.textMuted}
-          value={value}
-          onChangeText={setValue}
-          autoFocus
-          onSubmitEditing={handleSubmit}
-          returnKeyType="done"
-        />
+        <GlassSurface strong style={styles.inputShell}>
+          <TextInput
+            style={styles.input}
+            placeholder={placeholder}
+            placeholderTextColor={colors.textMuted}
+            value={value}
+            onChangeText={setValue}
+            autoFocus
+            onSubmitEditing={handleSubmit}
+            returnKeyType="done"
+          />
+        </GlassSurface>
         <View style={styles.buttonRow}>
-          <TouchableOpacity onPress={onCancel} style={[styles.button, styles.cancelButton]}>
+          <Pressable onPress={onCancel} style={styles.cancelButton}>
             <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleSubmit} style={[styles.button, styles.submitButton]}>
-            <Text style={styles.submitText}>{submitLabel}</Text>
-          </TouchableOpacity>
+          </Pressable>
+          <NeonButton label={submitLabel} onPress={handleSubmit} size="sm" style={styles.submitButton} />
         </View>
-      </View>
+      </GlassCard>
     </View>
   );
 }
@@ -94,7 +95,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
   return StyleSheet.create({
     backdrop: {
       flex: 1,
-      backgroundColor: 'rgba(0,0,0,0.5)',
+      backgroundColor: colors.night,
       justifyContent: 'center',
       alignItems: 'center',
       padding: 24
@@ -102,27 +103,25 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     card: {
       width: '100%',
       maxWidth: 420,
-      backgroundColor: colors.cardBg,
-      borderRadius: 12,
-      padding: 20,
-      borderWidth: 1,
-      borderColor: colors.border
+      padding: 20
     },
     title: {
       fontSize: 18,
-      fontWeight: '700',
-      marginBottom: 12,
+      fontWeight: '800',
+      marginBottom: 14,
       color: colors.textTitle
     },
+    inputShell: {
+      borderRadius: 16,
+      marginBottom: 2
+    },
     input: {
-      borderWidth: 1,
-      borderColor: colors.border,
-      borderRadius: 8,
-      paddingHorizontal: 12,
+      paddingHorizontal: 14,
       paddingVertical: 10,
       fontSize: 16,
+      fontWeight: '700',
       color: colors.textTitle,
-      backgroundColor: colors.background
+      minHeight: 44
     },
     buttonRow: {
       flexDirection: 'row',
@@ -130,24 +129,22 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       gap: 8,
       marginTop: 16
     },
-    button: {
-      paddingHorizontal: 14,
-      paddingVertical: 10,
-      borderRadius: 8
-    },
     cancelButton: {
-      backgroundColor: colors.chipBg
+      minHeight: 36,
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 13,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+      backgroundColor: colors.glassFill2,
+      justifyContent: 'center'
     },
     cancelText: {
       color: colors.textBody,
-      fontWeight: '600'
+      fontWeight: '700'
     },
     submitButton: {
-      backgroundColor: colors.primary
-    },
-    submitText: {
-      color: '#ffffff',
-      fontWeight: '700'
+      minWidth: 86
     }
   });
 }

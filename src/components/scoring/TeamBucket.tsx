@@ -20,11 +20,13 @@
  *     opacity so the user reads the row as one tap target.
  */
 
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { useTheme } from '@/library/theme/ThemeContext';
 import { teeSwatch } from '@/components/scoring/TeePickerSheet';
 import { PlayerChip } from './PlayerChip';
+import type { ThemeColors } from '@/library/theme/themes';
 import type { Tee } from '@/types/golf';
 
 export type BucketMember = {
@@ -58,13 +60,11 @@ export function TeamBucket({
   onTapChip,
 }: Props) {
   const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const rowStyles = [
     styles.row,
-    {
-      backgroundColor: colors.cardBg,
-      borderColor: isDestination ? colors.accent : colors.border,
-    },
+    isDestination ? styles.rowDestinationColor : styles.rowBaseColor,
     isDestination && styles.rowDestination,
   ];
 
@@ -75,9 +75,9 @@ export function TeamBucket({
   // the opacity-0.55 dimming on the wrapper.
   const teePill =
     isDestination && tee ? (
-      <View style={[styles.teePill, { backgroundColor: colors.chipBg }]}>
+      <View style={styles.teePill}>
         <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} />
-        <Text style={[styles.teeText, { color: colors.textTitle }]} numberOfLines={1}>
+        <Text style={styles.teeText} numberOfLines={1}>
           {tee.name}
         </Text>
       </View>
@@ -87,20 +87,20 @@ export function TeamBucket({
         style={[
           styles.teePill,
           tee
-            ? { backgroundColor: colors.chipBg }
-            : { borderWidth: 1, borderColor: colors.border, backgroundColor: 'transparent' },
+            ? null
+            : styles.teePillEmpty,
         ]}
         accessibilityRole="button"
         accessibilityLabel={tee ? `Change tee from ${tee.name}` : 'Pick a tee'}>
         {tee ? (
           <>
             <View style={[styles.teeDot, { backgroundColor: teeSwatch(tee, colors) }]} />
-            <Text style={[styles.teeText, { color: colors.textTitle }]} numberOfLines={1}>
+            <Text style={styles.teeText} numberOfLines={1}>
               {tee.name}
             </Text>
           </>
         ) : (
-          <Text style={[styles.teeTextEmpty, { color: colors.textMuted }]}>+ Tee</Text>
+          <Text style={styles.teeTextEmpty}>+ Tee</Text>
         )}
         <Text style={[styles.teeChev, { color: colors.textMuted }]}>▾</Text>
       </Pressable>
@@ -110,7 +110,7 @@ export function TeamBucket({
     <View style={[styles.inner, isDestination && styles.innerDimmed]}>
       <View style={styles.chipList}>
         {members.length === 0 ? (
-          <Text style={[styles.emptyHint, { color: colors.textMuted }]}>
+          <Text style={styles.emptyHint}>
             No players yet
           </Text>
         ) : (
@@ -147,59 +147,85 @@ export function TeamBucket({
   return <View style={rowStyles}>{inner}</View>;
 }
 
-const styles = StyleSheet.create({
-  row: {
-    borderRadius: 12,
-    borderWidth: 1,
-    padding: 10,
-  },
-  rowDestination: {
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-  },
-  inner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  innerDimmed: {
-    opacity: 0.55,
-  },
-  chipList: {
-    flex: 1,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-  },
-  teePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 6,
-    borderRadius: 999,
-    flexShrink: 0,
-  },
-  teeDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  teeText: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  teeTextEmpty: {
-    fontSize: 11,
-    fontWeight: '700',
-  },
-  teeChev: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  emptyHint: {
-    fontSize: 11,
-    fontStyle: 'italic',
-    paddingVertical: 6,
-  },
-});
+function makeStyles(colors: ThemeColors) {
+  return StyleSheet.create({
+    row: {
+      borderRadius: 18,
+      borderWidth: 1,
+      padding: 12,
+      shadowColor: colors.cyan,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.08,
+      shadowRadius: 16,
+    },
+    rowBaseColor: {
+      backgroundColor: colors.glassFill,
+      borderColor: colors.glassStroke,
+    },
+    rowDestinationColor: {
+      backgroundColor: colors.glowCyan,
+      borderColor: colors.cyan,
+    },
+    rowDestination: {
+      borderWidth: 1.5,
+      borderStyle: 'dashed',
+    },
+    inner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    innerDimmed: {
+      opacity: 0.55,
+    },
+    chipList: {
+      flex: 1,
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+    },
+    teePill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 7,
+      borderRadius: 999,
+      flexShrink: 0,
+      backgroundColor: colors.night,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
+    },
+    teePillEmpty: {
+      backgroundColor: 'transparent',
+      borderColor: colors.glassStroke,
+      borderStyle: 'dashed',
+    },
+    teeDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    teeText: {
+      color: colors.textTitle,
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    teeTextEmpty: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    teeChev: {
+      color: colors.textMuted,
+      fontSize: 10,
+      fontWeight: '800',
+    },
+    emptyHint: {
+      color: colors.textMuted,
+      fontSize: 11,
+      fontStyle: 'italic',
+      paddingVertical: 6,
+    },
+  });
+}

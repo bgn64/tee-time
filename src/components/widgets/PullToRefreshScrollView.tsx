@@ -100,7 +100,7 @@ function NativePullToRefresh({
   showsVerticalScrollIndicator,
 }: Props) {
   const { colors } = useTheme();
-  const spinnerColor = tintColor ?? colors.primary;
+  const spinnerColor = tintColor ?? colors.lime;
 
   const [refreshing, setRefreshing] = React.useState(false);
   const refreshingRef = React.useRef(false);
@@ -132,7 +132,8 @@ function NativePullToRefresh({
           refreshing={refreshing}
           onRefresh={handleRefresh}
           tintColor={spinnerColor}
-          colors={[spinnerColor]}
+          colors={[spinnerColor, colors.cyan]}
+          progressBackgroundColor={colors.glassFill2}
         />
       }>
       {children}
@@ -164,8 +165,8 @@ function WebPullToRefresh({
   showsVerticalScrollIndicator,
 }: Props) {
   const { colors } = useTheme();
-  const spinnerColor = tintColor ?? colors.primary;
-  const trackColor = colors.border;
+  const spinnerColor = tintColor ?? colors.lime;
+  const trackColor = colors.glassStroke;
 
   // Content offset (and, while refreshing, the resting spinner gap).
   const pull = useSharedValue(0);
@@ -338,7 +339,12 @@ function WebPullToRefresh({
         <Animated.View
           style={[
             styles.spinnerCircle,
-            { borderColor: trackColor, borderTopColor: spinnerColor },
+            {
+              backgroundColor: colors.glassFill2,
+              borderColor: trackColor,
+              borderTopColor: spinnerColor,
+              borderRightColor: colors.cyan,
+            },
             circleStyle,
           ]}
         />
@@ -374,9 +380,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   spinnerCircle: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    borderWidth: 2.5,
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 3,
   },
 });

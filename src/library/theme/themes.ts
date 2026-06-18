@@ -85,96 +85,109 @@ export type ThemeColors = {
   tabBar: string;
   tabBarActive: string;
   tabBarInactive: string;
+  /** Neon lime brand color for active states and primary fills. */
+  lime: string;
+  /** Electric cyan accent for contrast against danger red. */
+  cyan: string;
+  /** Aurora violet accent for gradient depth and highlights. */
+  violet: string;
+  /** Dark text/icon color for use on neon lime or cyan fills. */
+  onNeon: string;
+  /** Primary translucent glass surface fill. */
+  glassFill: string;
+  /** Slightly stronger translucent glass surface fill. */
+  glassFill2: string;
+  /** Shared glass outline stroke color. */
+  glassStroke: string;
+  /** Soft lime glow wash for elevated neon elements. */
+  glowLime: string;
+  /** Soft cyan glow wash for secondary neon elements. */
+  glowCyan: string;
+  /** Deepest night base for Aurora gradients. */
+  night: string;
+  /** Top-left blue-green night gradient stop. */
+  nightTop: string;
+  /** Top-right violet night gradient stop. */
+  nightViolet: string;
+  /** Score pip fill for birdies. */
+  pipBirdie: string;
+  /** Score pip outline glow for birdies. */
+  pipBirdieRing: string;
+  /** Score pip fill for eagles. */
+  pipEagleBg: string;
+  /** Score pip text color for eagles. */
+  pipEagleText: string;
+  /** Score pip fill for bogeys. */
+  pipBogey: string;
+  /** Score pip outline glow for bogeys. */
+  pipBogeyRing: string;
 };
 
 export type ThemeName = 'light' | 'dark';
 
+export const numericFontVariant = ['tabular-nums'] as const;
+
+const auroraGlassTheme: ThemeColors = {
+  background: '#070a12',
+  primary: '#b6ff3b',
+  primaryDark: '#8fcf2e',
+  accent: '#ff6b6b',
+  textTitle: '#eaf2ee',
+  textBody: '#c4d0dc',
+  textMuted: '#93a3b3',
+  cardBg: '#0f1622',
+  chipBg: '#172230',
+  border: 'rgba(255,255,255,0.12)',
+  hairline: 'rgba(255,255,255,0.07)',
+  shadowCard: {
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.5,
+    shadowRadius: 30,
+    elevation: 8,
+  },
+  divergent: '#39e6c6',
+  teeBlue: '#6aa9e5',
+  teeWhite: '#c2c8b8',
+  teeRed: '#f08e7e',
+  teeGold: '#d4a839',
+  teeGreen: '#8fce6a',
+  teeBlack: '#b8b8b8',
+  teeYellow: '#e0c34a',
+  teeBurgundy: '#d59aa1',
+  teeSilver: '#c4cad2',
+  teeOrange: '#ef9b5a',
+  teePurple: '#a86fc8',
+  teeFallback1: '#c08fd2',
+  teeFallback2: '#4cc7c4',
+  teeFallback3: '#ef9b5a',
+  teeFallback4: '#8eb978',
+  teeFallback5: '#ea6fa1',
+  teeFallback6: '#8d8baf',
+  tabBar: '#0b121c',
+  tabBarActive: '#b6ff3b',
+  tabBarInactive: '#93a3b3',
+  lime: '#b6ff3b',
+  cyan: '#39e6c6',
+  violet: '#9d7bff',
+  onNeon: '#08121a',
+  glassFill: 'rgba(255,255,255,0.06)',
+  glassFill2: 'rgba(255,255,255,0.09)',
+  glassStroke: 'rgba(255,255,255,0.15)',
+  glowLime: 'rgba(182,255,59,0.14)',
+  glowCyan: 'rgba(57,230,198,0.12)',
+  night: '#05070c',
+  nightTop: '#13283a',
+  nightViolet: '#231a44',
+  pipBirdie: '#b6ff3b',
+  pipBirdieRing: 'rgba(182,255,59,0.4)',
+  pipEagleBg: '#b6ff3b',
+  pipEagleText: '#08121a',
+  pipBogey: '#ffc08a',
+  pipBogeyRing: 'rgba(255,178,122,0.4)',
+};
+
 export const themes: Record<ThemeName, ThemeColors> = {
-  light: {
-    background: '#f6f7f2',
-    primary: '#2f7d4b',
-    primaryDark: '#14543a',
-    accent: '#d94835',
-    textTitle: '#123322',
-    textBody: '#39423d',
-    textMuted: '#718077',
-    cardBg: '#ffffff',
-    chipBg: '#edf1e9',
-    border: '#dce2d8',
-    hairline: '#ebeee6',
-    shadowCard: {
-      // Mockup uses a primary-tinted shadow in light mode; we use
-      // `primaryDark` directly so the elevation reads as a soft green
-      // wash rather than a neutral grey on the warm page background.
-      shadowColor: '#14543a',
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.08,
-      shadowRadius: 14,
-      elevation: 3,
-    },
-    divergent: '#d94835',
-    teeBlue: '#4b8fd1',
-    teeWhite: '#8a8f81',
-    teeRed: '#c9442f',
-    teeGold: '#b08a1d',
-    teeGreen: '#4e9a3e',
-    teeBlack: '#333333',
-    teeYellow: '#9a7d10',
-    teeBurgundy: '#8a3a44',
-    teeSilver: '#9aa0a8',
-    teeOrange: '#cf6a1f',
-    teePurple: '#8a44ad',
-    teeFallback1: '#a05fb2',
-    teeFallback2: '#0e9491',
-    teeFallback3: '#d77a2e',
-    teeFallback4: '#4a6f3a',
-    teeFallback5: '#c93b7a',
-    teeFallback6: '#5c5a7d',
-    tabBar: '#ffffff',
-    tabBarActive: '#2f7d4b',
-    tabBarInactive: '#718077',
-  },
-  dark: {
-    background: '#0f1419',
-    primary: '#91d45f',
-    primaryDark: '#66b34e',
-    accent: '#f97066',
-    textTitle: '#edf5e8',
-    textBody: '#cbd6cf',
-    textMuted: '#91a095',
-    cardBg: '#18222b',
-    chipBg: '#24313a',
-    border: '#34424b',
-    hairline: 'rgba(255,255,255,0.06)',
-    shadowCard: {
-      // Dark mode uses a pure-black shadow at higher opacity so the
-      // card still lifts off the very dark page background.
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.45,
-      shadowRadius: 14,
-      elevation: 6,
-    },
-    divergent: '#f97066',
-    teeBlue: '#6aa9e5',
-    teeWhite: '#c2c8b8',
-    teeRed: '#f08e7e',
-    teeGold: '#d4a839',
-    teeGreen: '#8fce6a',
-    teeBlack: '#b8b8b8',
-    teeYellow: '#e0c34a',
-    teeBurgundy: '#d59aa1',
-    teeSilver: '#c4cad2',
-    teeOrange: '#ef9b5a',
-    teePurple: '#a86fc8',
-    teeFallback1: '#c08fd2',
-    teeFallback2: '#4cc7c4',
-    teeFallback3: '#ef9b5a',
-    teeFallback4: '#8eb978',
-    teeFallback5: '#ea6fa1',
-    teeFallback6: '#8d8baf',
-    tabBar: '#18222b',
-    tabBarActive: '#91d45f',
-    tabBarInactive: '#91a095',
-  },
+  light: auroraGlassTheme,
+  dark: auroraGlassTheme,
 };
