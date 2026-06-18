@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Tee-Time · Course search + course screen</title>
+<!--
+  Course lookup feature mockup (static HTML/CSS/JS, no build step).
+
+  Two screens:
+    1. SEARCH TAB (augmented) — the existing people search becomes a SINGLE
+       unified result feed (people + courses) sorted by relevance. No
+       people/courses split, no scope toggle. People rows keep the round avatar;
+       course rows use a rounded golf-icon tile (so the two read as distinct
+       kinds within one list). Backed by the people search + the same
+       `useCoursesSearch` catalog query the new-round picker uses.
+    2. COURSE SCREEN — a new read-only screen reached by tapping a course row.
+       It reuses existing components to surface course info WITHOUT creating a
+       round (the main value: browse the catalog). Sections, top → bottom:
+         · CourseBanner — same deterministic art, "course" variant: the course
+           NAME is the hero title (no @handle), location is the subscript.
+         · "You've played here N times" — a quick personal-history strip.
+         · Tees — each tee with length + rating/slope; tap one to highlight its
+           yardage row in the scorecard.
+         · Scorecard — the empty HorizontalScorecard: PAR + HCP + one yardage row
+           per tee, Front 9 / Back 9, no scorer rows (no round exists).
+
+  (Earlier explorations — stat tiles, signature hole, friends-played +
+  leaderboard, and a "Start a round here" CTA — were dropped per review.)
+
+  Mirrors tokens/components:
+    src/library/theme/themes.ts, components/round/CourseBanner.tsx +
+    library/golf/courseBanner.ts (banner art/JS), components/scoring/
+    HorizontalScorecard.tsx (.sc-* grid), components/scoring/CourseRow.tsx,
+    components/social/SearchResultsRow.tsx, components/AppHeader.tsx
+-->
+<style>
+  :root, [data-theme="light"] {
+    --bg:#f6f7f2; --primary:#2f7d4b; --primary-dark:#14543a; --accent:#d94835;
+    --text-title:#123322; --text-body:#39423d; --text-muted:#718077;
+    --card-bg:#ffffff; --chip-bg:#edf1e9; --border:#dce2d8; --hairline:#ebeee6;
+    --tee-blue:#4b8fd1; --tee-white:#8a8f81; --tee-red:#c9442f; --tee-gold:#b08a1d;
+    --shadow-card:0 10px 14px rgba(20,84,58,0.10); --page-text:#2b332e;
+  }
+  [data-theme="dark"] {
+    --bg:#0f1419; --primary:#91d45f; --primary-dark:#66b34e; --accent:#f97066;
+    --text-title:#edf5e8; --text-body:#cbd6cf; --text-muted:#91a095;
+    --card-bg:#18222b; --chip-bg:#24313a; --border:#34424b; --hairline:rgba(255,255,255,.06);
+    --tee-blue:#6aa9e5; --tee-white:#c2c8b8; --tee-red:#f08e7e; --tee-gold:#d4a839;
+    --shadow-card:0 10px 16px rgba(0,0,0,.45); --page-text:#cdd6cf;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--page-text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; transition: background .2s, color .2s; padding: 28px 16px 90px;
+  }
+  .page-head { max-width: 980px; margin: 0 auto 6px; }
+  .page-head h1 { font-size: 21px; margin: 0 0 6px; color: var(--text-title); letter-spacing: -.3px; }
+  .page-head p { font-size: 13px; line-height: 1.55; margin: 0; color: var(--text-muted); max-width: 820px; }
+  .toolbar { max-width: 980px; margin: 16px auto 0; display: flex; gap: 10px; }
+  .btn { font: inherit; font-size: 12.5px; font-weight: 700; border: 1px solid var(--border); background: var(--card-bg); color: var(--text-title); padding: 8px 13px; border-radius: 9px; cursor: pointer; }
+  .btn:hover { border-color: var(--primary); }
+  .btn[aria-pressed="true"] { background: var(--primary); color:#fff; border-color: var(--primary); }
+
+  .stage { display: flex; flex-wrap: wrap; justify-content: center; gap: 30px; margin-top: 28px; align-items: flex-start; }
+  .col { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .col-tag { font-size: 11px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase; color: var(--text-muted); }
+
+  /* device frame — sizes to content (no fixed height) */
+  .phone { width: 394px; max-width: 100%; background:#000; border-radius: 38px; padding: 10px; box-shadow: 0 20px 50px rgba(0,0,0,.25); }
+  .screen { position: relative; background: var(--bg); border-radius: 30px; overflow: hidden; }
+
+  /* AppHeader (centered wordmark + hairline) */
+  .appbar { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 13px 12px; background: var(--card-bg); border-bottom: 1px solid var(--hairline); }
+  .appbar .brand { font-size: 16px; font-weight: 900; letter-spacing: -.2px; color: var(--text-title); }
+  .appbar .flag { color: var(--primary); font-size: 15px; }
+
+  /* native stack header (course screen) */
+  .nav { display: flex; align-items: center; gap: 8px; padding: 12px 12px 10px; background: var(--card-bg); border-bottom: 1px solid var(--hairline); }
+  .nav .back { font-size: 22px; color: var(--text-title); width: 26px; text-align: center; }
+  .nav .nav-title { font-size: 16px; font-weight: 800; color: var(--text-title); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+
+  /* ---------- SEARCH TAB (single relevance feed) ---------- */
+  .search-body { padding: 18px 20px 28px; }
+  .lede { font-size: 13px; color: var(--text-muted); margin: 0 0 14px; }
+  .search-field { display: flex; align-items: center; gap: 8px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 10px; padding: 0 12px; height: 44px; margin-bottom: 14px; }
+  .search-field .mag { color: var(--text-muted); font-size: 15px; }
+  .search-field input { flex: 1; border: none; background: none; outline: none; font: inherit; font-size: 15px; color: var(--text-title); }
+
+  .results { border-top: 1px solid var(--hairline); }
+  .result-row { display: flex; align-items: center; gap: 12px; padding: 12px 2px; cursor: pointer; border-bottom: 1px solid var(--hairline); }
+  .result-row:hover { background: var(--chip-bg); }
+  .ava { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color:#fff; font-weight: 800; font-size: 15px; flex: none; }
+  .course-ic { width: 40px; height: 40px; border-radius: 11px; background: var(--chip-bg); display: flex; align-items: center; justify-content: center; flex: none; }
+  .course-ic svg { width: 21px; height: 21px; stroke: var(--primary-dark); fill: none; stroke-width: 1.8; }
+  [data-theme="dark"] .course-ic svg { stroke: var(--primary); }
+  .r-body { flex: 1; min-width: 0; }
+  .r-name { font-size: 14.5px; font-weight: 800; color: var(--text-title); }
+  .r-sub { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-top: 2px; }
+  .chev { color: var(--text-muted); font-size: 18px; }
+
+  /* =========================================================
+     COURSE BANNER (lifted art; course-title variant)
+     ========================================================= */
+  .banner { position: relative; height: 132px; overflow: hidden; }
+  .banner .bgrad { position: absolute; inset: 0; }
+  .banner .bcontour { position: absolute; inset: 0; opacity: .55; }
+  .banner .bcontour svg { width: 100%; height: 100%; display: block; }
+  .banner .bscrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.22) 0%, rgba(0,0,0,0) 40%, rgba(0,0,0,.60) 100%); }
+  .banner .bhead { position: absolute; inset: 0; padding: 13px 16px; display: flex; flex-direction: column; }
+  .banner .bmeta { display: flex; align-items: center; gap: 6px; }
+  .banner .bmeta .top-text { color: rgba(255,255,255,.92); text-shadow: 0 1px 6px rgba(0,0,0,.45); font-size: 11px; font-weight: 800; letter-spacing: .6px; }
+  .banner .btitle { margin-top: auto; }
+  .banner .bhandle { font-size: 22px; font-weight: 900; letter-spacing: -.3px; color: #fff; text-shadow: 0 1px 10px rgba(0,0,0,.5); line-height: 1.05; }
+  .banner .bsub { margin-top: 5px; font-size: 12.5px; font-weight: 600; color: rgba(255,255,255,.92); text-shadow: 0 1px 8px rgba(0,0,0,.45); }
+
+  /* ---------- COURSE SCREEN content ---------- */
+  .section { padding: 14px 16px; }
+  .section + .section { border-top: 1px solid var(--hairline); }
+  .section-title { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--text-muted); margin: 0 0 10px; }
+
+  /* "played here" strip */
+  .hist-wrap { padding: 14px 16px 0; }
+  .history { display: flex; align-items: center; gap: 10px; background: color-mix(in srgb, var(--primary) 10%, var(--card-bg)); border: 1px solid color-mix(in srgb, var(--primary) 26%, var(--card-bg)); border-radius: 12px; padding: 11px 13px; }
+  .history .hi { width: 30px; height: 30px; border-radius: 8px; background: color-mix(in srgb, var(--primary) 20%, var(--card-bg)); display: flex; align-items: center; justify-content: center; flex: none; }
+  .history .hi svg { width: 17px; height: 17px; stroke: var(--primary-dark); fill: none; stroke-width: 1.9; }
+  [data-theme="dark"] .history .hi svg { stroke: var(--primary); }
+  .history .ht { flex: 1; }
+  .history .ht b { font-size: 13.5px; font-weight: 900; color: var(--text-title); }
+  .history .ht span { display: block; font-size: 11.5px; font-weight: 600; color: var(--text-muted); margin-top: 1px; }
+
+  /* tees */
+  .tee-row { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 10px; cursor: pointer; border: 1px solid transparent; }
+  .tee-row:hover { background: var(--chip-bg); }
+  .tee-row.active { background: var(--chip-bg); border-color: var(--border); }
+  .tee-dot { width: 13px; height: 13px; border-radius: 50%; flex: none; border: 1px solid rgba(0,0,0,.12); }
+  .tee-name { flex: 1; font-size: 13.5px; font-weight: 800; color: var(--text-title); }
+  .tee-yds { font-size: 13px; font-weight: 900; color: var(--text-title); }
+  .tee-rs { font-size: 11px; font-weight: 700; color: var(--text-muted); margin-left: 10px; min-width: 74px; text-align: right; }
+
+  /* scorecard (mirrors HorizontalScorecard fit-to-width) */
+  .sc-nine + .sc-nine { margin-top: 14px; }
+  .sc-cap { font-size: 11px; font-weight: 800; letter-spacing: .4px; color: var(--text-muted); margin: 0 0 5px 2px; }
+  .sc-row { display: grid; grid-template-columns: 30px repeat(9, minmax(0,1fr)) 30px 34px; align-items: center; }
+  .sc-cell { text-align: center; font-size: 11px; padding: 3px 0; min-width: 0; }
+  .sc-label { padding-left: 2px; text-align: left; font-size: 9.5px; font-weight: 900; color: var(--text-muted); white-space: nowrap; overflow: hidden; display: flex; align-items: center; gap: 4px; }
+  .sc-head { border-bottom: 1.5px solid var(--text-title); padding-bottom: 2px; }
+  .sc-head .sc-cell { font-weight: 900; color: var(--text-title); font-size: 10.5px; }
+  .sc-par .sc-cell { font-size: 12px; font-weight: 800; color: var(--text-title); }
+  .sc-par .sc-label { color: var(--text-title); }
+  .sc-hcp .sc-cell { font-size: 9px; font-weight: 700; color: var(--text-muted); }
+  .sc-yds { border-top: 1px solid var(--hairline); }
+  .sc-yds .sc-cell { padding: 4px 0; font-size: 10px; font-weight: 600; color: var(--text-body); }
+  .sc-yds .tee-tag { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .sc-yds.dim { opacity: .42; }
+  .col-out, .col-tot { background: var(--chip-bg); }
+  .sc-row .col-out, .sc-row .col-tot { font-weight: 900; }
+</style>
+</head>
+<body data-theme="light">
+
+  <div class="page-head">
+    <h1>Course lookup — search + course screen</h1>
+    <p>
+      Search returns one relevance-ranked feed of people <em>and</em> courses (no split, no toggle).
+      Tapping a course opens a read-only <strong>course screen</strong>: the <strong>course banner</strong>
+      (course name as the hero), a <strong>&ldquo;played here&rdquo;</strong> strip, the <strong>tees</strong>
+      (tap one to highlight its scorecard row), and the <strong>empty scorecard</strong> — par / handicap /
+      per-tee yardages, no round needed.
+    </p>
+  </div>
+  <div class="toolbar">
+    <button class="btn" id="themeBtn" aria-pressed="false">🌙 Dark theme</button>
+  </div>
+
+  <div class="stage">
+
+    <!-- ===================== SEARCH TAB ===================== -->
+    <div class="col">
+      <div class="col-tag">Search · one relevance feed</div>
+      <div class="phone">
+        <div class="screen">
+          <div class="appbar"><span class="flag">⛳</span><span class="brand">tee-time</span></div>
+          <div class="search-body">
+            <p class="lede">Search people and courses.</p>
+            <div class="search-field">
+              <span class="mag">🔍</span>
+              <input value="pebb" readonly />
+            </div>
+
+            <div class="results">
+              <!-- Mixed, relevance-ordered: people and courses in one list. -->
+              <div class="result-row" data-open>
+                <div class="course-ic"><svg viewBox="0 0 24 24"><path d="M12 2v15M12 4l7 2-7 2"/><circle cx="12" cy="20" r="1.6"/></svg></div>
+                <div class="r-body">
+                  <div class="r-name">Pebble Beach Golf Links</div>
+                  <div class="r-sub">Pebble Beach, CA · 18 holes · Par 72</div>
+                </div>
+                <span class="chev">›</span>
+              </div>
+              <div class="result-row">
+                <div class="ava" style="background:#a05fb2">P</div>
+                <div class="r-body">
+                  <div class="r-name">Pebbles Martin</div>
+                  <div class="r-sub">@pebbles</div>
+                </div>
+                <span class="chev">›</span>
+              </div>
+              <div class="result-row">
+                <div class="course-ic"><svg viewBox="0 0 24 24"><path d="M12 2v15M12 4l7 2-7 2"/><circle cx="12" cy="20" r="1.6"/></svg></div>
+                <div class="r-body">
+                  <div class="r-name">Pebble Creek CC</div>
+                  <div class="r-sub">Goodyear, AZ · 18 holes · Par 72</div>
+                </div>
+                <span class="chev">›</span>
+              </div>
+              <div class="result-row">
+                <div class="course-ic"><svg viewBox="0 0 24 24"><path d="M12 2v15M12 4l7 2-7 2"/><circle cx="12" cy="20" r="1.6"/></svg></div>
+                <div class="r-body">
+                  <div class="r-name">Pebble Ridge Municipal</div>
+                  <div class="r-sub">Austin, TX · 9 holes · Par 35</div>
+                </div>
+                <span class="chev">›</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="col-tag" style="text-transform:none;font-weight:600;max-width:360px;text-align:center">
+        Tap “Pebble Beach Golf Links” → the course screen at right.
+      </div>
+    </div>
+
+    <!-- ===================== COURSE SCREEN ===================== -->
+    <div class="col">
+      <div class="col-tag">Course screen</div>
+      <div class="phone">
+        <div class="screen">
+          <div class="nav">
+            <span class="back">‹</span>
+            <span class="nav-title">Course</span>
+          </div>
+
+          <div class="banner" data-course-banner='{"course":"Pebble Beach Golf Links","title":"Pebble Beach Golf Links","subtitle":"Pebble Beach, California","meta":"18 HOLES · PAR 72 · PUBLIC"}'></div>
+
+          <!-- played-here strip (only when the viewer has rounds here) -->
+          <div class="hist-wrap">
+            <div class="history">
+              <div class="hi"><svg viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 3 3 5-6"/></svg></div>
+              <div class="ht">
+                <b>You've played here 3 times</b>
+                <span>Best round 81 (+9) · last played Apr 2026</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- tees -->
+          <div class="section">
+            <div class="section-title">Tees</div>
+            <div id="teeList"></div>
+          </div>
+
+          <!-- empty scorecard -->
+          <div class="section">
+            <div class="section-title">Scorecard</div>
+            <div class="sc-nine"><div class="sc-cap">FRONT 9</div><div id="scFront"></div></div>
+            <div class="sc-nine"><div class="sc-cap">BACK 9</div><div id="scBack"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+(function () {
+  "use strict";
+  var body = document.body;
+
+  /* ----- Deterministic banner art (mirrors courseBanner.ts) ----- */
+  function hashStr(s) {
+    var h = 0, str = String(s).toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (var i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    return h;
+  }
+  function styleFor(seed) {
+    var h = hashStr(seed);
+    return { hue: h % 360, sat: 44 + (Math.floor(h / 360) % 16), pattern: Math.floor(h / 23) % 4, angle: 110 + (Math.floor(h / 7) % 70), flagX: 18 + (Math.floor(h / 13) % 64) };
+  }
+  function gradFor(s) {
+    var hue2 = (s.hue + 22) % 360;
+    return "linear-gradient(" + s.angle + "deg, hsl(" + s.hue + " " + s.sat + "% 23%), hsl(" + hue2 + " " + s.sat + "% 39%))";
+  }
+  function flagSVG(flagX, topY) {
+    var fx = Math.round(flagX / 100 * 404);
+    return '<g stroke="#fff" stroke-opacity=".85" stroke-width="2"><line x1="' + fx + '" y1="' + topY + '" x2="' + fx + '" y2="' + (topY + 40) + '"/></g>' +
+           '<path d="M' + fx + ' ' + topY + ' L' + (fx + 20) + ' ' + (topY + 6) + ' L' + fx + ' ' + (topY + 12) + ' Z" fill="#fff" fill-opacity=".9"/>';
+  }
+  function patternSVG(pattern, flagX) {
+    var open = '<svg viewBox="0 0 404 132" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">';
+    if (pattern === 0) {
+      return open + '<g fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.2">' +
+        '<path d="M-10 96 C 80 76,150 106,240 86 S 380 70,420 90"/>' +
+        '<path d="M-10 108 C 80 90,150 118,240 98 S 380 84,420 102"/>' +
+        '<path d="M-10 82 C 80 62,160 94,250 72 S 380 56,420 76"/></g>' + flagSVG(flagX, 36) + '</svg>';
+    }
+    if (pattern === 1) {
+      return open + '<g fill="none" stroke="#fff" stroke-opacity=".5" stroke-width="1.2">' +
+        '<path d="M-10 102 C 60 62,140 116,210 84 S 360 52,420 100"/>' +
+        '<path d="M-10 88 C 70 54,150 104,230 74 S 370 44,420 86"/>' +
+        '<path d="M-10 114 C 60 82,150 124,220 100 S 360 74,420 112"/></g>' + flagSVG(flagX, 32) + '</svg>';
+    }
+    if (pattern === 2) {
+      return open + '<path d="M-10 132 L-10 96 C 90 78,180 110,280 92 S 420 76,420 102 L420 132 Z" fill="#fff" fill-opacity=".14"/>' +
+        '<g fill="none" stroke="#fff" stroke-opacity=".4" stroke-width="1.1"><path d="M-10 84 C 90 68,180 96,280 80 S 420 66,420 90"/></g>' + flagSVG(flagX, 32) + '</svg>';
+    }
+    var cx = Math.round(flagX / 100 * 404);
+    return open + '<g fill="none" stroke="#fff" stroke-opacity=".42" stroke-width="1.2">' +
+      '<ellipse cx="' + cx + '" cy="86" rx="26" ry="13"/><ellipse cx="' + cx + '" cy="86" rx="52" ry="26"/>' +
+      '<ellipse cx="' + cx + '" cy="86" rx="82" ry="40"/><ellipse cx="' + cx + '" cy="86" rx="116" ry="56"/></g>' + flagSVG(flagX, 44) + '</svg>';
+  }
+  function bannerHTML(o) {
+    var s = styleFor(o.seed || o.course);
+    var meta = o.meta ? '<div class="bmeta"><span class="top-text">' + o.meta + '</span></div>' : '';
+    var title = o.title || ('@' + (o.handle || 'you'));
+    var sub = o.subtitle != null ? o.subtitle : (o.course + (o.location ? ' · ' + o.location : ''));
+    return '<div class="bgrad" style="background:' + gradFor(s) + '"></div>' +
+      '<div class="bcontour">' + patternSVG(s.pattern, s.flagX) + '</div>' +
+      '<div class="bscrim"></div>' +
+      '<div class="bhead">' + meta +
+        '<div class="btitle"><div class="bhandle">' + title + '</div>' +
+        '<div class="bsub">' + sub + '</div></div>' +
+      '</div>';
+  }
+  document.querySelectorAll("[data-course-banner]").forEach(function (el) {
+    el.innerHTML = bannerHTML(JSON.parse(el.dataset.courseBanner));
+  });
+
+  /* ----- Course data (a mock catalog row; Course type in types/golf.ts) ----- */
+  var PAR = [4,5,4,4,3,5,3,4,4, 4,4,3,4,4,3,4,5,5];
+  var HCP = [7,3,5,11,17,1,15,9,13, 8,4,18,6,2,16,10,12,14];
+  var BLUE = [380,502,390,331,166,506,106,418,481, 446,380,202,399,565,397,403,178,543];
+  function scale(arr, f) { return arr.map(function (y) { return Math.round(y * f / 5) * 5; }); }
+  var TEES = [
+    { name: "Blue",  varc: "--tee-blue",  rating: "74.1", slope: 144, yds: BLUE },
+    { name: "White", varc: "--tee-white", rating: "71.7", slope: 135, yds: scale(BLUE, 0.90) },
+    { name: "Red",   varc: "--tee-red",   rating: "71.9", slope: 130, yds: scale(BLUE, 0.76) }
+  ];
+  function sum(arr, a, b) { var t = 0; for (var i = a; i < b; i++) t += arr[i]; return t; }
+
+  /* ----- Tee list ----- */
+  var teeList = document.getElementById("teeList");
+  TEES.forEach(function (t, i) {
+    var row = document.createElement("div");
+    row.className = "tee-row" + (i === 0 ? " active" : "");
+    row.dataset.tee = t.name;
+    row.innerHTML =
+      '<span class="tee-dot" style="background:var(' + t.varc + ')"></span>' +
+      '<span class="tee-name">' + t.name + '</span>' +
+      '<span class="tee-yds">' + sum(t.yds, 0, 18).toLocaleString() + ' yds</span>' +
+      '<span class="tee-rs">' + t.rating + ' / ' + t.slope + '</span>';
+    row.addEventListener("click", function () { selectTee(t.name); });
+    teeList.appendChild(row);
+  });
+
+  /* ----- Empty scorecard (mirrors HorizontalScorecard: yds rows + PAR + HCP) ----- */
+  function cells(values, lo, hi, sub, tot) {
+    var html = "";
+    for (var i = lo; i < hi; i++) {
+      var v = values[i];
+      html += '<div class="sc-cell">' + (v == null || v === "" ? "" : v) + "</div>";
+    }
+    html += '<div class="sc-cell col-out">' + (sub == null ? "" : sub) + "</div>";
+    html += '<div class="sc-cell col-tot">' + (tot == null ? "" : tot) + "</div>";
+    return html;
+  }
+  function buildNine(side) {
+    var lo = side === "front" ? 0 : 9, hi = side === "front" ? 9 : 18;
+    var subLabel = side === "front" ? "OUT" : "IN";
+    var out = '<div class="sc-row sc-head">';
+    out += '<div class="sc-cell sc-label">HOLE</div>';
+    for (var i = lo; i < hi; i++) out += '<div class="sc-cell">' + (i + 1) + "</div>";
+    out += '<div class="sc-cell col-out">' + subLabel + '</div><div class="sc-cell col-tot">TOT</div></div>';
+
+    TEES.forEach(function (t) {
+      out += '<div class="sc-row sc-yds" data-tee="' + t.name + '">';
+      out += '<div class="sc-cell sc-label"><span class="tee-tag" style="background:var(' + t.varc + ')"></span>' + t.name.toUpperCase() + "</div>";
+      out += cells(t.yds, lo, hi, sum(t.yds, lo, hi), sum(t.yds, 0, 18).toLocaleString());
+      out += "</div>";
+    });
+
+    out += '<div class="sc-row sc-par"><div class="sc-cell sc-label">PAR</div>' +
+      cells(PAR, lo, hi, sum(PAR, lo, hi), sum(PAR, 0, 18)) + "</div>";
+    out += '<div class="sc-row sc-hcp"><div class="sc-cell sc-label">HCP</div>' +
+      cells(HCP, lo, hi, null, null) + "</div>";
+    return out;
+  }
+  document.getElementById("scFront").innerHTML = buildNine("front");
+  document.getElementById("scBack").innerHTML = buildNine("back");
+
+  /* ----- Tee selection: highlight the chosen tee's yardage row ----- */
+  function selectTee(name) {
+    document.querySelectorAll(".tee-row").forEach(function (r) {
+      r.classList.toggle("active", r.dataset.tee === name);
+    });
+    document.querySelectorAll(".sc-yds").forEach(function (r) {
+      r.classList.toggle("dim", r.dataset.tee !== name);
+    });
+  }
+  selectTee("Blue");
+
+  /* ----- Theme toggle ----- */
+  var themeBtn = document.getElementById("themeBtn");
+  themeBtn.addEventListener("click", function () {
+    var dark = body.getAttribute("data-theme") === "dark";
+    body.setAttribute("data-theme", dark ? "light" : "dark");
+    themeBtn.setAttribute("aria-pressed", String(!dark));
+    themeBtn.textContent = dark ? "🌙 Dark theme" : "☀️ Light theme";
+  });
+})();
+</script>
+</body>
+</html>
