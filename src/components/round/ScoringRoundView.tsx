@@ -20,10 +20,11 @@
  * course info, hole hero, editor, and footer CTA.
  */
 
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { LensSwitcher, type ScoringLens } from './LensSwitcher';
 import { SwipeableHoleEditor } from './SwipeableHoleEditor';
 import { GlassCard, NeonButton, NumericText } from '@/components/aurora';
 import { findTee } from '@/library/golf/courseHelpers';
@@ -55,6 +56,17 @@ type Props = {
    */
   secondaryLabel?: string;
   onSecondary?: () => void;
+  /**
+   * Live-scoring lens system (mockup `04-aurora-glass.html`): when
+   * `onChangeLens` is provided, the header shows a Hole · Card · Chat
+   * switcher and the `card`/`chat` lenses swap the Hole body for the
+   * injected `cardLens` / `chatLens`. The edit-round screen omits these
+   * and keeps the plain Hole surface.
+   */
+  lens?: ScoringLens;
+  onChangeLens?: (lens: ScoringLens) => void;
+  cardLens?: ReactNode;
+  chatLens?: ReactNode;
 };
 
 export function ScoringRoundView({
@@ -67,10 +79,17 @@ export function ScoringRoundView({
   onPrimary,
   secondaryLabel,
   onSecondary,
+  lens,
+  onChangeLens,
+  cardLens,
+  chatLens,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
+
+  const activeLens: ScoringLens = lens ?? 'hole';
+  const showSwitcher = onChangeLens != null;
 
   const isInProgress = !round.completedAt;
   const currentHole = round.course.holes.find((h) => h.number === currentHoleNumber);
@@ -112,7 +131,10 @@ export function ScoringRoundView({
                 {metaLine}
               </Text>
             </View>
-            {currentHole ? (
+            {showSwitcher && onChangeLens ? (
+              <LensSwitcher value={activeLens} onChange={onChangeLens} />
+            ) : null}
+            {activeLens === 'hole' && currentHole ? (
               <View style={styles.hero}>
                 <NumericText style={styles.heroNumber}>
                   {currentHole.number}
@@ -134,42 +156,52 @@ export function ScoringRoundView({
                   <NumericText style={styles.toParValue}>
                     {formatScore(progress.relativeScore)}
                   </NumericText>
-                  <Text style={styles.toParLabel}>RUNNING</Text>
+                  <Text style={styles.toParLabel}>
+                    {round.scoringRule === 'scramble' ? 'TEAM' : 'RUNNING'}
+                  </Text>
                 </View>
               </View>
             ) : null}
           </GlassCard>
 
-          <SwipeableHoleEditor
-            round={round}
-            currentHoleNumber={currentHoleNumber}
-            onChangeCurrentHole={onChangeCurrentHole}
-            onChangeScore={onChangeScore}
-            onPressTeeForScorer={onPressTeeForScorer}
-          />
-
-          <View style={styles.footer}>
-            {onPrimary ? (
-              <NeonButton
-                label={primaryLabel ?? 'Continue'}
-                onPress={onPrimary}
+          {activeLens === 'hole' ? (
+            <>
+              <SwipeableHoleEditor
+                round={round}
+                currentHoleNumber={currentHoleNumber}
+                onChangeCurrentHole={onChangeCurrentHole}
+                onChangeScore={onChangeScore}
+                onPressTeeForScorer={onPressTeeForScorer}
               />
-            ) : null}
-            {onSecondary ? (
-              <Pressable
-                onPress={onSecondary}
-                accessibilityRole="button"
-                accessibilityLabel={secondaryLabel ?? 'Abandon round'}
-                style={({ pressed }) => [
-                  styles.abandon,
-                  pressed ? styles.abandonPressed : null,
-                ]}>
-                <Text style={styles.abandonText}>
-                  {secondaryLabel ?? 'Abandon round'}
-                </Text>
-              </Pressable>
-            ) : null}
-          </View>
+
+              <View style={styles.footer}>
+                {onPrimary ? (
+                  <NeonButton
+                    label={primaryLabel ?? 'Continue'}
+                    onPress={onPrimary}
+                  />
+                ) : null}
+                {onSecondary ? (
+                  <Pressable
+                    onPress={onSecondary}
+                    accessibilityRole="button"
+                    accessibilityLabel={secondaryLabel ?? 'Abandon round'}
+                    style={({ pressed }) => [
+                      styles.abandon,
+                      pressed ? styles.abandonPressed : null,
+                    ]}>
+                    <Text style={styles.abandonText}>
+                      {secondaryLabel ?? 'Abandon round'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </>
+          ) : activeLens === 'card' ? (
+            cardLens ?? null
+          ) : (
+            chatLens ?? null
+          )}
         </View>
       </ScrollView>
     </View>

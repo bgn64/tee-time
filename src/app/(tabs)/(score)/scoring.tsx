@@ -37,6 +37,9 @@ import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
 import { ConfirmAbandonSheet } from '@/components/scoring/ConfirmAbandonSheet';
 import { PhoneFrame } from '@/components/aurora';
 import { HeaderOverflowMenu } from '@/components/round/HeaderOverflowMenu';
+import type { ScoringLens } from '@/components/round/LensSwitcher';
+import { ScoringCardLens } from '@/components/round/ScoringCardLens';
+import { ScoringChatLens } from '@/components/round/ScoringChatLens';
 import { ScoringRoundView } from '@/components/round/ScoringRoundView';
 import { useRound } from '@/library/golf/RoundContext';
 import {
@@ -61,6 +64,7 @@ export default function ScoringScreen() {
   } = useRound();
 
   const [abandonConfirmVisible, setAbandonConfirmVisible] = useState(false);
+  const [lens, setLens] = useState<ScoringLens>('hole');
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   // Per-hole-details rows + participant resolver are read here so
@@ -206,6 +210,12 @@ export default function ScoringScreen() {
           onPrimary={() => void handleFinish()}
           secondaryLabel="Abandon round"
           onSecondary={() => setAbandonConfirmVisible(true)}
+          lens={lens}
+          onChangeLens={setLens}
+          cardLens={
+            <ScoringCardLens round={round} currentHoleNumber={currentHole.number} />
+          }
+          chatLens={<ScoringChatLens round={round} />}
         />
       </PhoneFrame>
 

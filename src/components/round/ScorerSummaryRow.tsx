@@ -17,6 +17,7 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { TeamAvatarCluster, type AvatarMember } from '@/components/scoring/TeamAvatarCluster';
+import { formatScore } from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Tee } from '@/types/golf';
@@ -72,6 +73,15 @@ type Props = {
    * the viewing surfaces untouched.
    */
   subtitleOverride?: string | null;
+  /**
+   * Per-scorer running ROUND score for the live Hole lens (mockup
+   * `04-aurora-glass.html`). When set, the right score column shows the
+   * running to-par + "THRU N" instead of the per-hole `scoreText` /
+   * `scoreSub`. Viewing surfaces omit it.
+   */
+  runningScore?: { rel: number; thru: number };
+  /** Renders a "YOU" pill after the handle (the signed-in player's row). */
+  isYou?: boolean;
 };
 
 export function ScorerSummaryRow({
@@ -84,6 +94,8 @@ export function ScorerSummaryRow({
   onPressTee,
   holeContext,
   subtitleOverride,
+  runningScore,
+  isYou,
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -199,6 +211,18 @@ export function ScorerSummaryRow({
         : null
       : teeChip;
 
+  // The live Hole lens swaps the per-hole hero for the scorer's running
+  // ROUND score (to-par + "THRU N"), toned by the running relative score.
+  const scoreColTone: ScoreTone = runningScore
+    ? runningScore.rel < 0
+      ? 'under'
+      : runningScore.rel > 0
+        ? 'over'
+        : 'even'
+    : tone;
+  const scoreColValue = runningScore ? formatScore(runningScore.rel) : scoreText;
+  const scoreColSub = runningScore ? `THRU ${runningScore.thru}` : scoreSub;
+
   return (
     <View style={styles.row}>
       <TeamAvatarCluster
@@ -207,21 +231,28 @@ export function ScorerSummaryRow({
         ringColor={colors.cardBg}
       />
       <View style={styles.body}>
-        <Text style={styles.handle} numberOfLines={2}>
-          {joinHandles(members)}
-        </Text>
+        <View style={styles.handleRow}>
+          <Text style={styles.handle} numberOfLines={2}>
+            {joinHandles(members)}
+          </Text>
+          {isYou ? (
+            <View style={styles.youPill}>
+              <Text style={styles.youPillText}>YOU</Text>
+            </View>
+          ) : null}
+        </View>
         {metaNode}
       </View>
       <View style={styles.scoreCol}>
         <Text
           style={[
             styles.scoreText,
-            tone === 'over' ? styles.scoreOver : null,
-            tone === 'even' ? styles.scoreEven : null,
+            scoreColTone === 'over' ? styles.scoreOver : null,
+            scoreColTone === 'even' ? styles.scoreEven : null,
           ]}>
-          {scoreText}
+          {scoreColValue}
         </Text>
-        {scoreSub ? <Text style={styles.thruText}>{scoreSub}</Text> : null}
+        {scoreColSub ? <Text style={styles.thruText}>{scoreColSub}</Text> : null}
       </View>
     </View>
   );
@@ -245,10 +276,29 @@ function makeStyles(colors: ThemeColors) {
       flex: 1,
       minWidth: 0,
     },
+    handleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 7,
+    },
     handle: {
+      flexShrink: 1,
       fontSize: 14,
       fontWeight: '800',
       color: colors.textTitle,
+    },
+    youPill: {
+      flexShrink: 0,
+      backgroundColor: colors.glowLime,
+      borderRadius: 5,
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+    },
+    youPillText: {
+      color: colors.lime,
+      fontSize: 8.5,
+      fontWeight: '900',
+      letterSpacing: 0.5,
     },
     statusText: {
       marginTop: 4,
