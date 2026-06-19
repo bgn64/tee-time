@@ -25,6 +25,7 @@ import {
   type StatValueMap,
 } from '@/library/golf/builtInStats';
 import { holeScoreDisplay } from '@/library/golf/holeScoreDisplay';
+import { playerProgress } from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Hole, Round } from '@/types/golf';
@@ -33,6 +34,7 @@ type Props = {
   round: Round;
   hole: Hole;
   scorers: RoundScorer[];
+  userScorerId?: string;
   trackedSet: ReadonlySet<string>;
   isScramble: boolean;
   getValues: (scorerId: string, holeNumber: number) => StatValueMap;
@@ -61,6 +63,7 @@ export function HoleEditPane({
   round,
   hole,
   scorers,
+  userScorerId,
   trackedSet,
   isScramble,
   getValues,
@@ -98,12 +101,15 @@ export function HoleEditPane({
           ? getContributors(s.id, hole.number)
           : undefined;
         const teamMembers = isScramble ? s.members : undefined;
+        const running = playerProgress(round, s.id);
 
         return (
           <ScoreEntryAccordion
             key={s.id}
             members={s.members}
             name={s.name}
+            runningScore={running}
+            isYou={s.id === userScorerId}
             scoreText={display.scoreText}
             scoreTone={display.tone}
             scoreSub={display.scoreSub}

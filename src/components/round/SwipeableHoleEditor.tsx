@@ -18,10 +18,11 @@ import {
 } from 'react-native';
 
 import { HoleEditPane } from './HoleEditPane';
-import { holesInRange } from '@/library/golf/scoring';
+import { holesInRange, scorerIdForUser } from '@/library/golf/scoring';
 import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRoundShotAttributions } from '@/library/golf/useRoundShotAttributions';
+import { useRequiredAccount } from '@/library/social/AccountContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import type { Round } from '@/types/golf';
@@ -49,6 +50,9 @@ export function SwipeableHoleEditor({
   const { getContributors, setContributors } = useRoundShotAttributions(
     round.id
   );
+
+  const { userId } = useRequiredAccount();
+  const userScorerId = scorerIdForUser(round, userId);
 
   const isScramble =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0;
@@ -89,6 +93,7 @@ export function SwipeableHoleEditor({
           round={round}
           hole={currentHole}
           scorers={scorers}
+          userScorerId={userScorerId}
           trackedSet={trackedSet}
           isScramble={isScramble}
           getValues={getValues}

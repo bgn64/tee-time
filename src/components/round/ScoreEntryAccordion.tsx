@@ -42,6 +42,12 @@ type Props = {
   scoreSub?: string;
   tee?: Tee;
   onPressTee?: () => void;
+  /**
+   * Per-scorer running ROUND score + "YOU" marker for the live Hole
+   * lens; forwarded to ScorerSummaryRow. Omitted on the edit screen.
+   */
+  runningScore?: { rel: number; thru: number };
+  isYou?: boolean;
 
   // Score-chip props (current hole context)
   holeNumber: number;
@@ -77,6 +83,8 @@ export function ScoreEntryAccordion({
   scoreTone,
   scoreSub,
   tee,
+  runningScore,
+  isYou,
   par,
   strokes,
   onChange,
@@ -109,6 +117,8 @@ export function ScoreEntryAccordion({
         tone={scoreTone}
         scoreSub={scoreSub}
         subtitleOverride={strokes == null ? 'to play' : null}
+        runningScore={runningScore}
+        isYou={isYou}
       />
       {onChange ? (
         <ScoreChipRow

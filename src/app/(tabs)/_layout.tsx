@@ -1,12 +1,20 @@
 import { Tabs } from 'expo-router';
-import Ionicons from '@expo/vector-icons/Ionicons';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Text, type ColorValue } from 'react-native';
 
 import { PHONE_MAX_WIDTH } from '@/components/aurora';
 import { AuthGate } from '@/components/auth/AuthGate';
 import { AccountProvider } from '@/library/social/AccountContext';
 import { FriendsProvider } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
+
+/**
+ * Tab bar icons rendered as the mockup's geometric glyphs (◎ ＋ ⌕ ◔)
+ * instead of vector icons, so the footer matches the Aurora design doc.
+ * Active/inactive tint comes from the navigator via `color`.
+ */
+function TabGlyph({ glyph, color }: { glyph: string; color: ColorValue }) {
+  return <Text style={[styles.tabGlyph, { color }]}>{glyph}</Text>;
+}
 
 export default function TabLayout() {
   const { colors } = useTheme();
@@ -46,9 +54,7 @@ export default function TabLayout() {
               options={{
                 title: 'Feed',
                 headerShown: false,
-                tabBarIcon: ({ color, focused }) => (
-                  <Ionicons name={focused ? 'home-sharp' : 'home-outline'} color={color} size={24} />
-                )
+                tabBarIcon: ({ color }) => <TabGlyph glyph="◎" color={color} />
               }}
             />
             <Tabs.Screen
@@ -56,9 +62,7 @@ export default function TabLayout() {
               options={{
                 title: 'Score',
                 headerShown: false,
-                tabBarIcon: ({ color }) => (
-                  <Ionicons name="add" color={color} size={30} />
-                )
+                tabBarIcon: ({ color }) => <TabGlyph glyph="＋" color={color} />
               }}
             />
             <Tabs.Screen
@@ -66,13 +70,7 @@ export default function TabLayout() {
               options={{
                 title: 'Search',
                 headerShown: false,
-                tabBarIcon: ({ color, focused }) => (
-                  <Ionicons
-                    name={focused ? 'search' : 'search-outline'}
-                    color={color}
-                    size={24}
-                  />
-                )
+                tabBarIcon: ({ color }) => <TabGlyph glyph="⌕" color={color} />
               }}
             />
             <Tabs.Screen
@@ -80,13 +78,7 @@ export default function TabLayout() {
               options={{
                 title: 'You',
                 headerShown: false,
-                tabBarIcon: ({ color, focused }) => (
-                  <Ionicons
-                    name={focused ? 'person-circle' : 'person-circle-outline'}
-                    color={color}
-                    size={24}
-                  />
-                )
+                tabBarIcon: ({ color }) => <TabGlyph glyph="◔" color={color} />
               }}
             />
           </Tabs>
@@ -95,3 +87,11 @@ export default function TabLayout() {
     </AccountProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  tabGlyph: {
+    fontSize: 21,
+    lineHeight: 24,
+    textAlign: 'center'
+  }
+});

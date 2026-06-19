@@ -109,6 +109,10 @@ export type ThemeColors = {
   nightTop: string;
   /** Top-right violet night gradient stop. */
   nightViolet: string;
+  /** Top stop of the screen base gradient (near-black phone interior). */
+  screenBgTop: string;
+  /** Bottom stop of the screen base gradient. */
+  screenBgBottom: string;
   /** Score pip fill for birdies. */
   pipBirdie: string;
   /** Score pip outline glow for birdies. */
@@ -179,6 +183,8 @@ const auroraGlassTheme: ThemeColors = {
   night: '#05070c',
   nightTop: '#13283a',
   nightViolet: '#231a44',
+  screenBgTop: '#0c1018',
+  screenBgBottom: '#0a0e16',
   pipBirdie: '#b6ff3b',
   pipBirdieRing: 'rgba(182,255,59,0.4)',
   pipEagleBg: '#b6ff3b',
