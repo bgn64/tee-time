@@ -73,10 +73,10 @@ export default function HandicapScreen() {
           </View>
           <Text style={styles.explain}>
             World Handicap System: the average of your best differentials from your most recent 20
-            rounds (fewer while you build up). Each differential is (113 ÷ Slope) × (Adjusted Gross −
-            Course Rating). New players cap each hole at par + 5 until an index is established; after
-            that the cap is net double bogey. An approximation — no playing-conditions or cap
-            adjustments yet.
+            rounds. With fewer than 20 you count fewer of them and subtract a fixed adjustment — so
+            your index can sit below your single best round. Each differential is (113 ÷ Slope) ×
+            (Adjusted Gross − Course Rating); holes cap at net double bogey (par + 5 before your
+            first index). An approximation — no playing-conditions adjustment yet.
           </Text>
           <Text style={styles.formula}>
             Differential = (113 ÷ Slope) × (Adjusted Gross − Course Rating)
@@ -101,12 +101,35 @@ export default function HandicapScreen() {
             ))}
 
             {hasIndex ? (
-              <View style={styles.summary}>
-                <Text style={styles.summaryLabel}>
-                  Average of lowest {breakdown.usedCount} of {breakdown.window.length}
-                </Text>
-                <NumericText style={styles.summaryValue}>{breakdown.indexLabel}</NumericText>
-              </View>
+              breakdown.adjustment !== 0 && breakdown.lowAverage != null ? (
+                <View style={styles.calc}>
+                  <View style={styles.calcRow}>
+                    <Text style={styles.calcLabel}>
+                      Lowest {breakdown.usedCount} of {breakdown.window.length}
+                    </Text>
+                    <NumericText style={styles.calcValue}>
+                      {breakdown.lowAverage.toFixed(1)}
+                    </NumericText>
+                  </View>
+                  <View style={styles.calcRow}>
+                    <Text style={styles.calcLabel}>Fewer-rounds adjustment</Text>
+                    <NumericText style={styles.calcValue}>
+                      −{Math.abs(breakdown.adjustment).toFixed(1)}
+                    </NumericText>
+                  </View>
+                  <View style={styles.calcRowTotal}>
+                    <Text style={styles.calcLabelTotal}>Handicap index</Text>
+                    <NumericText style={styles.calcValueTotal}>{breakdown.indexLabel}</NumericText>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.summary}>
+                  <Text style={styles.summaryLabel}>
+                    Average of lowest {breakdown.usedCount} of {breakdown.window.length}
+                  </Text>
+                  <NumericText style={styles.summaryValue}>{breakdown.indexLabel}</NumericText>
+                </View>
+              )
             ) : (
               <Text style={styles.note}>
                 You need at least 3 eligible rounds to establish an index. Play {remaining} more
@@ -341,6 +364,52 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     summaryValue: {
       color: colors.lime,
       fontSize: 18,
+      fontWeight: '900'
+    },
+
+    calc: {
+      backgroundColor: colors.glowLime,
+      borderWidth: 1,
+      borderColor: colors.lime,
+      borderRadius: 16,
+      paddingHorizontal: 15,
+      marginTop: 2,
+      marginBottom: 6
+    },
+    calcRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      paddingVertical: 11,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.glassStroke
+    },
+    calcRowTotal: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+      paddingVertical: 11
+    },
+    calcLabel: {
+      color: colors.textMuted,
+      fontSize: 12,
+      fontWeight: '600'
+    },
+    calcValue: {
+      color: colors.textTitle,
+      fontSize: 15,
+      fontWeight: '800'
+    },
+    calcLabelTotal: {
+      color: colors.textBody,
+      fontSize: 12,
+      fontWeight: '700'
+    },
+    calcValueTotal: {
+      color: colors.lime,
+      fontSize: 19,
       fontWeight: '900'
     },
     note: {
