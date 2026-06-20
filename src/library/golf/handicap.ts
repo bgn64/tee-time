@@ -6,11 +6,19 @@
  *
  *   Differential = (113 / Slope) × (Adjusted Gross Score − Course Rating)
  *
- * where Adjusted Gross Score caps each hole at *net double bogey*
- * (par + 2 + the strokes the player receives on that hole). The strokes
- * received come from the player's Course Handicap, which itself depends on
- * the index — so the index is found by iterating from a provisional value
- * until it stabilises (`computeWhsHandicap` below).
+ * where Adjusted Gross Score caps each hole's score. The cap follows the real
+ * WHS bootstrap, which sidesteps the circular "net double bogey needs a Course
+ * Handicap, a Course Handicap needs an index, an index needs scores" problem:
+ *
+ *   - Before you have an established index (your first 54 holes / 3 rounds),
+ *     each hole is capped at *par + 5* — no handicap strokes required.
+ *   - Once an index exists, each hole is capped at *net double bogey*
+ *     (par + 2 + strokes received), using the Course Handicap derived from the
+ *     index built off your earlier scores.
+ *
+ * Scores are therefore processed in posting order (oldest first), and each
+ * round's Score Differential is fixed once posted — never recomputed when a
+ * later round changes the index (`computeWhsHandicap` below).
  *
  * The Handicap Index is the average of the lowest 8 of the player's most
  * recent 20 differentials, using the WHS reduced-rounds table when fewer
@@ -145,12 +153,34 @@ function courseHandicap(index: number, slope: number, rating: number, parTotal: 
   return Math.round(index * (slope / 113) + (rating - parTotal));
 }
 
-function adjustedGrossFor(source: EligibleSource, index: number): number {
+/** Maximum strokes over par a hole counts for before the player has an index (WHS: par + 5). */
+const PRE_INDEX_HOLE_CAP_OVER_PAR = 5;
+
+/**
+ * Adjusted Gross with each hole capped at net double bogey
+ * (par + 2 + strokes received). Used once the player has an established index,
+ * which is what supplies the Course Handicap the cap depends on.
+ */
+function adjustedGrossNetDoubleBogey(source: EligibleSource, index: number): number {
   const ch = courseHandicap(index, source.slope, source.rating, source.parTotal);
   let ags = 0;
   for (const hole of source.holes) {
     const netDoubleBogey = hole.par + 2 + strokesReceived(hole.strokeIndex, ch);
     ags += Math.min(hole.strokes, netDoubleBogey);
+  }
+  return ags;
+}
+
+/**
+ * Adjusted Gross for a player with no established index yet: each hole is
+ * capped at par + 5 — the WHS maximum before a Course Handicap exists. This is
+ * how a brand-new player's first scores are processed, breaking the otherwise
+ * circular "net double bogey needs a handicap, a handicap needs scores" loop.
+ */
+function adjustedGrossParPlus5(source: EligibleSource): number {
+  let ags = 0;
+  for (const hole of source.holes) {
+    ags += Math.min(hole.strokes, hole.par + PRE_INDEX_HOLE_CAP_OVER_PAR);
   }
   return ags;
 }
@@ -263,53 +293,55 @@ export function computeWhsHandicap(rounds: Round[], userId: string): HandicapBre
     eligible.push(source);
   }
 
-  eligible.sort((a, b) => b.date - a.date);
-  const windowSources = eligible.slice(0, WHS_WINDOW);
+  // Process acceptable scores in posting order (oldest first). Each round's
+  // Adjusted Gross uses the cap rule in effect AT THAT TIME: par + 5 until an
+  // index is established (≥ 3 rounds / 54 holes), then net double bogey derived
+  // from the index built off the earlier scores. A round's Score Differential is
+  // fixed once posted and never recomputed — exactly how a handicap bootstraps
+  // in real life, and it avoids the net-double-bogey / index circularity.
+  eligible.sort((a, b) => a.date - b.date);
 
-  // Bootstrap the index: start uncapped (AGS = gross), then iterate the
-  // Course-Handicap-dependent net-double-bogey cap until it settles.
-  let index = indexFrom(windowSources.map((s) => differentialFor(s, s.gross))).index ?? 0;
-  for (let i = 0; i < 6; i += 1) {
-    const diffs = windowSources.map((s) => differentialFor(s, adjustedGrossFor(s, index)));
-    const next = indexFrom(diffs).index ?? 0;
-    if (Math.abs(next - index) < 0.05) {
-      index = next;
-      break;
-    }
-    index = next;
-  }
-
-  // Final detailed pass with the settled index.
-  const detailed = windowSources.map((source) => {
-    const adjustedGross = adjustedGrossFor(source, index);
-    return {
+  const posted: { source: EligibleSource; adjustedGross: number; differential: number }[] = [];
+  for (const source of eligible) {
+    const priorIndex = indexFrom(
+      posted.slice(-WHS_WINDOW).map((p) => p.differential)
+    ).index;
+    const adjustedGross =
+      priorIndex == null
+        ? adjustedGrossParPlus5(source)
+        : adjustedGrossNetDoubleBogey(source, priorIndex);
+    posted.push({
       source,
       adjustedGross,
       differential: differentialFor(source, adjustedGross),
-    };
-  });
+    });
+  }
 
+  // The index uses the most recent 20 posted differentials.
+  const windowPosts = posted.slice(-WHS_WINDOW);
   const { index: finalIndex, used, adjustment } = indexFrom(
-    detailed.map((d) => d.differential)
+    windowPosts.map((p) => p.differential)
   );
 
-  // The lowest `used` differentials count toward the index.
-  const countingThreshold = [...detailed]
-    .sort((a, b) => a.differential - b.differential)
-    .slice(0, used);
-  const countingSet = new Set(countingThreshold.map((d) => d.source.round.id));
+  // The lowest `used` of those count toward the index.
+  const countingSet = new Set(
+    [...windowPosts]
+      .sort((a, b) => a.differential - b.differential)
+      .slice(0, used)
+      .map((p) => p.source.round.id)
+  );
 
-  const windowRounds: EligibleHandicapRound[] = detailed
-    .map((d) => ({
-      round: d.source.round,
-      date: d.source.date,
-      gross: d.source.gross,
-      adjustedGross: d.adjustedGross,
-      rating: d.source.rating,
-      slope: d.source.slope,
-      parTotal: d.source.parTotal,
-      differential: d.differential,
-      counts: countingSet.has(d.source.round.id),
+  const windowRounds: EligibleHandicapRound[] = windowPosts
+    .map((p) => ({
+      round: p.source.round,
+      date: p.source.date,
+      gross: p.source.gross,
+      adjustedGross: p.adjustedGross,
+      rating: p.source.rating,
+      slope: p.source.slope,
+      parTotal: p.source.parTotal,
+      differential: p.differential,
+      counts: countingSet.has(p.source.round.id),
     }))
     .sort((a, b) => a.differential - b.differential);
 

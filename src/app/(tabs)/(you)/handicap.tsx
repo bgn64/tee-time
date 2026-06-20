@@ -74,8 +74,9 @@ export default function HandicapScreen() {
           <Text style={styles.explain}>
             World Handicap System: the average of your best differentials from your most recent 20
             rounds (fewer while you build up). Each differential is (113 ÷ Slope) × (Adjusted Gross −
-            Course Rating), with every hole capped at net double bogey. An approximation — no
-            playing-conditions or cap adjustments yet.
+            Course Rating). New players cap each hole at par + 5 until an index is established; after
+            that the cap is net double bogey. An approximation — no playing-conditions or cap
+            adjustments yet.
           </Text>
           <Text style={styles.formula}>
             Differential = (113 ÷ Slope) × (Adjusted Gross − Course Rating)

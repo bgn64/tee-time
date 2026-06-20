@@ -44,9 +44,12 @@ Date: 2026-06-19
   app-wide (profile tile + the new detail screen).
 - Chosen WHS v1 algorithm (client-only):
   - Differential = (113 ÷ Slope) × (Adjusted Gross − Course Rating).
-  - Adjusted Gross caps each hole at net double bogey = par + 2 + strokes the
-    player receives on that hole (needs per-hole stroke index + the player's
-    Course Handicap, bootstrapped iteratively from a provisional index).
+  - Adjusted Gross cap follows the real WHS bootstrap, processed in posting
+    order (oldest first): par + 5 per hole until an index is established (≥ 3
+    rounds / 54 holes), then net double bogey (par + 2 + strokes received) using
+    the Course Handicap from the index built off the earlier scores. Each
+    round's differential is fixed once posted (no iterative re-solve). This is
+    how a new player with no prior handicap is bootstrapped in real life.
   - Index = average of the lowest 8 of the most recent 20 differentials, using
     the WHS reduced-rounds table when fewer than 20 are available (min 3 rounds
     to establish an index); NO ×0.96 (that's the retired pre-2020 factor).
