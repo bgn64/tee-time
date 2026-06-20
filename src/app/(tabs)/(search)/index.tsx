@@ -1,5 +1,6 @@
 /**
- * Search tab — merged people search, requests, and friends list.
+ * Search tab — People (friend search, requests, friends list) and Courses
+ * (searchable course catalog → course detail), switched by a segmented toggle.
  */
 
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -15,16 +16,19 @@ import {
   View
 } from 'react-native';
 
-import { Avatar, GlassCard, GlassSurface, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
+import { Avatar, GlassCard, GlassSurface, PHONE_MAX_WIDTH, SectionLabel, SegmentedToggle } from '@/components/aurora';
+import { CourseRow } from '@/components/scoring/CourseRow';
 import { FriendActionPill } from '@/components/social/FriendActionPill';
 import { IncomingRequestsBanner } from '@/components/social/IncomingRequestsBanner';
 import { SearchResultsRow } from '@/components/social/SearchResultsRow';
 import { userParticipantKey } from '@/library/golf/participantKey';
+import { useCoursesSearch } from '@/library/golf/useCourses';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useScorecardStats } from '@/library/golf/useScorecardStats';
 import { useFriends } from '@/library/social/FriendsContext';
 import { warmProfileCache } from '@/library/social/profileCache';
 import { useTheme } from '@/library/theme/ThemeContext';
+import type { Course } from '@/types/golf';
 import type { ProfileSummary } from '@/types/social';
 
 const MIN_QUERY_LEN = 2;
@@ -44,6 +48,7 @@ export default function SearchScreen() {
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
   const [query, setQuery] = React.useState('');
+  const [tab, setTab] = React.useState<'people' | 'courses'>('people');
   const [results, setResults] = React.useState<ProfileSummary[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -131,6 +136,19 @@ export default function SearchScreen() {
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="handled">
+      <SegmentedToggle
+        options={[
+          { key: 'people', label: 'People' },
+          { key: 'courses', label: 'Courses' }
+        ]}
+        value={tab}
+        onChange={setTab}
+        style={styles.toggle}
+      />
+      {tab === 'courses' ? (
+        <CoursesPane styles={styles} colors={colors} />
+      ) : (
+        <>
       <GlassSurface strong glow style={styles.searchField}>
         <Ionicons name="search" size={18} color={colors.cyan} />
         <TextInput
@@ -253,7 +271,112 @@ export default function SearchScreen() {
           })}
         </>
       )}
+        </>
+      )}
     </ScrollView>
+  );
+}
+
+/** Secondary line for a course search result: location · par · tee count (only the parts we have). */
+function courseRowDetail(course: Course): string | undefined {
+  const parts: string[] = [];
+  if (course.location) parts.push(course.location);
+  const par = course.holes.reduce((sum, h) => sum + h.par, 0);
+  if (par > 0) parts.push(`par ${par}`);
+  const teeCount = course.tees?.length ?? 0;
+  if (teeCount > 0) parts.push(`${teeCount} ${teeCount === 1 ? 'tee' : 'tees'}`);
+  return parts.length > 0 ? parts.join(' · ') : undefined;
+}
+
+type SearchStyles = ReturnType<typeof makeStyles>;
+
+function CoursesPane({
+  styles,
+  colors
+}: {
+  styles: SearchStyles;
+  colors: ReturnType<typeof useTheme>['colors'];
+}) {
+  const router = useRouter();
+  const [query, setQuery] = React.useState('');
+  const { courses, loading, error } = useCoursesSearch(query);
+
+  const trimmed = query.trim();
+  const showNoResults = trimmed.length > 0 && !loading && !error && courses.length === 0;
+
+  return (
+    <>
+      <GlassSurface strong glow style={styles.searchField}>
+        <Ionicons name="search" size={18} color={colors.cyan} />
+        <TextInput
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="Search courses"
+          placeholderTextColor={colors.textMuted}
+          returnKeyType="search"
+        />
+        {loading ? (
+          <ActivityIndicator color={colors.lime} />
+        ) : query.length > 0 ? (
+          <Pressable onPress={() => setQuery('')} hitSlop={8}>
+            <Text style={styles.clearLink}>Clear</Text>
+          </Pressable>
+        ) : null}
+      </GlassSurface>
+
+      {trimmed.length === 0 ? (
+        <GlassCard strong glow style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>Search the catalog</Text>
+          <Text style={styles.emptyText}>
+            Find any course by name to see its tees, ratings, and full scorecard.
+          </Text>
+        </GlassCard>
+      ) : (
+        <>
+          <SectionLabel
+            right={
+              loading ? (
+                <ActivityIndicator color={colors.lime} />
+              ) : courses.length > 0 ? (
+                <Text style={styles.sectionMeta}>
+                  {courses.length} {courses.length === 1 ? 'match' : 'matches'}
+                </Text>
+              ) : null
+            }>
+            Courses
+          </SectionLabel>
+
+          {error ? (
+            <GlassCard style={styles.emptyCard}>
+              <Text style={[styles.emptyText, { color: colors.accent }]}>{error}</Text>
+            </GlassCard>
+          ) : null}
+
+          {showNoResults ? (
+            <GlassCard style={styles.emptyCard}>
+              <Text style={styles.emptyTitle}>No matches</Text>
+              <Text style={styles.emptyText}>No courses match “{trimmed}”.</Text>
+            </GlassCard>
+          ) : null}
+
+          <View style={styles.courseList}>
+            {courses.map((course) => (
+              <CourseRow
+                key={course.id}
+                course={course}
+                detail={courseRowDetail(course)}
+                onPress={() =>
+                  router.push(`/(tabs)/(search)/course/${course.id}` as never)
+                }
+              />
+            ))}
+          </View>
+        </>
+      )}
+    </>
   );
 }
 
@@ -278,6 +401,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       paddingHorizontal: 14,
       height: 52,
       marginBottom: 8
+    },
+    toggle: {
+      marginBottom: 12
+    },
+    courseList: {
+      gap: 10
     },
     searchInput: {
       flex: 1,

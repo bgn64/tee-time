@@ -4,11 +4,13 @@
   Premium dark fitness-tech aesthetic: deep night gradient, frosted glass
   panels (backdrop-blur), neon lime + cyan accents, soft glows, big rounded
   forms, tabular numerics. Same backend model as the others.
-  Expanded to nine screens: Feed, Live Scoring (Hole entry plus Card and Chat
+  Expanded to eleven screens: Feed, Live Scoring (Hole entry plus Card and Chat
   lenses for mid-round standings, the running scorecard & live comments),
-  Round Detail (full scorecard + comments), New Round setup, Friends/Search
-  (requests), Profile, and a Handicap breakdown (World Handicap System
-  differentials from your most recent rounds).
+  Round Detail (full scorecard + comments), New Round setup, Search (People and
+  Courses — friend requests plus a searchable course catalog), Course Detail
+  (full course info: tees, ratings/slopes, hole-by-hole scorecard), Profile, and
+  a Handicap breakdown (World Handicap System differentials from your most recent
+  rounds).
 -->
 <html lang="en">
 <head>
@@ -231,16 +233,27 @@
   .hexp b{color:var(--ink)}
   .fmla{margin-top:10px;font-family:var(--num);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--cy);background:#0a0f17;border:1px solid var(--stroke);border-radius:10px;padding:9px 11px;letter-spacing:.2px}
   .mini .v.lime{color:var(--lime)}
-  .hcsum{display:flex;align-items:center;gap:8px;background:#b6ff3b14;border:1px solid #b6ff3b40;border-radius:16px;padding:13px 15px;margin:2px 0 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
-  .hcsum span{font-size:12px;color:var(--muted)}
-  .hcsum span:first-child{margin-right:auto}
-  .hcsum b{font-family:var(--num);font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink)}
-  .hcsum b.lime{color:var(--lime)}
+  .hcalc{background:#b6ff3b0d;border:1px solid #b6ff3b33;border-radius:16px;padding:4px 15px;margin:2px 0 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .hcrow{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--stroke)}
+  .hcrow:last-child{border-bottom:0}
+  .hcrow span{font-size:12px;color:var(--muted)}
+  .hcrow b{font-family:var(--num);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .hcrow.tot span{color:var(--ink);font-weight:600}
+  .hcrow.tot b{font-size:19px;font-weight:800}
+  .hcrow b.lime{color:var(--lime)}
+
+  /* course detail */
+  .trow{display:flex;align-items:center;gap:11px;padding:11px 2px;border-bottom:1px solid var(--stroke)}
+  .trow:last-child{border-bottom:0}
+  .tdot{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
+  .trow .tn{font-size:14px;font-weight:600;min-width:50px}
+  .trow .trs{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+  .trow .tyd{font-family:var(--num);font-size:13px;font-variant-numeric:tabular-nums;min-width:74px;text-align:right}
 </style>
 </head>
 <body>
   <div class="stage">
-    <p class="cap">Exploration 04 — “Aurora Glass”, expanded to eight screens. Row 1 · Browse &amp; play: the Feed and the live Scoring card — a <b>Hole · Card · Chat</b> header, with each partner’s running score on the hole.</p>
+    <p class="cap">Exploration 04 — “Aurora Glass”, expanded to eleven screens. Row 1 · Browse &amp; play: the Feed and the live Scoring card — a <b>Hole · Card · Chat</b> header, with each partner’s running score on the hole.</p>
 
     <!-- FEED -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
@@ -447,12 +460,13 @@
         <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
     </div>
 
-    <p class="cap" style="margin-top:34px">Row 4 · Your people, your locker, and the math behind your handicap.</p>
+    <p class="cap" style="margin-top:34px">Row 4 · Search your people <b>and</b> the course catalog (full course info — tees, ratings/slopes, hole-by-hole), your locker, and the math behind your handicap.</p>
 
     <!-- FRIENDS / SEARCH -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim">
-        <div class="top"><h1>Friends</h1><div class="me" style="background:linear-gradient(135deg,#39e6c6,#9d7bff)">B</div></div>
+        <div class="top"><h1>Search</h1><div class="me" style="background:linear-gradient(135deg,#39e6c6,#9d7bff)">B</div></div>
+        <div class="seg"><a class="on">People</a><a>Courses</a></div>
         <div class="search"><span>⌕</span><input value="" placeholder="Search @handle" /></div>
         <div class="label">Requests<span class="r">2 incoming</span></div>
         <div class="req"><span class="av" style="background:#42a5f5">J</span>
@@ -476,6 +490,66 @@
         <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
     </div>
 
+    <!-- SEARCH · COURSES -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>Search</h1><div class="me" style="background:linear-gradient(135deg,#39e6c6,#9d7bff)">B</div></div>
+        <div class="seg"><a>People</a><a class="on">Courses</a></div>
+        <div class="search"><span>⌕</span><input value="pebble" placeholder="Search courses" /></div>
+        <div class="label">Courses<span class="r">3 matches</span></div>
+        <div class="frow"><span class="av" style="background:var(--glass2);color:var(--cy)">⛳</span>
+          <div><div class="hand">Pebble Beach Golf Links</div><div class="sub">Pebble Beach, CA · par 72 · 4 tees</div></div><span class="go2">View ›</span></div>
+        <div class="frow"><span class="av" style="background:var(--glass2);color:var(--cy)">⛳</span>
+          <div><div class="hand">Pebble Creek G.C.</div><div class="sub">Scottsdale, AZ · par 72 · 3 tees</div></div><span class="go2">View ›</span></div>
+        <div class="frow"><span class="av" style="background:var(--glass2);color:var(--cy)">⛳</span>
+          <div><div class="hand">Pebblebrook Golf Course</div><div class="sub">Tampa, FL · par 70 · 3 tees</div></div><span class="go2">View ›</span></div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- COURSE DETAIL -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>‹&nbsp;Course</h1><div class="me" style="background:var(--glass2);color:var(--cy)">☆</div></div>
+        <div class="banner">
+          <div class="course2">Pebble Beach Golf Links</div>
+          <div class="csub2">Pebble Beach, California · Public</div>
+          <div class="hero2">
+            <span class="big" style="color:var(--cy)">72</span>
+            <div class="biglab">Par<br>6,828 yds</div>
+            <div class="quick"><div class="qd"><b>74.8</b><span>RATING</span></div><div class="qd"><b>145</b><span>SLOPE</span></div></div>
+          </div>
+        </div>
+        <div class="label">Tees<span class="r">4 sets</span></div>
+        <div class="scard">
+          <div class="trow"><span class="tdot" style="background:#1c2a3a;box-shadow:0 0 0 1px #5b6b7d inset"></span><div class="tn">Black</div><div class="trs">75.5 / 148</div><div class="tyd">7,075 yds</div></div>
+          <div class="trow"><span class="tdot" style="background:#5b8def"></span><div class="tn">Blue</div><div class="trs">74.8 / 145</div><div class="tyd">6,828 yds</div></div>
+          <div class="trow"><span class="tdot" style="background:#eaf2ee"></span><div class="tn">White</div><div class="trs">72.7 / 135</div><div class="tyd">6,116 yds</div></div>
+          <div class="trow"><span class="tdot" style="background:#ff5d6c"></span><div class="tn">Red</div><div class="trs">71.9 / 129</div><div class="tyd">5,197 yds</div></div>
+        </div>
+        <div class="label">Scorecard<span class="r">Blue · par 72</span></div>
+        <div class="scard">
+          <div class="sgrid">
+            <div class="rl">Hole</div><div class="hn">1</div><div class="hn">2</div><div class="hn">3</div><div class="hn">4</div><div class="hn">5</div><div class="hn">6</div><div class="hn">7</div><div class="hn">8</div><div class="hn">9</div>
+            <div class="rl">Par</div><div class="pr">4</div><div class="pr">5</div><div class="pr">4</div><div class="pr">3</div><div class="pr">4</div><div class="pr">4</div><div class="pr">5</div><div class="pr">4</div><div class="pr">3</div>
+            <div class="rl">Yds</div><div class="hn">410</div><div class="hn">540</div><div class="hn">405</div><div class="hn">175</div><div class="hn">415</div><div class="hn">360</div><div class="hn">525</div><div class="hn">419</div><div class="hn">165</div>
+            <div class="rl">Hcp</div><div class="hn">7</div><div class="hn">1</div><div class="hn">11</div><div class="hn">17</div><div class="hn">5</div><div class="hn">13</div><div class="hn">3</div><div class="hn">9</div><div class="hn">15</div>
+          </div>
+          <div class="sdiv"></div>
+          <div class="sgrid">
+            <div class="rl">Hole</div><div class="hn">10</div><div class="hn">11</div><div class="hn">12</div><div class="hn">13</div><div class="hn">14</div><div class="hn">15</div><div class="hn">16</div><div class="hn">17</div><div class="hn">18</div>
+            <div class="rl">Par</div><div class="pr">4</div><div class="pr">4</div><div class="pr">5</div><div class="pr">3</div><div class="pr">4</div><div class="pr">5</div><div class="pr">4</div><div class="pr">3</div><div class="pr">4</div>
+            <div class="rl">Yds</div><div class="hn">415</div><div class="hn">430</div><div class="hn">545</div><div class="hn">200</div><div class="hn">405</div><div class="hn">560</div><div class="hn">360</div><div class="hn">185</div><div class="hn">314</div>
+            <div class="rl">Hcp</div><div class="hn">8</div><div class="hn">4</div><div class="hn">2</div><div class="hn">18</div><div class="hn">10</div><div class="hn">6</div><div class="hn">14</div><div class="hn">16</div><div class="hn">12</div>
+          </div>
+          <div class="stot"><span>Out <b>36</b> · In <b>36</b></span><span class="tp">Par 72 · 6,828</span></div>
+        </div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
     <!-- PROFILE -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim">
@@ -489,7 +563,7 @@
           <div class="ptile"><b class="lime">48</b><span>Rounds played</span></div>
           <div class="ptile"><b>84.2</b><span>Scoring average</span></div>
           <div class="ptile"><b class="cy">76</b><span>Personal best</span></div>
-          <div class="ptile more"><b>7.9</b><span>Handicap index</span></div>
+          <div class="ptile more"><b>22.7</b><span>Handicap index</span></div>
         </div>
         <div class="label">Recent rounds<span class="r">All rounds ›</span></div>
         <div class="mini"><div class="v">78<small> +6</small></div>
@@ -509,31 +583,27 @@
         <div class="top"><h1>‹&nbsp;Handicap</h1><div class="me" style="background:var(--glass2);color:var(--muted)">ⓘ</div></div>
         <div class="banner">
           <div class="hero2" style="margin-top:2px;padding-top:0;border-top:0">
-            <span class="big">7.9</span>
+            <span class="big">22.7</span>
             <div class="biglab">Handicap<br>index</div>
-            <div class="quick"><div class="qd"><b>2</b><span>COUNTING</span></div><div class="qd"><b>8</b><span>ELIGIBLE</span></div></div>
+            <div class="quick"><div class="qd"><b>1</b><span>COUNTING</span></div><div class="qd"><b>4</b><span>ELIGIBLE</span></div></div>
           </div>
-          <div class="hexp">World Handicap System: the average of your best differentials from your most recent <b>20</b> rounds (fewer while you build up). Each differential is <b>(113 ÷ Slope) × (Adjusted Gross − Course Rating)</b>. New players cap each hole at <b>par + 5</b> until an index is established; after that the cap is net double bogey. An approximation — no playing-conditions or cap adjustments yet.</div>
+          <div class="hexp">World Handicap System: the average of your best differentials from your most recent <b>20</b> rounds. With fewer than 20 you count fewer of them and the System subtracts a fixed adjustment — with <b>4</b> rounds it counts your <b>lowest 1</b> and subtracts <b>1.0</b>, which is why your index (22.7) sits below that single counting round (23.7). Each differential is <b>(113 ÷ Slope) × (Adjusted Gross − Course Rating)</b>; holes cap at net double bogey (par + 5 before your first index). An approximation — no playing-conditions adjustment yet.</div>
           <div class="fmla">Differential = (113 ÷ Slope) × (Adjusted Gross − Course Rating)</div>
         </div>
-        <div class="label">Counting differentials<span class="r">Lowest 2 of 8</span></div>
-        <div class="mini"><div class="v lime">7.5</div>
-          <div><div class="c">Pebble Creek</div><div class="m">AGS 79 · 70.8/124</div></div><span class="lk">28 May</span></div>
-        <div class="mini"><div class="v lime">8.3</div>
-          <div><div class="c">Cedar Ridge</div><div class="m">AGS 80 · 70.9/124</div></div><span class="lk">14 May</span></div>
-        <div class="mini"><div class="v">9.2</div>
-          <div><div class="c">Aldwood Links</div><div class="m">AGS 82 · 71.6/128</div></div><span class="lk">21 May</span></div>
-        <div class="mini"><div class="v">10.2</div>
-          <div><div class="c">Sand Hollow</div><div class="m">AGS 82 · 71.0/122</div></div><span class="lk">30 Apr</span></div>
-        <div class="mini"><div class="v">10.4</div>
-          <div><div class="c">Pine Valley</div><div class="m">AGS 84 · 72.0/130</div></div><span class="lk">7 May</span></div>
-        <div class="mini"><div class="v">11.5</div>
-          <div><div class="c">Torrey Pines — South</div><div class="m">AGS 88 · 74.0/138</div></div><span class="lk">16 Apr</span></div>
-        <div class="mini"><div class="v">11.7</div>
-          <div><div class="c">Harbor Town</div><div class="m">AGS 85 · 71.5/130</div></div><span class="lk">23 Apr</span></div>
-        <div class="mini"><div class="v">12.6</div>
-          <div><div class="c">Bethpage Black</div><div class="m">AGS 89 · 73.4/140</div></div><span class="lk">9 Apr</span></div>
-        <div class="hcsum"><span>Average of lowest 2 of 8</span><b class="lime">7.9</b></div>
+        <div class="label">Counting differentials<span class="r">Lowest 1 of 4</span></div>
+        <div class="mini"><div class="v lime">23.7</div>
+          <div><div class="c">Pebble Creek</div><div class="m">AGS 98 · 71.4/127</div></div><span class="lk">28 May</span></div>
+        <div class="mini"><div class="v">25.7</div>
+          <div><div class="c">Cedar Ridge</div><div class="m">AGS 99 · 70.8/124</div></div><span class="lk">21 May</span></div>
+        <div class="mini"><div class="v">26.1</div>
+          <div><div class="c">Aldwood Links</div><div class="m">AGS 102 · 72.0/130</div></div><span class="lk">14 May</span></div>
+        <div class="mini"><div class="v">28.4</div>
+          <div><div class="c">Sand Hollow</div><div class="m">AGS 102 · 70.8/124</div></div><span class="lk">30 Apr</span></div>
+        <div class="hcalc">
+          <div class="hcrow"><span>Lowest 1 of 4</span><b>23.7</b></div>
+          <div class="hcrow"><span>Fewer-rounds adjustment</span><b>−1.0</b></div>
+          <div class="hcrow tot"><span>Handicap index</span><b class="lime">22.7</b></div>
+        </div>
         <div class="label">Not counted<span class="r">missing data</span></div>
         <div class="mini"><div class="v" style="color:var(--muted)">—</div>
           <div><div class="c">Riverside Muni</div><div class="m">No tee selected</div></div><span class="lk">2 May</span></div>

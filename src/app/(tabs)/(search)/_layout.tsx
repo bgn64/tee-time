@@ -1,8 +1,9 @@
 /**
  * Search tab stack.
  *
- *   index            — search input + requests + friends list.
+ *   index            — people + course search, requests, and friends list.
  *   profile/[userId] — read-only profile screen with friend-action pill.
+ *   course/[id]      — read-only course detail (full scorecard + tees).
  *
  * Headers are owned by each screen so titles can vary by content
  * (the profile screen sets its title to the displayName once loaded).
@@ -29,9 +30,10 @@ export default function SearchLayout() {
       }}>
       <Stack.Screen
         name="index"
-        options={{ title: 'Friends', headerRight: () => <SearchHeaderAvatar /> }}
+        options={{ title: 'Search', headerRight: () => <SearchHeaderAvatar /> }}
       />
       <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
+      <Stack.Screen name="course/[id]" options={{ title: 'Course' }} />
     </Stack>
   );
 }

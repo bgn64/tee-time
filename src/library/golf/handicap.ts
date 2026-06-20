@@ -91,6 +91,12 @@ export type HandicapBreakdown = {
   window: EligibleHandicapRound[];
   /** How many differentials were averaged for the index. */
   usedCount: number;
+  /**
+   * Average of the counting (lowest-`usedCount`) differentials BEFORE the
+   * reduced-rounds adjustment, rounded to one decimal. Null until an index
+   * exists. When `adjustment` is 0 this equals `index`.
+   */
+  lowAverage: number | null;
   /** WHS reduced-rounds adjustment applied to the average (≤ 0). */
   adjustment: number;
   /** All-time eligible rounds (may exceed the 20-round window). */
@@ -192,15 +198,16 @@ function differentialFor(source: EligibleSource, ags: number): number {
 /** Average of the lowest `used` differentials (already 1-dp) plus adjustment. */
 function indexFrom(differentials: number[]): {
   index: number | null;
+  lowAverage: number | null;
   used: number;
   adjustment: number;
 } {
   const n = differentials.length;
-  if (n < MIN_ROUNDS_FOR_INDEX) return { index: null, used: 0, adjustment: 0 };
+  if (n < MIN_ROUNDS_FOR_INDEX) return { index: null, lowAverage: null, used: 0, adjustment: 0 };
   const { used, adjustment } = reducedRounds(n);
   const lowest = [...differentials].sort((a, b) => a - b).slice(0, used);
   const average = lowest.reduce((sum, d) => sum + d, 0) / used;
-  return { index: round1(average + adjustment), used, adjustment };
+  return { index: round1(average + adjustment), lowAverage: round1(average), used, adjustment };
 }
 
 /** Format an index for display: plus handicaps as "+N.N", else "N.N", null as "—". */
@@ -319,7 +326,7 @@ export function computeWhsHandicap(rounds: Round[], userId: string): HandicapBre
 
   // The index uses the most recent 20 posted differentials.
   const windowPosts = posted.slice(-WHS_WINDOW);
-  const { index: finalIndex, used, adjustment } = indexFrom(
+  const { index: finalIndex, lowAverage, used, adjustment } = indexFrom(
     windowPosts.map((p) => p.differential)
   );
 
@@ -352,6 +359,7 @@ export function computeWhsHandicap(rounds: Round[], userId: string): HandicapBre
     indexLabel: formatHandicapIndex(finalIndex),
     window: windowRounds,
     usedCount: used,
+    lowAverage,
     adjustment,
     totalEligible: eligible.length,
     excluded,

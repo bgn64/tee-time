@@ -15,11 +15,15 @@ import type { Course } from '@/types/golf';
 type Props = {
   course: Course;
   onPress: () => void;
+  /** Optional secondary line shown under the name (e.g. "City · par 72 · 4 tees"). Defaults to the course location. */
+  detail?: string;
 };
 
-export function CourseRow({ course, onPress }: Props) {
+export function CourseRow({ course, onPress, detail }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+
+  const meta = detail ?? course.location;
 
   return (
     <Pressable style={styles.row} onPress={onPress}>
@@ -30,9 +34,9 @@ export function CourseRow({ course, onPress }: Props) {
         <Text style={styles.name} numberOfLines={1}>
           {course.name}
         </Text>
-        {course.location ? (
+        {meta ? (
           <Text style={styles.meta} numberOfLines={1}>
-            {course.location}
+            {meta}
           </Text>
         ) : null}
       </View>
