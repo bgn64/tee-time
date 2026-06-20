@@ -70,6 +70,7 @@ export default function YouLayout() {
         }}
       />
       <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
+      <Stack.Screen name="handicap" options={{ title: 'Handicap' }} />
       <Stack.Screen name="friends/index" options={{ title: 'Search' }} />
     </Stack>
   );

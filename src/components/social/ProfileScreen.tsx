@@ -16,6 +16,7 @@ import { Avatar, GlassCard, NeonButton, NumericText, PHONE_MAX_WIDTH, SectionLab
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
 import { useRefresh } from '@/library/data/useRefresh';
 import { holesInRange, scoreForRoundsList, scorerIdForUser, formatRelativeTime, formatScore } from '@/library/golf/scoring';
+import { computeWhsHandicap, formatHandicapIndex } from '@/library/golf/handicap';
 import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useScorecardStats } from '@/library/golf/useScorecardStats';
@@ -90,8 +91,8 @@ export function ProfileScreen({ userId }: Props) {
   }, [eligibleMetrics]);
 
   const handicapIndex = React.useMemo(
-    () => formatHandicapIndex(eligibleMetrics),
-    [eligibleMetrics]
+    () => formatHandicapIndex(computeWhsHandicap(rounds, account.userId).index),
+    [rounds, account.userId]
   );
 
   const recentRounds = roundMetrics.slice(0, 3);
@@ -160,7 +161,12 @@ export function ProfileScreen({ userId }: Props) {
             <StatTile value={roundsPlayed} label="Rounds played" tone="lime" style={styles.tile} />
             <StatTile value={scoringAverage} label="Scoring average" style={styles.tile} />
             <StatTile value={personalBest} label="Personal best" tone="cyan" style={styles.tile} />
-            <StatTile value={handicapIndex} label="Handicap index" style={styles.tile} />
+            <StatTile
+              value={handicapIndex}
+              label="Handicap index"
+              style={styles.tile}
+              onPress={() => router.push('/(tabs)/(you)/handicap' as never)}
+            />
           </>
         ) : (
           <>
@@ -265,29 +271,12 @@ function formatJoinedYear(createdAt?: string | null): string | null {
   return Number.isFinite(year) ? String(year) : null;
 }
 
-function formatHandicapIndex(eligibleMetrics: RoundMetric[]): string {
-  const differentials = eligibleMetrics
-    .map((metric) => metric.relative)
-    .filter((relative) => Number.isFinite(relative))
-    .sort((a, b) => a - b);
-
-  if (differentials.length === 0) return '—';
-
-  const bestCount = Math.max(1, Math.min(8, Math.ceil(differentials.length * 0.4)));
-  const bestAverage =
-    differentials.slice(0, bestCount).reduce((sum, relative) => sum + relative, 0) / bestCount;
-  const index = bestAverage * 0.96;
-
-  if (index < 0) return `+${Math.abs(index).toFixed(1)}`;
-  return index.toFixed(1);
-}
-
 /**
- * Conservative gate for the headline profile stats (scoring average,
- * personal best, handicap index): only full 18-hole stroke-play rounds
- * where every hole was scored. Looser formats — 9-hole, scramble,
- * partial cards — are intentionally excluded until there's enough real
- * data to handle them well.
+ * Conservative gate for the headline profile stats (scoring average and
+ * personal best): only full 18-hole stroke-play rounds where every hole was
+ * scored. Looser formats — 9-hole, scramble, partial cards — are intentionally
+ * excluded until there's enough real data to handle them well. (The handicap
+ * index has its own eligibility rules in `library/golf/handicap.ts`.)
  */
 function isStatEligible(metric: RoundMetric): boolean {
   return (

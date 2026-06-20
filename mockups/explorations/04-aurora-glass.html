@@ -4,10 +4,11 @@
   Premium dark fitness-tech aesthetic: deep night gradient, frosted glass
   panels (backdrop-blur), neon lime + cyan accents, soft glows, big rounded
   forms, tabular numerics. Same backend model as the others.
-  Expanded to eight screens: Feed, Live Scoring (Hole entry plus Card and Chat
+  Expanded to nine screens: Feed, Live Scoring (Hole entry plus Card and Chat
   lenses for mid-round standings, the running scorecard & live comments),
   Round Detail (full scorecard + comments), New Round setup, Friends/Search
-  (requests), and Profile.
+  (requests), Profile, and a Handicap breakdown (World Handicap System
+  differentials from your most recent rounds).
 -->
 <html lang="en">
 <head>
@@ -222,6 +223,19 @@
   .ptile b{font-family:var(--num);font-size:25px;font-weight:800;font-variant-numeric:tabular-nums}
   .ptile b.lime{color:var(--lime)}.ptile b.cy{color:var(--cy)}
   .ptile span{display:block;font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:.4px}
+  .ptile.more{position:relative}
+  .ptile.more::after{content:'\203A';position:absolute;top:11px;right:13px;color:var(--muted);font-size:16px;line-height:1}
+
+  /* handicap detail */
+  .hexp{font-size:12px;color:var(--muted);line-height:1.5;margin-top:14px;padding-top:13px;border-top:1px solid var(--stroke)}
+  .hexp b{color:var(--ink)}
+  .fmla{margin-top:10px;font-family:var(--num);font-variant-numeric:tabular-nums;font-size:11.5px;color:var(--cy);background:#0a0f17;border:1px solid var(--stroke);border-radius:10px;padding:9px 11px;letter-spacing:.2px}
+  .mini .v.lime{color:var(--lime)}
+  .hcsum{display:flex;align-items:center;gap:8px;background:#b6ff3b14;border:1px solid #b6ff3b40;border-radius:16px;padding:13px 15px;margin:2px 0 14px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .hcsum span{font-size:12px;color:var(--muted)}
+  .hcsum span:first-child{margin-right:auto}
+  .hcsum b{font-family:var(--num);font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .hcsum b.lime{color:var(--lime)}
 </style>
 </head>
 <body>
@@ -433,7 +447,7 @@
         <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
     </div>
 
-    <p class="cap" style="margin-top:34px">Row 4 · Your people, and your locker.</p>
+    <p class="cap" style="margin-top:34px">Row 4 · Your people, your locker, and the math behind your handicap.</p>
 
     <!-- FRIENDS / SEARCH -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
@@ -475,7 +489,7 @@
           <div class="ptile"><b class="lime">48</b><span>Rounds played</span></div>
           <div class="ptile"><b>84.2</b><span>Scoring average</span></div>
           <div class="ptile"><b class="cy">76</b><span>Personal best</span></div>
-          <div class="ptile"><b>12.3</b><span>Handicap index</span></div>
+          <div class="ptile more"><b>7.9</b><span>Handicap index</span></div>
         </div>
         <div class="label">Recent rounds<span class="r">All rounds ›</span></div>
         <div class="mini"><div class="v">78<small> +6</small></div>
@@ -484,6 +498,49 @@
           <div><div class="c">Aldwood Links</div><div class="m">scramble · 18 · last week</div></div><span class="lk">♥ 14</span></div>
         <div class="mini"><div class="v">76<small> +4</small></div>
           <div><div class="c">Bethpage Black</div><div class="m">stroke · 18 · personal best</div></div><span class="lk">♥ 27</span></div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a class="on"><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- PROFILE · HANDICAP -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>‹&nbsp;Handicap</h1><div class="me" style="background:var(--glass2);color:var(--muted)">ⓘ</div></div>
+        <div class="banner">
+          <div class="hero2" style="margin-top:2px;padding-top:0;border-top:0">
+            <span class="big">7.9</span>
+            <div class="biglab">Handicap<br>index</div>
+            <div class="quick"><div class="qd"><b>2</b><span>COUNTING</span></div><div class="qd"><b>8</b><span>ELIGIBLE</span></div></div>
+          </div>
+          <div class="hexp">World Handicap System: the average of your best differentials from your most recent <b>20</b> rounds (fewer while you build up). Each differential is <b>(113 ÷ Slope) × (Adjusted Gross − Course Rating)</b>, with every hole capped at net double bogey. An approximation — no playing-conditions or cap adjustments yet.</div>
+          <div class="fmla">Differential = (113 ÷ Slope) × (Adjusted Gross − Course Rating)</div>
+        </div>
+        <div class="label">Counting differentials<span class="r">Lowest 2 of 8</span></div>
+        <div class="mini"><div class="v lime">7.5</div>
+          <div><div class="c">Pebble Creek</div><div class="m">AGS 79 · 70.8/124</div></div><span class="lk">28 May</span></div>
+        <div class="mini"><div class="v lime">8.3</div>
+          <div><div class="c">Cedar Ridge</div><div class="m">AGS 80 · 70.9/124</div></div><span class="lk">14 May</span></div>
+        <div class="mini"><div class="v">9.2</div>
+          <div><div class="c">Aldwood Links</div><div class="m">AGS 82 · 71.6/128</div></div><span class="lk">21 May</span></div>
+        <div class="mini"><div class="v">10.2</div>
+          <div><div class="c">Sand Hollow</div><div class="m">AGS 82 · 71.0/122</div></div><span class="lk">30 Apr</span></div>
+        <div class="mini"><div class="v">10.4</div>
+          <div><div class="c">Pine Valley</div><div class="m">AGS 84 · 72.0/130</div></div><span class="lk">7 May</span></div>
+        <div class="mini"><div class="v">11.5</div>
+          <div><div class="c">Torrey Pines — South</div><div class="m">AGS 88 · 74.0/138</div></div><span class="lk">16 Apr</span></div>
+        <div class="mini"><div class="v">11.7</div>
+          <div><div class="c">Harbor Town</div><div class="m">AGS 85 · 71.5/130</div></div><span class="lk">23 Apr</span></div>
+        <div class="mini"><div class="v">12.6</div>
+          <div><div class="c">Bethpage Black</div><div class="m">AGS 89 · 73.4/140</div></div><span class="lk">9 Apr</span></div>
+        <div class="hcsum"><span>Average of lowest 2 of 8</span><b class="lime">7.9</b></div>
+        <div class="label">Not counted<span class="r">missing data</span></div>
+        <div class="mini"><div class="v" style="color:var(--muted)">—</div>
+          <div><div class="c">Riverside Muni</div><div class="m">No tee selected</div></div><span class="lk">2 May</span></div>
+        <div class="mini"><div class="v" style="color:var(--muted)">—</div>
+          <div><div class="c">Greenfield G.C.</div><div class="m">Course rating unavailable</div></div><span class="lk">24 Apr</span></div>
+        <div class="mini"><div class="v" style="color:var(--muted)">—</div>
+          <div><div class="c">Quick 9 at Cedar</div><div class="m">9-hole round</div></div><span class="lk">18 Apr</span></div>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
         <a><span class="ic">⌕</span>Search</a><a class="on"><span class="ic">◔</span>You</a></div></div>
