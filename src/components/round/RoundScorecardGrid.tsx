@@ -3,10 +3,11 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { NumericText, ScorePip } from '@/components/aurora';
 import { formatScore, holesInRange, playerProgress } from '@/library/golf/scoring';
+import { getHoleStats } from '@/library/golf/teeGrouping';
 import type { RoundScorer } from '@/library/golf/useRoundScorers';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
-import type { Hole, Round } from '@/types/golf';
+import type { Hole, Round, Tee } from '@/types/golf';
 
 type RoundScorecardGridProps = {
   round: Round;
@@ -22,11 +23,22 @@ export function RoundScorecardGrid({ round, scorers, currentHoleNumber }: RoundS
   const back = holes.filter((h) => h.number >= 10);
   const hasBack = back.length > 0;
 
+  // Per-hole Yds + Hcp follow the round's primary tee (scorers[0]) — the
+  // same tee the header/holehero report — so the scorecard reflects the
+  // tee being played, not the course default. Rows are hidden when no
+  // in-range hole has the data (e.g. a tee-less or unenriched round).
+  const tee = scorers[0]?.tee;
+  const showYards = holes.some((h) => {
+    const y = statForTee(tee, h).yardage;
+    return y != null && y > 0;
+  });
+  const showHcp = holes.some((h) => statForTee(tee, h).handicapIndex != null);
+
   return (
     <View style={styles.scorecardBody}>
-      <NineGrid label="Out" holes={front} round={round} scorers={scorers} currentHoleNumber={currentHoleNumber} />
+      <NineGrid label="Out" holes={front} round={round} scorers={scorers} tee={tee} showYards={showYards} showHcp={showHcp} currentHoleNumber={currentHoleNumber} />
       {hasBack ? <View style={styles.scoreDivider} /> : null}
-      {hasBack ? <NineGrid label="In" holes={back} round={round} scorers={scorers} currentHoleNumber={currentHoleNumber} /> : null}
+      {hasBack ? <NineGrid label="In" holes={back} round={round} scorers={scorers} tee={tee} showYards={showYards} showHcp={showHcp} currentHoleNumber={currentHoleNumber} /> : null}
       <View style={styles.totalBar}>
         <Text style={styles.totalMuted}>
           Out <Text style={styles.totalStrong}>{nineTotal(round, front, scorers[0]?.id)}</Text>
@@ -48,12 +60,18 @@ function NineGrid({
   holes,
   round,
   scorers,
+  tee,
+  showYards,
+  showHcp,
   currentHoleNumber,
 }: {
   label: string;
   holes: Hole[];
   round: Round;
   scorers: RoundScorer[];
+  tee: Tee | undefined;
+  showYards: boolean;
+  showHcp: boolean;
   currentHoleNumber?: number;
 }) {
   const { colors } = useTheme();
@@ -64,6 +82,12 @@ function NineGrid({
     <View style={styles.nine}>
       <ScoreRow label="Hole" cells={padded.map((h) => (h.number > 0 ? String(h.number) : ''))} muted />
       <ScoreRow label="Par" cells={padded.map((h) => (h.par ? String(h.par) : ''))} />
+      {showYards ? (
+        <ScoreRow label="Yds" cells={padded.map((h) => (h.number > 0 ? formatYards(statForTee(tee, h).yardage) : ''))} muted />
+      ) : null}
+      {showHcp ? (
+        <ScoreRow label="Hcp" cells={padded.map((h) => (h.number > 0 ? hcpText(statForTee(tee, h).handicapIndex) : ''))} muted />
+      ) : null}
       {scorers.map((scorer) => (
         <View key={scorer.id} style={styles.scoreRow}>
           <Text style={styles.rowLabel} numberOfLines={1}>{scorers.length === 1 ? label : shortName(scorer.name)}</Text>
@@ -114,6 +138,29 @@ function nineTotal(round: Round, holes: Hole[], scorerId: string | undefined): s
 
 function shortName(name: string): string {
   return name.split(/\s+/)[0] ?? name;
+}
+
+/**
+ * Per-hole (par · handicapIndex · yardage) for a tee, preferring the
+ * tee's per-hole row and falling back to the course-level `Hole`
+ * scalars. When no tee is selected, reads the scalar `Hole` values.
+ */
+function statForTee(tee: Tee | undefined, hole: Hole) {
+  if (tee) return getHoleStats(tee, hole.number, hole);
+  return {
+    holeNumber: hole.number,
+    par: hole.par,
+    handicapIndex: hole.handicapIndex,
+    yardage: hole.yardage,
+  };
+}
+
+function formatYards(yardage: number | undefined): string {
+  return yardage != null && yardage > 0 ? Math.round(yardage).toLocaleString('en-US') : '';
+}
+
+function hcpText(handicapIndex: number | undefined): string {
+  return handicapIndex != null ? String(handicapIndex) : '';
 }
 
 function makeStyles(colors: ThemeColors) {
