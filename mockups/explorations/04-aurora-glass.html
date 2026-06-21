@@ -22,6 +22,7 @@
     --ink:#eaf2ee; --muted:#93a3b3; --lime:#b6ff3b; --cy:#39e6c6; --vio:#9d7bff;
     --glass:rgba(255,255,255,.06); --glass2:rgba(255,255,255,.09);
     --stroke:rgba(255,255,255,.12);
+    --sheet:rgba(12,16,23,.96);
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --num:"SF Pro Display",system-ui,sans-serif;
   }
@@ -249,6 +250,19 @@
   .trow .tn{font-size:14px;font-weight:600;min-width:50px}
   .trow .trs{margin-left:auto;font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
   .trow .tyd{font-family:var(--num);font-size:13px;font-variant-numeric:tabular-nums;min-width:74px;text-align:right}
+  .trow{cursor:pointer}
+  .trow.sel{background:#b6ff3b0d;border:1px solid #b6ff3b40;border-radius:14px;padding:11px 10px}
+  .trow.sel .tn{color:var(--lime)}
+  .schk{margin-left:12px;color:var(--lime);font-weight:800}
+
+  /* bottom sheet (tee picker) */
+  .dim{position:absolute;inset:0;z-index:3;background:rgba(3,5,9,.55)}
+  .sheet{position:absolute;left:0;right:0;bottom:0;z-index:4;background:var(--sheet);
+    border:1px solid var(--stroke);border-bottom:0;border-radius:26px 26px 0 0;padding:10px 18px 22px;
+    box-shadow:0 -26px 60px -22px #000;backdrop-filter:blur(28px);-webkit-backdrop-filter:blur(28px)}
+  .sheet .grab{width:40px;height:4px;border-radius:3px;background:#46566a;margin:4px auto 12px}
+  .sheet h3{font-size:16px;font-weight:700;margin:0}
+  .sheet .ssub{font-size:11px;color:var(--muted);margin:3px 0 8px}
 </style>
 </head>
 <body>
@@ -316,7 +330,7 @@
             <div class="stp"><button>−</button><span class="v empty">–</span><button>+</button></div></div></div>
         <div class="label">Stats · hole 13</div>
         <div class="tg"><span class="tog yes"><b>✓</b>Fairway</span><span class="tog"><b>–</b>Green</span>
-          <span class="tog"><b>–</b>Putts</span><span class="tog"><b>0</b>OB</span></div>
+          <span class="tog"><b>–</b>Putts</span><span class="tog"><b>0</b>Penalties</span><span class="tog"><b>0</b>Sand</span></div>
         <div class="nv"><button>‹ Prev</button><button class="go">Next ›</button></div>
         <button class="finish">Finish round ›</button>
         <div class="abandon">Abandon round</div>
@@ -453,11 +467,58 @@
         <div class="label">Track stats</div>
         <div class="tg">
           <span class="tog yes"><b>✓</b>Fairways</span><span class="tog yes"><b>✓</b>Greens</span>
-          <span class="tog yes"><b>✓</b>Putts</span><span class="tog"><b>＋</b>Penalties</span><span class="tog"><b>＋</b>Sand</span></div>
+          <span class="tog yes"><b>✓</b>Putts</span><span class="tog yes"><b>✓</b>Penalties</span><span class="tog yes"><b>✓</b>Sand</span></div>
         <button class="start">Start round ›</button>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
         <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- NEW ROUND · TEES SHEET -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen">
+        <div class="scrim">
+          <div class="top"><h1>New round</h1><div class="me" style="background:var(--glass2);color:var(--muted)">✕</div></div>
+          <div class="label">Course</div>
+          <div class="field"><span class="ic2">⛳</span>
+            <div><div class="lab">Selected course</div><div class="val">Torrey Pines — South</div></div>
+            <span class="chev">›</span></div>
+          <div class="label">Format</div>
+          <div class="choice">
+            <div class="opt"><b>Stroke</b><small>solo / individual</small></div>
+            <div class="opt sel"><b>Scramble</b><small>teams · best ball</small></div>
+          </div>
+          <div class="field" style="border-color:#b6ff3b66;background:#b6ff3b0d"><span class="ic2">⚑</span>
+            <div><div class="lab">Tees</div><div class="val">Blue · 6,602 yds</div></div>
+            <span class="chev">›</span></div>
+          <div class="label">Players<span class="r">3 selected</span></div>
+          <div class="psel"><span class="av" style="background:#7cb342">M</span>
+            <div><div class="hand">@marcus<span class="you">YOU</span></div><div class="sub">host</div></div>
+            <span class="check on">✓</span></div>
+          <div class="psel"><span class="av" style="background:#5c6bc0">P</span>
+            <div><div class="hand">@priya</div><div class="sub">friend</div></div><span class="check on">✓</span></div>
+          <div class="psel"><span class="av" style="background:#ff7043">D</span>
+            <div><div class="hand">@deshawn</div><div class="sub">friend</div></div><span class="check on">✓</span></div>
+          <div class="addp"><span class="pl">＋</span>Add custom player</div>
+          <div class="label">Track stats</div>
+          <div class="tg">
+            <span class="tog yes"><b>✓</b>Fairways</span><span class="tog yes"><b>✓</b>Greens</span>
+            <span class="tog yes"><b>✓</b>Putts</span><span class="tog yes"><b>✓</b>Penalties</span><span class="tog yes"><b>✓</b>Sand</span></div>
+          <button class="start">Start round ›</button>
+        </div>
+        <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
+          <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h3>Select tees</h3>
+          <div class="ssub">Torrey Pines — South · 4 tee sets</div>
+          <div class="trow"><span class="tdot" style="background:#1c2a3a;box-shadow:0 0 0 1px #5b6b7d inset"></span><div class="tn">Black</div><div class="trs">75.3 / 142</div><div class="tyd">7,058 yds</div></div>
+          <div class="trow sel"><span class="tdot" style="background:#5b8def"></span><div class="tn">Blue</div><div class="trs">73.9 / 138</div><div class="tyd">6,602 yds</div><span class="schk">✓</span></div>
+          <div class="trow"><span class="tdot" style="background:#eaf2ee"></span><div class="tn">White</div><div class="trs">71.8 / 131</div><div class="tyd">6,089 yds</div></div>
+          <div class="trow"><span class="tdot" style="background:#ff5d6c"></span><div class="tn">Red</div><div class="trs">70.4 / 124</div><div class="tyd">5,478 yds</div></div>
+        </div>
+      </div>
     </div>
 
     <p class="cap" style="margin-top:34px">Row 4 · Search your people <b>and</b> the course catalog (full course info — tees, ratings/slopes, hole-by-hole), your locker, and the math behind your handicap.</p>
@@ -521,29 +582,29 @@
             <div class="quick"><div class="qd"><b>74.8</b><span>RATING</span></div><div class="qd"><b>145</b><span>SLOPE</span></div></div>
           </div>
         </div>
-        <div class="label">Tees<span class="r">4 sets</span></div>
-        <div class="scard">
-          <div class="trow"><span class="tdot" style="background:#1c2a3a;box-shadow:0 0 0 1px #5b6b7d inset"></span><div class="tn">Black</div><div class="trs">75.5 / 148</div><div class="tyd">7,075 yds</div></div>
-          <div class="trow"><span class="tdot" style="background:#5b8def"></span><div class="tn">Blue</div><div class="trs">74.8 / 145</div><div class="tyd">6,828 yds</div></div>
-          <div class="trow"><span class="tdot" style="background:#eaf2ee"></span><div class="tn">White</div><div class="trs">72.7 / 135</div><div class="tyd">6,116 yds</div></div>
-          <div class="trow"><span class="tdot" style="background:#ff5d6c"></span><div class="tn">Red</div><div class="trs">71.9 / 129</div><div class="tyd">5,197 yds</div></div>
+        <div class="label">Tees<span class="r">4 sets · tap to view</span></div>
+        <div class="scard" id="cdTees">
+          <div class="trow" data-tee="Black" data-total="7,075" data-front="425,560,420,180,430,375,545,435,170" data-back="430,445,565,205,420,580,375,190,325"><span class="tdot" style="background:#1c2a3a;box-shadow:0 0 0 1px #5b6b7d inset"></span><div class="tn">Black</div><div class="trs">75.5 / 148</div><div class="tyd">7,075 yds</div></div>
+          <div class="trow sel" data-tee="Blue" data-total="6,828" data-front="410,540,405,175,415,360,525,419,165" data-back="415,430,545,200,405,560,360,185,314"><span class="tdot" style="background:#5b8def"></span><div class="tn">Blue</div><div class="trs">74.8 / 145</div><div class="tyd">6,828 yds</div><span class="schk">✓</span></div>
+          <div class="trow" data-tee="White" data-total="6,120" data-front="365,485,365,155,370,325,470,375,150" data-back="370,385,490,180,365,500,325,165,280"><span class="tdot" style="background:#eaf2ee"></span><div class="tn">White</div><div class="trs">72.7 / 135</div><div class="tyd">6,120 yds</div></div>
+          <div class="trow" data-tee="Red" data-total="5,197" data-front="312,411,308,133,316,274,400,319,126" data-back="316,327,415,152,308,426,274,141,239"><span class="tdot" style="background:#ff5d6c"></span><div class="tn">Red</div><div class="trs">71.9 / 129</div><div class="tyd">5,197 yds</div></div>
         </div>
-        <div class="label">Scorecard<span class="r">Blue · par 72</span></div>
+        <div class="label">Scorecard<span class="r" id="cdScName">Blue · par 72</span></div>
         <div class="scard">
-          <div class="sgrid">
+          <div class="sgrid" id="cdFront">
             <div class="rl">Hole</div><div class="hn">1</div><div class="hn">2</div><div class="hn">3</div><div class="hn">4</div><div class="hn">5</div><div class="hn">6</div><div class="hn">7</div><div class="hn">8</div><div class="hn">9</div>
             <div class="rl">Par</div><div class="pr">4</div><div class="pr">5</div><div class="pr">4</div><div class="pr">3</div><div class="pr">4</div><div class="pr">4</div><div class="pr">5</div><div class="pr">4</div><div class="pr">3</div>
-            <div class="rl">Yds</div><div class="hn">410</div><div class="hn">540</div><div class="hn">405</div><div class="hn">175</div><div class="hn">415</div><div class="hn">360</div><div class="hn">525</div><div class="hn">419</div><div class="hn">165</div>
+            <div class="rl">Yds</div><div class="hn yd">410</div><div class="hn yd">540</div><div class="hn yd">405</div><div class="hn yd">175</div><div class="hn yd">415</div><div class="hn yd">360</div><div class="hn yd">525</div><div class="hn yd">419</div><div class="hn yd">165</div>
             <div class="rl">Hcp</div><div class="hn">7</div><div class="hn">1</div><div class="hn">11</div><div class="hn">17</div><div class="hn">5</div><div class="hn">13</div><div class="hn">3</div><div class="hn">9</div><div class="hn">15</div>
           </div>
           <div class="sdiv"></div>
-          <div class="sgrid">
+          <div class="sgrid" id="cdBack">
             <div class="rl">Hole</div><div class="hn">10</div><div class="hn">11</div><div class="hn">12</div><div class="hn">13</div><div class="hn">14</div><div class="hn">15</div><div class="hn">16</div><div class="hn">17</div><div class="hn">18</div>
             <div class="rl">Par</div><div class="pr">4</div><div class="pr">4</div><div class="pr">5</div><div class="pr">3</div><div class="pr">4</div><div class="pr">5</div><div class="pr">4</div><div class="pr">3</div><div class="pr">4</div>
-            <div class="rl">Yds</div><div class="hn">415</div><div class="hn">430</div><div class="hn">545</div><div class="hn">200</div><div class="hn">405</div><div class="hn">560</div><div class="hn">360</div><div class="hn">185</div><div class="hn">314</div>
+            <div class="rl">Yds</div><div class="hn yd">415</div><div class="hn yd">430</div><div class="hn yd">545</div><div class="hn yd">200</div><div class="hn yd">405</div><div class="hn yd">560</div><div class="hn yd">360</div><div class="hn yd">185</div><div class="hn yd">314</div>
             <div class="rl">Hcp</div><div class="hn">8</div><div class="hn">4</div><div class="hn">2</div><div class="hn">18</div><div class="hn">10</div><div class="hn">6</div><div class="hn">14</div><div class="hn">16</div><div class="hn">12</div>
           </div>
-          <div class="stot"><span>Out <b>36</b> · In <b>36</b></span><span class="tp">Par 72 · 6,828</span></div>
+          <div class="stot"><span>Out <b>36</b> · In <b>36</b></span><span class="tp" id="cdScTotal">Par 72 · 6,828</span></div>
         </div>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
@@ -616,5 +677,25 @@
         <a><span class="ic">⌕</span>Search</a><a class="on"><span class="ic">◔</span>You</a></div></div>
     </div>
   </div>
+  <script>
+    (function(){
+      var tees=document.getElementById('cdTees'); if(!tees) return;
+      var rows=tees.querySelectorAll('.trow');
+      var nameEl=document.getElementById('cdScName');
+      var totEl=document.getElementById('cdScTotal');
+      var front=document.querySelectorAll('#cdFront .yd');
+      var back=document.querySelectorAll('#cdBack .yd');
+      function apply(row){
+        rows.forEach(function(r){ r.classList.remove('sel'); var c=r.querySelector('.schk'); if(c) c.remove(); });
+        row.classList.add('sel');
+        if(!row.querySelector('.schk')){ var s=document.createElement('span'); s.className='schk'; s.textContent='✓'; row.appendChild(s); }
+        row.getAttribute('data-front').split(',').forEach(function(v,i){ if(front[i]) front[i].textContent=v; });
+        row.getAttribute('data-back').split(',').forEach(function(v,i){ if(back[i]) back[i].textContent=v; });
+        nameEl.textContent=row.getAttribute('data-tee')+' · par 72';
+        totEl.textContent='Par 72 · '+row.getAttribute('data-total');
+      }
+      rows.forEach(function(r){ r.addEventListener('click',function(){ apply(r); }); });
+    })();
+  </script>
 </body>
 </html>

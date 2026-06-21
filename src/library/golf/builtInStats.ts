@@ -6,7 +6,7 @@
  * (`scorecard_hole_details.details`) is open — any stat_key string
  * may be written. The registry defines:
  *
- *   - Which built-in stats exist for v1 (GIR, FIR, Putts, OB).
+ *   - Which built-in stats exist for v1 (GIR, FIR, Putts, Penalties, Sand).
  *   - Per-stat metadata: type (binary | integer), par applicability,
  *     tone (drives tile + pill color), default-enabled flag, and
  *     for integer stats the quick-pick values for the chip row.
@@ -66,16 +66,16 @@ export type IntegerStatDefinition = BaseStatDefinition & {
    * hasn't entered anything yet, AND eagerly written to storage
    * the first time a stroke count is entered for a (scorer, hole)
    * the stat applies to. See `useRoundHoleDetails.seedDefaults`
-   * for the write path. Picked per stat: OB defaults to 0 (no
-   * penalties is the common case), Putts defaults to 0 too (any
-   * non-zero putt count is a real data point the user must enter).
+   * for the write path. Picked per stat: Penalties defaults to 0
+   * (no penalties is the common case), Putts and Sand default to 0
+   * too (any non-zero count is a real data point the user enters).
    */
   defaultValue: number;
   /**
    * Minimum value the stepper will allow. The `-` button is
    * disabled when the current value is at `min`. Negative
    * integer stats aren't meaningful for any built-in so this
-   * defaults to 0 for both Putts and OB.
+   * defaults to 0 for Putts, Penalties and Sand.
    */
   min: number;
   /**
@@ -133,12 +133,21 @@ export const BUILT_IN_STATS: readonly StatDefinition[] = [
   },
   {
     key: 'ob',
-    label: 'OB',
+    label: 'Penalties',
     type: 'integer',
     defaultValue: 0,
     min: 0,
     aggregateTone: 'bad',
     defaultEnabled: true,
+  },
+  {
+    key: 'sand',
+    label: 'Sand',
+    type: 'integer',
+    defaultValue: 0,
+    min: 0,
+    aggregateTone: 'neutral',
+    defaultEnabled: false,
   },
 ];
 

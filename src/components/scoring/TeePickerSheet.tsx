@@ -106,9 +106,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     overlay: { flex: 1, justifyContent: 'flex-end' },
     backdrop: {
       ...StyleSheet.absoluteFill,
-      backgroundColor: 'rgba(0,0,0,0.35)',
+      backgroundColor: 'rgba(0,0,0,0.5)',
     },
     sheet: {
+      backgroundColor: colors.sheetBg,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
       borderBottomLeftRadius: 0,

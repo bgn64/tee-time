@@ -15,7 +15,7 @@
 
 import { Stack, useLocalSearchParams } from 'expo-router';
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { GlassCard, NumericText, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
 import { assignTeeColors } from '@/library/golf/teeColor';
@@ -113,13 +113,21 @@ function CourseBody({
     [tees]
   );
 
+  // The scorecard can be viewed for any tee; the hero stays the headline tee.
+  const [selectedTeeId, setSelectedTeeId] = React.useState<string | undefined>(undefined);
+  const selectedTee = orderedTees.find((t) => t.id === selectedTeeId) ?? defaultTee;
+
   const totalPar = course.holes.reduce((sum, h) => sum + h.par, 0);
 
-  const summedYards = course.holes.reduce((sum, h) => {
-    const y = statFor(defaultTee, h).yardage;
-    return y != null && y > 0 ? sum + y : sum;
-  }, 0);
-  const totalYards = defaultTee?.totalYardage ?? (summedYards > 0 ? summedYards : undefined);
+  const teeTotalYards = (tee: Tee | null): number | undefined => {
+    const summed = course.holes.reduce((sum, h) => {
+      const y = statFor(tee, h).yardage;
+      return y != null && y > 0 ? sum + y : sum;
+    }, 0);
+    return tee?.totalYardage ?? (summed > 0 ? summed : undefined);
+  };
+  const heroYards = teeTotalYards(defaultTee);
+  const scorecardYards = teeTotalYards(selectedTee);
 
   const nines = chunkNines(course.holes);
 
@@ -130,7 +138,7 @@ function CourseBody({
         {course.location ? <Text style={styles.courseSub}>{course.location}</Text> : null}
         <View style={styles.heroRow}>
           <NumericText style={styles.heroValue}>{totalPar > 0 ? totalPar : '—'}</NumericText>
-          <Text style={styles.heroLabel}>Par{'\n'}{formatYards(totalYards)} yds</Text>
+          <Text style={styles.heroLabel}>Par{'\n'}{formatYards(heroYards)} yds</Text>
           <View style={styles.quick}>
             <View style={styles.quickTile}>
               <NumericText style={styles.quickValue}>
@@ -160,17 +168,32 @@ function CourseBody({
             {orderedTees.map((tee, idx) => {
               const token = teeColors.get(tee.id);
               const dotColor = token ? colors[token] : colors.textMuted;
+              const active = tee.id === selectedTee?.id;
               return (
-                <View
+                <Pressable
                   key={tee.id}
-                  style={[styles.teeRow, idx < orderedTees.length - 1 ? styles.rowDivider : null]}>
+                  onPress={() => setSelectedTeeId(tee.id)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: active }}
+                  style={({ pressed }) => [
+                    styles.teeRow,
+                    active
+                      ? styles.teeRowActive
+                      : idx < orderedTees.length - 1
+                        ? styles.rowDivider
+                        : null,
+                    pressed ? styles.teeRowPressed : null,
+                  ]}>
                   <View style={[styles.teeDot, { backgroundColor: dotColor }]} />
-                  <Text style={styles.teeName} numberOfLines={1}>
+                  <Text
+                    style={[styles.teeName, active ? styles.teeNameActive : null]}
+                    numberOfLines={1}>
                     {tee.name}
                   </Text>
                   <Text style={styles.teeRating}>{ratingSlope(tee)}</Text>
                   <NumericText style={styles.teeYards}>{formatYards(tee.totalYardage)} yds</NumericText>
-                </View>
+                  {active ? <Text style={styles.teeCheck}>✓</Text> : null}
+                </Pressable>
               );
             })}
           </GlassCard>
@@ -181,7 +204,7 @@ function CourseBody({
         <>
           <SectionLabel
             right={
-              defaultTee ? <Text style={styles.labelRight}>{defaultTee.name}</Text> : null
+              selectedTee ? <Text style={styles.labelRight}>{selectedTee.name}</Text> : null
             }>
             Scorecard
           </SectionLabel>
@@ -189,14 +212,14 @@ function CourseBody({
             {nines.map((nine, idx) => (
               <React.Fragment key={idx}>
                 {idx > 0 ? <View style={styles.nineDivider} /> : null}
-                <ScorecardNine holes={nine} tee={defaultTee} styles={styles} />
+                <ScorecardNine holes={nine} tee={selectedTee} styles={styles} />
               </React.Fragment>
             ))}
             <View style={styles.totalsRow}>
               <Text style={styles.totalsText}>
                 Par <Text style={styles.totalsStrong}>{totalPar}</Text>
               </Text>
-              <Text style={styles.totalsYards}>{formatYards(totalYards)} yds</Text>
+              <Text style={styles.totalsYards}>{formatYards(scorecardYards)} yds</Text>
             </View>
           </GlassCard>
         </>
@@ -353,11 +376,22 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 11,
-      paddingVertical: 11
+      paddingVertical: 11,
+      paddingHorizontal: 8,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: 'transparent'
     },
     rowDivider: {
-      borderBottomWidth: 1,
+      borderRadius: 0,
       borderBottomColor: colors.glassStroke
+    },
+    teeRowActive: {
+      backgroundColor: colors.glowLime,
+      borderColor: colors.lime
+    },
+    teeRowPressed: {
+      opacity: 0.7
     },
     teeDot: {
       width: 12,
@@ -369,6 +403,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 14,
       fontWeight: '700',
       minWidth: 50
+    },
+    teeNameActive: {
+      color: colors.lime
     },
     teeRating: {
       marginLeft: 'auto',
@@ -382,6 +419,11 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textBody,
       fontSize: 13,
       fontWeight: '700'
+    },
+    teeCheck: {
+      color: colors.lime,
+      fontSize: 14,
+      fontWeight: '800'
     },
 
     gridRow: {

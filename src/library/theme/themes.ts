@@ -97,6 +97,8 @@ export type ThemeColors = {
   glassFill: string;
   /** Slightly stronger translucent glass surface fill. */
   glassFill2: string;
+  /** Opaque surface for bottom sheets / modals — legible over the backdrop. */
+  sheetBg: string;
   /** Shared glass outline stroke color. */
   glassStroke: string;
   /** Soft lime glow wash for elevated neon elements. */
@@ -177,6 +179,7 @@ const auroraGlassTheme: ThemeColors = {
   onNeon: '#08121a',
   glassFill: 'rgba(255,255,255,0.06)',
   glassFill2: 'rgba(255,255,255,0.09)',
+  sheetBg: 'rgba(12,16,23,0.97)',
   glassStroke: 'rgba(255,255,255,0.15)',
   glowLime: 'rgba(182,255,59,0.14)',
   glowCyan: 'rgba(57,230,198,0.12)',
