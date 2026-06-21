@@ -29,9 +29,26 @@ import { SwipeableHoleEditor } from './SwipeableHoleEditor';
 import { GlassCard, NeonButton, NumericText } from '@/components/aurora';
 import { findTee } from '@/library/golf/courseHelpers';
 import { formatScore, getScorerProgress } from '@/library/golf/scoring';
+import { getHoleStats } from '@/library/golf/teeGrouping';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
-import type { Round } from '@/types/golf';
+import type { Hole, Round, Tee } from '@/types/golf';
+
+/**
+ * Per-hole (par · yardage · stroke index) for the round's played tee.
+ * Prefers the tee's per-hole row, falling back to the course-level
+ * `Hole` scalars — so the hero reflects the tee the user is playing,
+ * not the course default.
+ */
+function holeStatsForTee(tee: Tee | undefined, hole: Hole) {
+  if (tee) return getHoleStats(tee, hole.number, hole);
+  return {
+    holeNumber: hole.number,
+    par: hole.par,
+    handicapIndex: hole.handicapIndex,
+    yardage: hole.yardage,
+  };
+}
 
 type Props = {
   round: Round;
@@ -107,6 +124,7 @@ export function ScoringRoundView({
     round.course,
     round.participants.find((p) => p.participantKey === firstParticipantKey)?.teeId
   );
+  const heroStats = currentHole ? holeStatsForTee(roundTee, currentHole) : null;
   const teeLine = roundTee
     ? `${roundTee.name}${roundTee.totalYardage ? ` ${roundTee.totalYardage.toLocaleString()}y` : ''}`
     : 'No tee';
@@ -134,21 +152,21 @@ export function ScoringRoundView({
             {showSwitcher && onChangeLens ? (
               <LensSwitcher value={activeLens} onChange={onChangeLens} />
             ) : null}
-            {activeLens === 'hole' && currentHole ? (
+            {activeLens === 'hole' && currentHole && heroStats ? (
               <View style={styles.hero}>
                 <NumericText style={styles.heroNumber}>
                   {currentHole.number}
                 </NumericText>
                 <View style={styles.heroMeta}>
-                  <Text style={styles.heroMetaText}>Par {currentHole.par}</Text>
-                  {currentHole.yardage ? (
+                  <Text style={styles.heroMetaText}>Par {heroStats.par}</Text>
+                  {heroStats.yardage ? (
                     <Text style={styles.heroMetaText}>
-                      {currentHole.yardage.toLocaleString()} yds
+                      {heroStats.yardage.toLocaleString()} yds
                     </Text>
                   ) : null}
-                  {currentHole.handicapIndex ? (
+                  {heroStats.handicapIndex ? (
                     <Text style={styles.heroMetaText}>
-                      Hcp {currentHole.handicapIndex}
+                      Hcp {heroStats.handicapIndex}
                     </Text>
                   ) : null}
                 </View>
