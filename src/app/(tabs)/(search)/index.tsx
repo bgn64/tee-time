@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 
 import { Avatar, GlassCard, GlassSurface, PHONE_MAX_WIDTH, SectionLabel, SegmentedToggle } from '@/components/aurora';
+import { AddCourseRow } from '@/components/course/AddCourseRow';
 import { CourseRow } from '@/components/scoring/CourseRow';
 import { FriendActionPill } from '@/components/social/FriendActionPill';
 import { IncomingRequestsBanner } from '@/components/social/IncomingRequestsBanner';
@@ -376,6 +377,10 @@ function CoursesPane({
           </View>
         </>
       )}
+
+      <View style={styles.addCourseEntry}>
+        <AddCourseRow onPress={() => router.push('/(tabs)/(search)/course/add' as never)} />
+      </View>
     </>
   );
 }
@@ -407,6 +412,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     courseList: {
       gap: 10
+    },
+    addCourseEntry: {
+      marginTop: 12
     },
     searchInput: {
       flex: 1,

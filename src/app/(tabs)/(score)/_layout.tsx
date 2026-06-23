@@ -50,6 +50,7 @@ export default function ScoreLayout() {
       }}>
       <Stack.Screen name="index" options={{ title: 'New round' }} />
       <Stack.Screen name="new/index" options={{ title: 'Choose course' }} />
+      <Stack.Screen name="new/add" options={{ title: 'Add course' }} />
       <Stack.Screen name="scoring" options={{ gestureEnabled: false }} />
       <Stack.Screen name="previous/index" options={{ title: 'Previous rounds' }} />
       <Stack.Screen name="previous/[id]" options={{ title: 'Round' }} />

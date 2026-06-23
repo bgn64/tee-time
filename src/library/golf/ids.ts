@@ -36,6 +36,24 @@ export function newTeamId(): string {
   return uuid();
 }
 
+/**
+ * Stable id for a user-created custom course (server-side `courses.id`
+ * with `source='custom'`). The `custom:` prefix keeps it distinct from
+ * catalog rows (`opengolf:`-prefixed) so enrichment never targets it —
+ * see `isCatalogCourse` in courseEnrichment.ts.
+ */
+export function newCustomCourseId(): string {
+  return `custom:${uuid()}`;
+}
+
+/**
+ * Stable id for a tee set on a custom course. Used as the key in
+ * `Hole.yardages` so per-hole yardages join back onto the tee.
+ */
+export function newTeeId(): string {
+  return `tee:${uuid()}`;
+}
+
 /** Stable id for a new round comment row (server-side `comments.id`). */
 export function newCommentId(): string {
   return uuid();

@@ -13,15 +13,17 @@
  * sets with their ratings, and a hole-by-hole scorecard (Par / Yds / Hcp).
  */
 
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { GlassCard, NumericText, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
 import { assignTeeColors } from '@/library/golf/teeColor';
+import { deleteCustomCourse } from '@/library/golf/customCourses';
 import { getHoleStats } from '@/library/golf/teeGrouping';
 import { useCourse } from '@/library/golf/useCourses';
 import { useTheme } from '@/library/theme/ThemeContext';
+import { confirmAsync, showAlert } from '@/library/utils/alert';
 import type { Course, Hole, Tee } from '@/types/golf';
 
 /** Headline tee: the longest tee that carries both a rating and a slope, else the longest, else the first. */
@@ -131,10 +133,27 @@ function CourseBody({
 
   const nines = chunkNines(course.holes);
 
+  const onRemove = async () => {
+    const ok = await confirmAsync(
+      'Remove course?',
+      `"${course.name}" will be deleted from your courses. Rounds you've already played keep their own scorecard.`
+    );
+    if (!ok) return;
+    try {
+      await deleteCustomCourse(course.id);
+      router.back();
+    } catch (err) {
+      showAlert('Could not remove', err instanceof Error ? err.message : 'Please try again.');
+    }
+  };
+
   return (
     <>
       <GlassCard style={styles.hero}>
-        <Text style={styles.courseName}>{course.name}</Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.courseName} numberOfLines={2}>{course.name}</Text>
+          {course.isCustom ? <Text style={styles.badge}>Personal</Text> : null}
+        </View>
         {course.location ? <Text style={styles.courseSub}>{course.location}</Text> : null}
         <View style={styles.heroRow}>
           <NumericText style={styles.heroValue}>{totalPar > 0 ? totalPar : '—'}</NumericText>
@@ -224,6 +243,15 @@ function CourseBody({
           </GlassCard>
         </>
       ) : null}
+
+      {course.isCustom ? (
+        <Pressable
+          onPress={onRemove}
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.removeBtn, pressed ? styles.removePressed : null]}>
+          <Text style={styles.removeText}>Remove course</Text>
+        </Pressable>
+      ) : null}
     </>
   );
 }
@@ -303,7 +331,28 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     courseName: {
       color: colors.textTitle,
       fontSize: 19,
-      fontWeight: '800'
+      fontWeight: '800',
+      flexShrink: 1
+    },
+    nameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap'
+    },
+    badge: {
+      fontSize: 9,
+      fontWeight: '800',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      color: colors.cyan,
+      backgroundColor: colors.glowCyan,
+      borderWidth: 1,
+      borderColor: colors.cyan,
+      borderRadius: 7,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      overflow: 'hidden'
     },
     courseSub: {
       marginTop: 2,
@@ -365,6 +414,17 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontSize: 11,
       fontWeight: '800',
       letterSpacing: 0.5
+    },
+    removeBtn: {
+      alignItems: 'center',
+      paddingVertical: 14,
+      marginTop: 2
+    },
+    removePressed: { opacity: 0.7 },
+    removeText: {
+      color: colors.accent,
+      fontSize: 13,
+      fontWeight: '800'
     },
 
     card: {

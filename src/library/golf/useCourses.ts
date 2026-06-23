@@ -25,11 +25,11 @@ import type { Course, Hole, Tee } from '@/types/golf';
 
 import { enrichCatalogCourse, needsEnrichment } from './courseEnrichment';
 
-const SEARCH_FIELDS = 'id,name,city,state,country,hole_count,holes,tees';
+export const SEARCH_FIELDS = 'id,name,city,state,country,hole_count,holes,tees,source';
 const SEARCH_DEBOUNCE_MS = 300;
 const SEARCH_LIMIT = 50;
 
-type CourseDbRow = {
+export type CourseDbRow = {
   id: string;
   name: string;
   city: string | null;
@@ -38,6 +38,7 @@ type CourseDbRow = {
   hole_count: number;
   holes: unknown;
   tees: unknown;
+  source?: string | null;
 };
 
 function locationOf(row: Pick<CourseDbRow, 'city' | 'state' | 'country'>): string {
@@ -140,6 +141,7 @@ export function mapDbCourseToCourse(row: CourseDbRow): Course {
     location: locationOf(row),
     holes: mapHoles(row.holes),
     tees: mapTees(row.tees),
+    isCustom: row.source === 'custom',
   };
 }
 
