@@ -34,6 +34,7 @@ export default function SearchLayout() {
       />
       <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
       <Stack.Screen name="course/[id]" options={{ title: 'Course' }} />
+      <Stack.Screen name="course/add" options={{ title: 'Add course' }} />
     </Stack>
   );
 }

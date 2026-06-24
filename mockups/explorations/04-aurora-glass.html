@@ -4,11 +4,13 @@
   Premium dark fitness-tech aesthetic: deep night gradient, frosted glass
   panels (backdrop-blur), neon lime + cyan accents, soft glows, big rounded
   forms, tabular numerics. Same backend model as the others.
-  Expanded to eleven screens: Feed, Live Scoring (Hole entry plus Card and Chat
+  Expanded to twelve screens: Feed, Live Scoring (Hole entry plus Card and Chat
   lenses for mid-round standings, the running scorecard & live comments),
   Round Detail (full scorecard + comments), New Round setup, Search (People and
   Courses — friend requests plus a searchable course catalog), Course Detail
-  (full course info: tees, ratings/slopes, hole-by-hole scorecard), Profile, and
+  (full course info: tees, ratings/slopes, hole-by-hole scorecard), Add Course
+  (create a course that isn't in the catalog — scan its scorecard from a photo or
+  enter it by hand, then review a private course only you can play), Profile, and
   a Handicap breakdown (World Handicap System differentials from your most recent
   rounds).
 -->
@@ -263,6 +265,46 @@
   .sheet .grab{width:40px;height:4px;border-radius:3px;background:#46566a;margin:4px auto 12px}
   .sheet h3{font-size:16px;font-weight:700;margin:0}
   .sheet .ssub{font-size:11px;color:var(--muted);margin:3px 0 8px}
+
+  /* add course (custom / scanned) */
+  .scan{display:flex;align-items:center;gap:13px;background:linear-gradient(90deg,#39e6c61f,transparent);border:1px solid #39e6c655;border-radius:18px;padding:14px;margin:2px 0 0;cursor:pointer}
+  .scan .si{width:40px;height:40px;border-radius:13px;background:var(--cy);color:#062018;display:grid;place-items:center;font-size:19px;flex:0 0 auto;box-shadow:0 0 20px -4px #39e6c699}
+  .scan .st{font-size:14px;font-weight:700}
+  .scan .ss{font-size:11px;color:var(--muted);margin-top:2px}
+  .scan .chev{margin-left:auto;color:var(--cy);font-size:18px}
+  .orline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:10px;letter-spacing:1.5px;text-transform:uppercase;margin:12px 2px 2px}
+  .orline::before,.orline::after{content:"";flex:1;height:1px;background:var(--stroke)}
+  .tin{all:unset;display:block;width:100%;box-sizing:border-box;font-size:14px;font-weight:600;color:var(--ink)}
+  .tin::placeholder{color:var(--muted);font-weight:400}
+  .binp{all:unset;box-sizing:border-box;width:46px;text-align:center;font-size:13px;font-weight:600;color:var(--ink);background:#0a0f17;border:1px solid var(--stroke);border-radius:8px;padding:7px 5px;font-variant-numeric:tabular-nums}
+  .teed{display:flex;align-items:center;gap:10px;padding:6px 2px 12px;border-bottom:1px solid var(--stroke)}
+  .tedot{width:12px;height:12px;border-radius:50%;flex:0 0 auto}
+  .tedd{margin-left:auto;display:flex;align-items:center;gap:5px;color:var(--muted);font-size:11px}
+  .sgrid .ecell{margin:3px auto;width:30px;height:27px;border:1px solid var(--stroke);border-radius:8px;background:#0a0f17;display:grid;place-items:center;font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums}
+  .sgrid .ecell.ph{color:#46566a}
+  .sgrid .ecell.flag{border-color:#ffb27a99;background:#ffb27a14;color:#ffc08a}
+  .snote{display:flex;align-items:center;gap:11px;background:#39e6c614;border:1px solid #39e6c655;border-radius:16px;padding:11px 13px;margin-bottom:13px}
+  .snote .si2{width:30px;height:30px;border-radius:10px;background:var(--cy);color:#062018;display:grid;place-items:center;font-size:15px;font-weight:800;flex:0 0 auto}
+  .snote .snt{font-size:13px;font-weight:700}
+  .snote .sns{font-size:11px;color:var(--muted);margin-top:2px}
+  .lockn{text-align:center;font-size:11px;color:var(--muted);margin:12px 0 4px}
+  .capture{position:relative;height:236px;border-radius:20px;overflow:hidden;border:1px solid var(--stroke);background:#070a10;margin-bottom:13px}
+  .capture .paper{position:absolute;inset:24px 30px;background:#e9edf2;border-radius:6px;transform:perspective(560px) rotateX(7deg);box-shadow:0 16px 32px -14px #000;padding:9px 10px;overflow:hidden}
+  .capture .ptitle{font-size:8px;letter-spacing:1px;color:#33424f;font-weight:800}
+  .capture .pgrid{position:absolute;left:10px;right:10px;top:24px;bottom:9px;background:repeating-linear-gradient(#c2cad4 0 1px,transparent 1px 16px),repeating-linear-gradient(90deg,#c2cad4 0 1px,transparent 1px 10%);opacity:.85}
+  .cnr{position:absolute;width:22px;height:22px;border:2px solid var(--cy)}
+  .cnr.tl{top:14px;left:16px;border-right:0;border-bottom:0;border-radius:7px 0 0 0}
+  .cnr.tr{top:14px;right:16px;border-left:0;border-bottom:0;border-radius:0 7px 0 0}
+  .cnr.bl{bottom:14px;left:16px;border-right:0;border-top:0;border-radius:0 0 0 7px}
+  .cnr.br{bottom:14px;right:16px;border-left:0;border-top:0;border-radius:0 0 7px 0}
+  .scanbar{position:absolute;left:18px;right:18px;height:2px;background:linear-gradient(90deg,transparent,#39e6c6,transparent);box-shadow:0 0 16px 2px #39e6c6aa;animation:scanmv 2.4s ease-in-out infinite}
+  @keyframes scanmv{0%,100%{top:26px}50%{top:204px}}
+  .proc{display:flex;align-items:center;gap:10px;justify-content:center;font-size:12px;color:var(--cy);margin-bottom:13px}
+  .proc .sp{width:14px;height:14px;border-radius:50%;border:2px solid #39e6c655;border-top-color:#39e6c6;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .tips{font-size:12.5px;color:var(--muted);line-height:1.95}
+  .tips b{color:var(--cy);font-weight:700;margin-right:6px}
+  .tag{font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--cy);background:#39e6c614;border:1px solid #39e6c655;border-radius:8px;padding:2px 7px;margin-left:8px;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -529,7 +571,7 @@
       </div>
     </div>
 
-    <p class="cap" style="margin-top:34px">Row 4 · Search your people <b>and</b> the course catalog (full course info — tees, ratings/slopes, hole-by-hole), your locker, and the math behind your handicap.</p>
+    <p class="cap" style="margin-top:34px">Row 4 · Search your people <b>and</b> the course catalog (full course info — tees, ratings/slopes, hole-by-hole) — and <b>add a course that isn't in the catalog</b>, by scanning its scorecard or entering it by hand — plus your locker and the math behind your handicap.</p>
 
     <!-- FRIENDS / SEARCH -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
@@ -565,13 +607,16 @@
         <div class="top"><h1>Search</h1><div class="me" style="background:linear-gradient(135deg,#39e6c6,#9d7bff)">B</div></div>
         <div class="seg"><a>People</a><a class="on">Courses</a></div>
         <div class="search"><span>⌕</span><input value="pebble" placeholder="Search courses" /></div>
-        <div class="label">Courses<span class="r">3 matches</span></div>
+        <div class="label">Courses<span class="r">4 matches</span></div>
+        <div class="frow"><span class="av" style="background:var(--glass2);color:var(--cy)">⛳</span>
+          <div><div class="hand">Pebble Hills Muni<span class="tag">Personal</span></div><div class="sub">Added by you · par 71 · 1 tee</div></div><span class="go2">View ›</span></div>
         <div class="frow"><span class="av" style="background:var(--glass2);color:var(--cy)">⛳</span>
           <div><div class="hand">Pebble Beach Golf Links</div><div class="sub">Pebble Beach, CA · par 72 · 4 tees</div></div><span class="go2">View ›</span></div>
         <div class="frow"><span class="av" style="background:var(--glass2);color:var(--cy)">⛳</span>
           <div><div class="hand">Pebble Creek G.C.</div><div class="sub">Scottsdale, AZ · par 72 · 3 tees</div></div><span class="go2">View ›</span></div>
         <div class="frow"><span class="av" style="background:var(--glass2);color:var(--cy)">⛳</span>
           <div><div class="hand">Pebblebrook Golf Course</div><div class="sub">Tampa, FL · par 70 · 3 tees</div></div><span class="go2">View ›</span></div>
+        <div class="addp"><span class="pl">＋</span>Add a course not in the catalog</div>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
         <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
@@ -614,6 +659,111 @@
           </div>
           <div class="stot"><span>Out <b>36</b> · In <b>36</b></span><span class="tp" id="cdScTotal">Par 72 · 6,828</span></div>
         </div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- ADD COURSE -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>‹&nbsp;Add course</h1><div class="me" style="background:var(--glass2);color:var(--muted)">✕</div></div>
+        <div class="scan"><span class="si">📷</span>
+          <div><div class="st">Scan scorecard</div><div class="ss">Auto-fill par, yards &amp; handicap from a photo</div></div>
+          <span class="chev">›</span></div>
+        <div class="orline">or enter by hand</div>
+        <div class="field"><span class="ic2">⛳</span>
+          <div style="flex:1"><div class="lab">Course name</div><input class="tin" value="Sunset Ridge G.C." /></div></div>
+        <div class="field"><span class="ic2">📍</span>
+          <div style="flex:1"><div class="lab">Location</div><input class="tin" value="Bend, OR" placeholder="City, State" /></div></div>
+        <div class="label">Holes</div>
+        <div class="choice">
+          <div class="opt sel"><b>18 holes</b><small>full course</small></div>
+          <div class="opt"><b>9 holes</b><small>front / back</small></div>
+        </div>
+        <div class="label">Tees<span class="r">tap a row to edit</span></div>
+        <div class="scard">
+          <div class="teed"><span class="tedot" style="background:#eaf2ee"></span>
+            <input class="binp" style="width:78px;text-align:left" value="White" />
+            <div class="tedd">Rating <input class="binp" value="71.8" /> Slope <input class="binp" value="131" /></div></div>
+          <div class="addp" style="padding-bottom:0"><span class="pl">＋</span>Add another tee</div>
+        </div>
+        <div class="label">Scorecard<span class="r">White · enter each hole</span></div>
+        <div class="scard">
+          <div class="sgrid">
+            <div class="rl">Hole</div><div class="hn">1</div><div class="hn">2</div><div class="hn">3</div><div class="hn">4</div><div class="hn">5</div><div class="hn">6</div><div class="hn">7</div><div class="hn">8</div><div class="hn">9</div>
+            <div class="rl">Par</div><div class="ecell">4</div><div class="ecell">5</div><div class="ecell">4</div><div class="ecell">3</div><div class="ecell">4</div><div class="ecell">4</div><div class="ecell">5</div><div class="ecell">4</div><div class="ecell">3</div>
+            <div class="rl">Yds</div><div class="ecell">372</div><div class="ecell">505</div><div class="ecell">398</div><div class="ecell">165</div><div class="ecell">389</div><div class="ecell">351</div><div class="ecell">498</div><div class="ecell">410</div><div class="ecell">152</div>
+            <div class="rl">Hcp</div><div class="ecell">7</div><div class="ecell">1</div><div class="ecell">11</div><div class="ecell">17</div><div class="ecell">5</div><div class="ecell">13</div><div class="ecell">3</div><div class="ecell">9</div><div class="ecell">15</div>
+          </div>
+          <div class="sdiv"></div>
+          <div class="sgrid">
+            <div class="rl">Hole</div><div class="hn">10</div><div class="hn">11</div><div class="hn">12</div><div class="hn">13</div><div class="hn">14</div><div class="hn">15</div><div class="hn">16</div><div class="hn">17</div><div class="hn">18</div>
+            <div class="rl">Par</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div>
+            <div class="rl">Yds</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div>
+            <div class="rl">Hcp</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div><div class="ecell ph">–</div>
+          </div>
+          <div class="stot"><span>Out <b>36</b> · In <b>—</b></span><span class="tp">9 of 18 holes</span></div>
+        </div>
+        <button class="start">Save course ›</button>
+        <div class="lockn">🔒 Private to you · only you can play it</div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- ADD COURSE · SCAN -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>‹&nbsp;Scan scorecard</h1><div class="me" style="background:var(--glass2);color:var(--muted)">✕</div></div>
+        <div class="capture">
+          <div class="paper"><div class="ptitle">SUNSET RIDGE G.C. — SCORECARD</div><div class="pgrid"></div></div>
+          <span class="cnr tl"></span><span class="cnr tr"></span><span class="cnr bl"></span><span class="cnr br"></span>
+          <div class="scanbar"></div>
+        </div>
+        <div class="proc"><span class="sp"></span>Reading par, yards &amp; handicap…</div>
+        <div class="label">For a clean scan</div>
+        <div class="scard">
+          <div class="tips">
+            <div><b>›</b>Lay the card flat and fill the frame</div>
+            <div><b>›</b>Avoid glare, shadows and creases</div>
+            <div><b>›</b>Capture all 18 holes in one shot</div>
+          </div>
+        </div>
+        <div class="nv"><button>Retake</button><button class="go">Use photo</button></div>
+        <div class="lockn">You'll review every value before it's saved</div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- ADD COURSE · REVIEW -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>‹&nbsp;Review scorecard</h1><div class="me" style="background:var(--glass2);color:var(--muted)">✕</div></div>
+        <div class="snote"><span class="si2">✓</span>
+          <div><div class="snt">Scanned from photo</div><div class="sns">Check the highlighted cells — tap any value to fix</div></div></div>
+        <div class="field"><span class="ic2">⛳</span>
+          <div style="flex:1"><div class="lab">Course name</div><input class="tin" value="Sunset Ridge G.C." /></div></div>
+        <div class="label">Scorecard<span class="r">White · scanned</span></div>
+        <div class="scard">
+          <div class="sgrid">
+            <div class="rl">Hole</div><div class="hn">1</div><div class="hn">2</div><div class="hn">3</div><div class="hn">4</div><div class="hn">5</div><div class="hn">6</div><div class="hn">7</div><div class="hn">8</div><div class="hn">9</div>
+            <div class="rl">Par</div><div class="ecell">4</div><div class="ecell">5</div><div class="ecell">4</div><div class="ecell">3</div><div class="ecell">4</div><div class="ecell">4</div><div class="ecell">5</div><div class="ecell">4</div><div class="ecell">3</div>
+            <div class="rl">Yds</div><div class="ecell">372</div><div class="ecell">505</div><div class="ecell">398</div><div class="ecell">165</div><div class="ecell">389</div><div class="ecell">351</div><div class="ecell">498</div><div class="ecell flag">410</div><div class="ecell">152</div>
+            <div class="rl">Hcp</div><div class="ecell">7</div><div class="ecell">1</div><div class="ecell">11</div><div class="ecell">17</div><div class="ecell">5</div><div class="ecell">13</div><div class="ecell">3</div><div class="ecell">9</div><div class="ecell">15</div>
+          </div>
+          <div class="sdiv"></div>
+          <div class="sgrid">
+            <div class="rl">Hole</div><div class="hn">10</div><div class="hn">11</div><div class="hn">12</div><div class="hn">13</div><div class="hn">14</div><div class="hn">15</div><div class="hn">16</div><div class="hn">17</div><div class="hn">18</div>
+            <div class="rl">Par</div><div class="ecell">4</div><div class="ecell">4</div><div class="ecell">5</div><div class="ecell">3</div><div class="ecell">4</div><div class="ecell">5</div><div class="ecell">4</div><div class="ecell">3</div><div class="ecell">4</div>
+            <div class="rl">Yds</div><div class="ecell">401</div><div class="ecell">360</div><div class="ecell">511</div><div class="ecell flag">175</div><div class="ecell">405</div><div class="ecell">520</div><div class="ecell">372</div><div class="ecell">158</div><div class="ecell">320</div>
+            <div class="rl">Hcp</div><div class="ecell">8</div><div class="ecell">4</div><div class="ecell">2</div><div class="ecell">18</div><div class="ecell">10</div><div class="ecell">6</div><div class="ecell">14</div><div class="ecell">16</div><div class="ecell">12</div>
+          </div>
+          <div class="stot"><span>Out <b>36</b> · In <b>36</b></span><span class="tp">Par 72 · 6,462</span></div>
+        </div>
+        <button class="start">Looks good · Save course ›</button>
+        <div class="lockn">🔒 Private to you</div>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
         <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>

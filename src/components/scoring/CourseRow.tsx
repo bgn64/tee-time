@@ -31,9 +31,12 @@ export function CourseRow({ course, onPress, detail }: Props) {
         <Ionicons name="golf-outline" size={20} color={colors.primaryDark} />
       </View>
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>
-          {course.name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>
+            {course.name}
+          </Text>
+          {course.isCustom ? <Text style={styles.badge}>Personal</Text> : null}
+        </View>
         {meta ? (
           <Text style={styles.meta} numberOfLines={1}>
             {meta}
@@ -69,7 +72,22 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       justifyContent: 'center',
     },
     info: { flex: 1, minWidth: 0 },
-    name: { fontSize: 15, fontWeight: '800', color: colors.textTitle },
+    nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    name: { fontSize: 15, fontWeight: '800', color: colors.textTitle, flexShrink: 1 },
+    badge: {
+      fontSize: 9,
+      fontWeight: '800',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      color: colors.cyan,
+      backgroundColor: colors.glowCyan,
+      borderWidth: 1,
+      borderColor: colors.cyan,
+      borderRadius: 7,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      overflow: 'hidden',
+    },
     meta: {
       fontSize: 12,
       fontWeight: '600',

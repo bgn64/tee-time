@@ -97,6 +97,12 @@ export type Course = {
   location: string;
   holes: Hole[];
   tees?: Tee[];
+  /**
+   * True for a user-created private course (`courses.source = 'custom'`,
+   * owner-scoped by RLS). Absent / false for the global opengolf catalog.
+   * Set by `mapDbCourseToCourse` from the row's `source` column.
+   */
+  isCustom?: boolean;
 };
 
 export type Player = {

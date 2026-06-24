@@ -29,6 +29,7 @@ import {
 } from 'react-native';
 
 import { GlassCard, GlassSurface, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
+import { AddCourseRow } from '@/components/course/AddCourseRow';
 import { CourseRow } from '@/components/scoring/CourseRow';
 import { useCoursesSearch } from '@/library/golf/useCourses';
 import { useRound } from '@/library/golf/RoundContext';
@@ -127,6 +128,10 @@ export default function CourseSelectionScreen() {
             </View>
           </GlassCard>
         ) : null}
+
+        <View style={styles.addRow}>
+          <AddCourseRow onPress={() => router.push('/(tabs)/(score)/new/add' as never)} />
+        </View>
       </ScrollView>
     </View>
   );
@@ -195,6 +200,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     },
     resultsCard: {
       marginTop: 8,
+    },
+    addRow: {
+      marginTop: 12,
     },
     sectionLabel: {
       marginTop: 0,
