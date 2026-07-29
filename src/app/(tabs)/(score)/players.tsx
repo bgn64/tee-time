@@ -60,7 +60,9 @@ export default function PlayersScreen() {
     return latest?.course.id;
   }, [completedRounds]);
   const activeCourseId = courseId ?? defaultCourseId;
-  const { course, loading: courseLoading, enriching: courseEnriching, error: courseError } = useCourse(activeCourseId);
+  const { course, loading: courseLoading, enriching: courseEnriching, error: courseError, retry: retryCourse } = useCourse(activeCourseId);
+  const courseHasHoles = (course?.holes?.length ?? 0) > 0;
+  const courseReady = !!course && courseHasHoles;
 
   const selfKey = useMemo(() => userParticipantKey(account.userId), [account.userId]);
   const [selectedKeys, setSelectedKeys] = useState<string[]>(() => [selfKey]);
@@ -201,7 +203,7 @@ export default function PlayersScreen() {
   const toggleStatKey = (key: StatKey) => setEnabledStatKeys((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]));
 
   async function handleStart() {
-    if (starting || selectedKeys.length === 0 || !course) return;
+    if (starting || selectedKeys.length === 0 || !courseReady) return;
     setStarting(true); setStartError(null);
     try {
       const finalEnabledStatKeys = enabledStatKeys;
@@ -233,7 +235,7 @@ export default function PlayersScreen() {
       setStartError(err instanceof Error ? err.message : String(err)); setStarting(false);
     }
   }
-  const startDisabled = starting || !course || selectedKeys.length === 0 || (scoringRule === 'scramble' && !scrambleCanStart);
+  const startDisabled = starting || !courseReady || courseLoading || courseEnriching || selectedKeys.length === 0 || (scoringRule === 'scramble' && !scrambleCanStart);
   const selectedTee = selectedTeeId ? teeById.get(selectedTeeId) : undefined;
   const courseValue = course?.name ?? (activeCourseId ? 'Course unavailable' : 'Choose a course');
   const teeValue = selectedTee ? formatTeeValue(selectedTee) : hasTees ? 'Choose tees' : 'No tee data';
@@ -249,11 +251,28 @@ export default function PlayersScreen() {
             <View style={styles.courseCopy}>
               <Text style={styles.courseMeta}>Selected course</Text>
               <Text style={[styles.courseName, !course && styles.placeholder]} numberOfLines={1}>{courseValue}</Text>
-              {courseError && activeCourseId ? <Text style={styles.inlineError} numberOfLines={1}>{courseError}</Text> : null}
+              {activeCourseId && (courseError || (course && !courseHasHoles && !courseLoading && !courseEnriching)) ? (
+                <Text style={styles.inlineError} numberOfLines={2}>
+                  {courseError ?? 'No scorecard data for this course yet, so it cannot be scored.'}
+                </Text>
+              ) : null}
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
           </GlassSurface>
         </Pressable>
+
+        {activeCourseId && !courseLoading && !courseEnriching && (courseError || (course && !courseHasHoles)) ? (
+          <Pressable onPress={() => retryCourse()} style={({ pressed }) => [styles.retryRow, pressed && styles.pressed]}>
+            <Ionicons name="refresh" size={16} color={colors.cyan} />
+            <Text style={styles.retryText}>Try loading this course again</Text>
+          </Pressable>
+        ) : null}
+        {activeCourseId && (courseLoading || courseEnriching) ? (
+          <View style={styles.retryRow}>
+            <ActivityIndicator color={colors.lime} />
+            <Text style={styles.retryTextMuted}>Loading course data…</Text>
+          </View>
+        ) : null}
 
         <SectionLabel>Format</SectionLabel>
         <View style={styles.choiceRow}>
@@ -398,6 +417,9 @@ function makeStyles(colors: ThemeColors) {
     courseMeta: { color: colors.textMuted, fontSize: 12, fontWeight: '700', marginTop: 2 },
     placeholder: { color: colors.textMuted },
     inlineError: { color: colors.accent, fontSize: 11, fontWeight: '800', marginTop: 3 },
+    retryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, marginTop: 4 },
+    retryText: { color: colors.cyan, fontSize: 13, fontWeight: '800' },
+    retryTextMuted: { color: colors.textMuted, fontSize: 13, fontWeight: '700' },
     choiceRow: { flexDirection: 'row', gap: 9, marginBottom: 14 },
     choiceCard: { flex: 1, alignItems: 'center', borderWidth: 1, borderColor: colors.glassStroke, backgroundColor: colors.glassFill, borderRadius: 14, paddingVertical: 13, paddingHorizontal: 8 },
     choiceCardSelected: { borderColor: colors.lime, backgroundColor: colors.glowLime },

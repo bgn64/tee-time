@@ -283,6 +283,11 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       if (playerIds.length === 0) {
         throw new Error('Pick at least one player before starting a round.');
       }
+      if (!course.holes || course.holes.length === 0) {
+        throw new Error(
+          'This course has no scorecard data yet, so it cannot be scored. Try again in a moment or pick another course.'
+        );
+      }
       if (scoringRule === 'scramble') {
         if (!teams || teams.length === 0) {
           throw new Error('Scramble rounds need at least one team.');
