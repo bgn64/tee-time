@@ -137,7 +137,9 @@ function buildHoles(raw: unknown[], tees: Tee[]): Hole[] {
   for (const entry of raw ?? []) {
     if (!entry || typeof entry !== 'object') continue;
     const obj = entry as Record<string, unknown>;
-    const number = numOrUndef(obj.hole_number ?? obj.hole);
+    // The live /holes endpoint keys the hole number as `number`; the base
+    // course `scorecard` uses `hole`; older payloads used `hole_number`.
+    const number = numOrUndef(obj.hole_number ?? obj.hole ?? obj.number);
     const par = numOrUndef(obj.par);
     if (number === undefined || par === undefined) continue;
 
@@ -239,16 +241,16 @@ export async function enrichCatalogCourse(
   // Tees first so per-hole yardages can join onto stable Tee.id keys.
   const tees: Tee[] = dedupeTees(teesPayload.tees ?? []);
 
-  // Prefer /holes (richer) and fall back to /courses/:id's `scorecard`
-  // when the dedicated endpoint returned nothing.
-  const rawHoles: unknown[] =
-    Array.isArray(holesPayload.holes) && holesPayload.holes.length > 0
-      ? holesPayload.holes
-      : Array.isArray(basePayload.scorecard)
-        ? (basePayload.scorecard as unknown[])
-        : [];
-
-  const holes: Hole[] = buildHoles(rawHoles, tees);
+  // Prefer the rich /holes payload; if it yields nothing parseable (e.g. an
+  // upstream field rename), fall back to the base course's par-only
+  // `scorecard` so the course stays playable rather than un-loadable.
+  let holes: Hole[] = buildHoles(
+    Array.isArray(holesPayload.holes) ? holesPayload.holes : [],
+    tees
+  );
+  if (holes.length === 0 && Array.isArray(basePayload.scorecard)) {
+    holes = buildHoles(basePayload.scorecard as unknown[], tees);
+  }
 
   if (holes.length === 0) {
     return {
