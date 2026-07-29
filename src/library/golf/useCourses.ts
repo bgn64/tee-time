@@ -18,7 +18,7 @@
  * this hook).
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { supabase } from '@/library/supabase/client';
 import type { Course, Hole, Tee } from '@/types/golf';
@@ -245,6 +245,7 @@ export function useCourse(id: string | null | undefined): {
   loading: boolean;
   enriching: boolean;
   error: string | null;
+  retry: () => void;
 } {
   const [result, setResult] = useState<{
     idAtFetch: string | null;
@@ -253,6 +254,12 @@ export function useCourse(id: string | null | undefined): {
   }>({ idAtFetch: null, course: undefined, error: null });
   const [loading, setLoading] = useState(false);
   const [enriching, setEnriching] = useState(false);
+  // Bumping this re-runs the fetch+enrichment effect for the same id, so a
+  // catalog course whose enrichment failed transiently (network / API blip)
+  // can be retried in place. A successful retry writes back to the shared
+  // catalog row, fixing it for everyone.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const retry = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   useEffect(() => {
     if (!id) {
@@ -301,10 +308,10 @@ export function useCourse(id: string | null | undefined): {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, reloadNonce]);
 
   if (!id) {
-    return { course: undefined, loading: false, enriching: false, error: null };
+    return { course: undefined, loading: false, enriching: false, error: null, retry };
   }
   // If the input id has changed but the fetch for it hasn't landed,
   // treat the in-state course as stale and surface loading.
@@ -314,5 +321,6 @@ export function useCourse(id: string | null | undefined): {
     loading: loading || isStale,
     enriching,
     error: isStale ? null : result.error,
+    retry,
   };
 }

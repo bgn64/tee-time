@@ -32,10 +32,10 @@
 
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, BackHandler, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, BackHandler, StyleSheet, Text, View } from 'react-native';
 
 import { ConfirmAbandonSheet } from '@/components/scoring/ConfirmAbandonSheet';
-import { PhoneFrame } from '@/components/aurora';
+import { NeonButton, PhoneFrame } from '@/components/aurora';
 import { HeaderOverflowMenu } from '@/components/round/HeaderOverflowMenu';
 import type { ScoringLens } from '@/components/round/LensSwitcher';
 import { ScoringCardLens } from '@/components/round/ScoringCardLens';
@@ -166,7 +166,35 @@ export default function ScoringScreen() {
   const currentHole = round.course.holes.find(
     (h) => h.number === round.currentHoleNumber
   );
-  if (!currentHole) return null;
+  // A round should never begin without hole data (guarded in startRound +
+  // players.tsx). But if an edge/legacy round has an empty scorecard, never
+  // render a blank screen: the picker redirects back here because a round is
+  // "in flight", which would trap the user. Surface a recoverable state so
+  // they can abandon it and start over.
+  if (!currentHole) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: 'Scoring' }} />
+        <View style={styles.emptyWrap}>
+          <Text style={styles.emptyTitle}>This round has no scorecard</Text>
+          <Text style={styles.emptyBody}>
+            {`We couldn't load hole data for ${round.course.name || 'this course'}, so it can't be scored. Abandon it to start a new round.`}
+          </Text>
+          <NeonButton label="Abandon round" onPress={() => setAbandonConfirmVisible(true)} />
+        </View>
+        <ConfirmAbandonSheet
+          visible={abandonConfirmVisible}
+          onCancel={() => setAbandonConfirmVisible(false)}
+          onConfirm={() => {
+            setAbandonConfirmVisible(false);
+            setTimeout(() => {
+              void abandonCurrentRound();
+            }, 0);
+          }}
+        />
+      </View>
+    );
+  }
 
   // Score-change handler wired into the pager. Just upserts the score
   // for the given hole; no longer auto-advances after entry.
@@ -246,6 +274,27 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    emptyWrap: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 32,
+      gap: 14,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: '900',
+      color: colors.textTitle,
+      textAlign: 'center',
+    },
+    emptyBody: {
+      fontSize: 14,
+      fontWeight: '600',
+      lineHeight: 20,
+      color: colors.textMuted,
+      textAlign: 'center',
+      marginBottom: 6,
     },
   });
 }
