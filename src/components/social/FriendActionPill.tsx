@@ -182,7 +182,7 @@ export function FriendActionPill({ target }: Props) {
                 ? colors.textTitle
                 : status === 'friend'
                   ? colors.primary
-                  : '#ffffff'
+                  : colors.onNeon
             }
           />
         ) : (
@@ -300,7 +300,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderRadius: 14,
       paddingVertical: 6,
       minWidth: 160,
-      shadowColor: '#000',
+      shadowColor: colors.shadow,
       shadowOpacity: 0.12,
       shadowOffset: { width: 0, height: 4 },
       shadowRadius: 12,

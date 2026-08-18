@@ -21,7 +21,9 @@ export function Avatar(props: { initial: string; color?: string; gradient?: [str
   const safeColor = props.color ? auroraAvatarColor(props.color) : null;
   const gradient = props.gradient ?? (safeColor ? null : [colors.cyan, colors.violet] as [string, string]);
   // Dark glyphs on the bright gradient/neon fills, matching the mockup.
-  const initialColor = gradient ? '#08121a' : avatarInitialColor(safeColor ?? colors.glassFill2);
+  const initialColor = gradient
+    ? colors.onNeon
+    : avatarInitialColor(safeColor ?? colors.glassFill2);
 
   if (gradient) {
     return (
@@ -59,7 +61,7 @@ function makeStyles(colors: ThemeColors) {
       elevation: 3,
     },
     initial: {
-      color: '#ffffff',
+      color: colors.textTitle,
       fontWeight: '900',
       includeFontPadding: false,
     },

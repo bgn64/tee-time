@@ -33,7 +33,7 @@ function makeStyles(colors: ThemeColors) {
       borderColor: colors.glassStroke,
       borderRadius: 20,
       overflow: 'hidden',
-      shadowColor: colors.night,
+      shadowColor: colors.shadow,
       shadowOffset: { width: 0, height: 18 },
       shadowOpacity: 0.35,
       shadowRadius: 28,

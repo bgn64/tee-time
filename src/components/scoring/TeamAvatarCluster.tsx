@@ -15,7 +15,10 @@
 import { useMemo } from 'react';
 import { StyleSheet, Text, View, ViewStyle } from 'react-native';
 
-import { auroraAvatarColor } from '@/library/social/avatarColors';
+import {
+  auroraAvatarColor,
+  avatarInitialColor,
+} from '@/library/social/avatarColors';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 
@@ -81,7 +84,12 @@ export function TeamAvatarCluster({
             i === 0 ? null : styles.avatarOverlap,
             { zIndex: i + 1 },
           ]}>
-          <Text style={styles.letter} numberOfLines={1}>
+          <Text
+            style={[
+              styles.letter,
+              { color: avatarInitialColor(auroraAvatarColor(m.color)) },
+            ]}
+            numberOfLines={1}>
             {m.name[0]?.toUpperCase() ?? '?'}
           </Text>
         </View>
@@ -120,7 +128,6 @@ function makeStyles(
       marginLeft: -dims.overlap,
     },
     letter: {
-      color: '#ffffff',
       fontWeight: '800',
       fontSize: dims.font,
     },
@@ -136,7 +143,7 @@ function makeStyles(
       marginLeft: -dims.overlap,
     },
     overflowText: {
-      color: '#ffffff',
+      color: colors.textTitle,
       fontWeight: '800',
       fontSize: dims.font,
     },

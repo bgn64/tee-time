@@ -211,7 +211,7 @@ function ContinueRoundBanner({
       accessibilityRole="button"
       accessibilityLabel="Continue your round">
       <LinearGradient
-        colors={[colors.glowLime, 'rgba(182, 255, 59, 0)']}
+        colors={[colors.glowLime, 'transparent']}
         start={{ x: 0, y: 0.5 }}
         end={{ x: 1, y: 0.5 }}
         style={styles.resume}>
@@ -259,7 +259,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       marginBottom: 14,
       borderRadius: 18,
       borderWidth: 1,
-      borderColor: 'rgba(182, 255, 59, 0.27)',
+      borderColor: colors.lime,
       overflow: 'hidden',
     },
     resume: {

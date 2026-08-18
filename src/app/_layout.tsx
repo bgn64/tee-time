@@ -1,7 +1,14 @@
 import React from 'react';
 import { Platform } from 'react-native';
-import { Stack, ThemeProvider as NavThemeProvider, DarkTheme } from 'expo-router';
+import {
+  Stack,
+  ThemeProvider as NavThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+} from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import * as SystemUI from 'expo-system-ui';
 import { enableScreens } from 'react-native-screens';
 import { QueryClientProvider } from '@tanstack/react-query';
 
@@ -20,6 +27,8 @@ import { ThemeProvider, useTheme } from '@/library/theme/ThemeContext';
 // while keeping the transparent backdrop intact. No-op on native (already on).
 if (Platform.OS === 'web') {
   enableScreens(true);
+} else {
+  void SplashScreen.preventAutoHideAsync();
 }
 
 export default function RootLayout() {
@@ -33,7 +42,7 @@ export default function RootLayout() {
 }
 
 function RootLayoutInner() {
-  const { colors } = useTheme();
+  const { colors, themeName } = useTheme();
 
   // Drain the persistent write outbox on mount, reconnect, and foreground
   // so queued score writes flush as soon as connectivity returns.
@@ -42,7 +51,25 @@ function RootLayoutInner() {
     return stop;
   }, []);
 
-  const statusBarStyle = 'light';
+  React.useEffect(() => {
+    let active = true;
+
+    SystemUI.setBackgroundColorAsync(colors.screenBgBottom)
+      .catch((error: unknown) => {
+        console.warn('Could not update the system background color.', error);
+      })
+      .finally(() => {
+        if (active && Platform.OS !== 'web') {
+          SplashScreen.hide();
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [colors.screenBgBottom]);
+
+  const statusBarStyle = themeName === 'dark' ? 'light' : 'dark';
 
   // expo-router defaults to React Navigation's light theme, whose navigator
   // container `background`/`card` would paint OVER the global Aurora gradient
@@ -51,10 +78,12 @@ function RootLayoutInner() {
   // single ScreenBackground shows through everywhere; `contentStyle:transparent`
   // on the inner stacks alone is not enough.
   const navTheme = React.useMemo(
-    () => ({
-      ...DarkTheme,
+    () => {
+      const baseTheme = themeName === 'dark' ? DarkTheme : DefaultTheme;
+      return {
+      ...baseTheme,
       colors: {
-        ...DarkTheme.colors,
+        ...baseTheme.colors,
         background: 'transparent',
         card: 'transparent',
         text: colors.textTitle,
@@ -62,8 +91,9 @@ function RootLayoutInner() {
         primary: colors.primary,
         notification: colors.accent,
       },
-    }),
-    [colors],
+    };
+    },
+    [colors, themeName],
   );
 
   return (

@@ -19,26 +19,25 @@ Validate every change with `npx tsc --noEmit` and `npm run lint`.
 
 ## Color tokens
 
-All colors come from `src/library/theme/themes.ts` via `useTheme().colors`. There
-is a single `auroraGlassTheme` (light and dark both alias it). Never hardcode hex
-in components — add a semantic token instead. The token shape grows
-monotonically: add new fields, don't repurpose existing ones, so existing call
-sites keep working.
+All colors come from `src/library/theme/themes.ts` via `useTheme().colors`.
+Aurora has coordinated light and dark palettes; every component must remain
+legible in both. Never hardcode theme-dependent colors in components — add a
+semantic token instead. The token shape grows monotonically: add new fields,
+don't repurpose existing ones, so existing call sites keep working.
 
-Key tokens: `lime`/`primary` (`#b6ff3b`), `cyan` (`#39e6c6`), `violet`, `onNeon`
-(dark ink for text on neon fills), `textTitle`/`textBody`/`textMuted`,
+Key tokens: `lime`/`primary`, `cyan`, `violet`, `onNeon` (contrasting text/icons
+for neon fills), `textTitle`/`textBody`/`textMuted`,
 `glassFill`/`glassFill2`/`glassStroke` (frosted panels), `glowLime`/`glowCyan`
 (soft tint fills — also reused as chip backgrounds), `cardBg`, `accent` (danger
 red), the `screenBgTop`/`screenBgBottom` base, and the `pip*` scorecard colors.
-Avatar colors are coerced onto the Aurora palette at render time via
+`shadow`/`shadowCard` provide palette-safe elevation. Avatar colors are coerced onto the Aurora palette at render time via
 `auroraAvatarColor()` (`src/library/social/avatarColors.ts`) — use it rather than
 raw colors for avatars.
 
 ## Background contract
 
 A single persistent `ScreenBackground` (`src/components/aurora/ScreenBackground.tsx`)
-lives behind every route, mounted once in `src/app/_layout.tsx`. It paints a
-near-black vertical gradient plus two soft SVG radial-gradient glows
+lives behind every route, mounted once in `src/app/_layout.tsx`. It paints a palette-specific vertical gradient plus two soft SVG radial-gradient glows
 (`react-native-svg`) that fade to transparent.
 
 Rules:
