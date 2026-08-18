@@ -13,9 +13,15 @@ type RoundScorecardGridProps = {
   round: Round;
   scorers: RoundScorer[];
   currentHoleNumber?: number;
+  performanceColor?: string;
 };
 
-export function RoundScorecardGrid({ round, scorers, currentHoleNumber }: RoundScorecardGridProps) {
+export function RoundScorecardGrid({
+  round,
+  scorers,
+  currentHoleNumber,
+  performanceColor,
+}: RoundScorecardGridProps) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const holes = holesInRange(round.course.holes, round.holeRange);
@@ -46,7 +52,11 @@ export function RoundScorecardGrid({ round, scorers, currentHoleNumber }: RoundS
           {hasBack ? <Text style={styles.totalStrong}>{nineTotal(round, back, scorers[0]?.id)}</Text> : null}
         </Text>
         {scorers[0] ? (
-          <NumericText style={styles.totalToPar}>
+          <NumericText
+            style={[
+              styles.totalToPar,
+              performanceColor ? { color: performanceColor } : null,
+            ]}>
             {formatScore(playerProgress(round, scorers[0].id).rel)} · thru {playerProgress(round, scorers[0].id).thru}
           </NumericText>
         ) : null}

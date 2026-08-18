@@ -103,28 +103,30 @@ function toScorecardRowShape(row: ScorecardRestRow): ScorecardRowShape | null {
   };
 }
 
-function completedScorecardsKey(userId: string | null) {
-  return ['completed_scorecards', userId] as const;
+function completedScorecardsKey(userId: string | null, limit: number | null) {
+  return ['completed_scorecards', userId, limit] as const;
 }
 
 function completedScoresKey(userId: string | null, scorecardIds: string[]) {
   return ['completed_scores', userId, scorecardIds] as const;
 }
 
-export function useCompletedRounds(): CompletedRoundsResult {
-  const { account } = useAccount();
-  const userId = account?.userId ?? null;
-
+export function usePlayerCompletedRounds(
+  userId: string | null,
+  limit: number | null = null
+): CompletedRoundsResult {
   const { data: scorecardRows, isLoading: scorecardLoading } = useQuery<ScorecardRestRow[]>({
-    queryKey: completedScorecardsKey(userId),
+    queryKey: completedScorecardsKey(userId, limit),
     enabled: !!userId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from(SCORECARDS_TABLE)
         .select(SCORECARD_COLUMNS)
         .eq('owner_user_id', userId as string)
         .not('completed_at', 'is', null)
-        .order('started_at', { ascending: false });
+        .order('completed_at', { ascending: false });
+      if (limit != null) query = query.limit(limit);
+      const { data, error } = await query;
       if (error) throw error;
       return (data ?? []) as ScorecardRestRow[];
     },
@@ -181,4 +183,9 @@ export function useCompletedRounds(): CompletedRoundsResult {
     rounds,
     isLoading: scorecardLoading || scoresLoading,
   };
+}
+
+export function useCompletedRounds(): CompletedRoundsResult {
+  const { account } = useAccount();
+  return usePlayerCompletedRounds(account?.userId ?? null, null);
 }

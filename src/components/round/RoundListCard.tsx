@@ -6,11 +6,12 @@ import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { GlassCard, ProgressDial } from '@/components/aurora';
+import { GlassCard, NumericText, ProgressDial } from '@/components/aurora';
 import { CommentsSheet } from './CommentsSheet';
 import { CourseBanner } from './CourseBanner';
 import type { OverflowItem } from './HeaderOverflowMenu';
 import { RoundActionBar } from './RoundActionBar';
+import { RoundCardScoreGrid } from './RoundCardScoreGrid';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import {
   aggregateBinary,
@@ -24,6 +25,11 @@ import {
   holesInRange,
   scorerIdForUser,
 } from '@/library/golf/scoring';
+import {
+  performanceToneColor,
+  useRoundPerformance,
+  userIdForScorer,
+} from '@/library/golf/performanceBenchmark';
 import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
@@ -119,13 +125,15 @@ export function RoundListCard({
   const hasScores = progress.thruCount > 0;
   const totalHoles = visibleHoles.length || 18;
   const scoreText = hasScores ? formatScore(progress.relativeScore) : 'E';
-  const progressColor = !hasScores
-    ? colors.cyan
-    : progress.relativeScore > 0
-      ? colors.accent
-      : progress.relativeScore < 0
-        ? colors.lime
-        : colors.cyan;
+  const benchmarkUserId = userIdForScorer(round, primaryScorerId);
+  const performance = useRoundPerformance(
+    round,
+    primaryScorerId,
+    benchmarkUserId
+  );
+  const progressColor = hasScores
+    ? performanceToneColor(colors, performance.tone)
+    : colors.performanceSteady;
   const teeMeta = primaryScorer?.tee?.name
     ? `${primaryScorer.tee.name} tees`
     : null;
@@ -187,17 +195,10 @@ export function RoundListCard({
     visibleHoles,
   ]);
 
-  const stripHoles = visibleHoles.slice(0, 9);
-  const scoreByHole = useMemo(() => {
-    const map = new Map<number, number>();
-    if (!primaryScorerId) return map;
-    for (const score of round.scores) {
-      if (score.scorerId === primaryScorerId) {
-        map.set(score.holeNumber, score.strokes);
-      }
-    }
-    return map;
-  }, [primaryScorerId, round.scores]);
+  const showScoreContext =
+    legend.length === 0 &&
+    (performance.grossScore != null ||
+      performance.scoringAverageGross != null);
   const openRound = () => router.push(`${detailRoutePrefix}/${round.id}` as never);
 
   return (
@@ -225,7 +226,13 @@ export function RoundListCard({
           <Text style={styles.courseMeta} numberOfLines={1}>
             {courseMeta}
           </Text>
-          <View style={styles.ringRow}>
+          <View
+            style={[
+              styles.ringRow,
+              legend.length === 0 && !showScoreContext
+                ? styles.ringRowCentered
+                : null,
+            ]}>
             <ProgressDial
               value={scoreText}
               label="TO PAR"
@@ -248,34 +255,32 @@ export function RoundListCard({
                   </View>
                 ))}
               </View>
+            ) : showScoreContext ? (
+              <View style={styles.scoreContext}>
+                {performance.grossScore != null ? (
+                  <View>
+                    <NumericText style={styles.scoreContextValue}>
+                      {performance.grossScore}
+                    </NumericText>
+                    <Text style={styles.scoreContextLabel}>
+                      {isInProgress ? 'Running score' : 'Final score'}
+                    </Text>
+                  </View>
+                ) : null}
+                {performance.scoringAverageGross != null ? (
+                  <View style={styles.scoreContextAverage}>
+                    <NumericText style={styles.scoreContextAverageValue}>
+                      {performance.scoringAverageGross.toFixed(1)}
+                    </NumericText>
+                    <Text style={styles.scoreContextLabel}>
+                      Scoring average
+                    </Text>
+                  </View>
+                ) : null}
+              </View>
             ) : null}
           </View>
-          <View style={styles.holes}>
-            {stripHoles.map((hole) => {
-              const strokes = scoreByHole.get(hole.number);
-              const birdie = typeof strokes === 'number' && strokes < hole.par;
-              return (
-                <View
-                  key={hole.number}
-                  style={[
-                    styles.holeCell,
-                    birdie ? styles.holeCellBirdie : null,
-                  ]}>
-                  <Text
-                    style={[
-                      styles.holeStrokes,
-                      birdie ? styles.holeStrokesBirdie : null,
-                      typeof strokes !== 'number'
-                        ? styles.holeStrokesEmpty
-                        : null,
-                    ]}>
-                    {typeof strokes === 'number' ? strokes : '–'}
-                  </Text>
-                  <Text style={styles.holeNumber}>{hole.number}</Text>
-                </View>
-              );
-            })}
-          </View>
+          <RoundCardScoreGrid round={round} scorerId={primaryScorerId} />
         </View>
       </Pressable>
       <RoundActionBar
@@ -325,6 +330,9 @@ function makeStyles(colors: ThemeColors) {
       gap: 16,
       marginVertical: 16,
     },
+    ringRowCentered: {
+      justifyContent: 'center',
+    },
     legend: {
       flex: 1,
       minWidth: 0,
@@ -351,44 +359,38 @@ function makeStyles(colors: ThemeColors) {
       fontWeight: '800',
       fontVariant: ['tabular-nums'],
     },
-    holes: {
-      flexDirection: 'row',
-      gap: 5,
-      marginTop: 1,
-      marginBottom: 2,
-    },
-    holeCell: {
+    scoreContext: {
       flex: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 8,
-      borderRadius: 9,
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.glassStroke,
       backgroundColor: colors.glassFill2,
-      borderWidth: StyleSheet.hairlineWidth,
-      borderColor: 'transparent',
     },
-    holeCellBirdie: {
-      backgroundColor: colors.glowLime,
-      borderColor: 'rgba(182, 255, 59, 0.32)',
-    },
-    holeStrokes: {
+    scoreContextValue: {
       color: colors.textTitle,
-      fontSize: 12.5,
-      fontWeight: '800',
-      fontVariant: ['tabular-nums'],
+      fontSize: 22,
+      fontWeight: '900',
     },
-    holeStrokesBirdie: {
-      color: colors.lime,
+    scoreContextAverage: {
+      paddingTop: 9,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: colors.glassStroke,
     },
-    holeStrokesEmpty: {
+    scoreContextAverageValue: {
       color: colors.textMuted,
+      fontSize: 17,
+      fontWeight: '900',
     },
-    holeNumber: {
-      marginTop: 1,
+    scoreContextLabel: {
+      marginTop: 2,
       color: colors.textMuted,
-      fontSize: 8.5,
-      fontWeight: '800',
-      fontVariant: ['tabular-nums'],
+      fontSize: 9,
+      fontWeight: '900',
+      letterSpacing: 1.2,
+      textTransform: 'uppercase',
     },
   });
 }

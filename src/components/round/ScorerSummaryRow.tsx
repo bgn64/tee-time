@@ -80,6 +80,8 @@ type Props = {
    * `scoreSub`. Viewing surfaces omit it.
    */
   runningScore?: { rel: number; thru: number };
+  /** Player-relative tone for `runningScore`; per-hole scores keep golf conventions. */
+  runningColor?: string;
   /** Renders a "YOU" pill after the handle (the signed-in player's row). */
   isYou?: boolean;
 };
@@ -95,6 +97,7 @@ export function ScorerSummaryRow({
   holeContext,
   subtitleOverride,
   runningScore,
+  runningColor,
   isYou,
 }: Props) {
   const { colors } = useTheme();
@@ -249,6 +252,7 @@ export function ScorerSummaryRow({
             styles.scoreText,
             scoreColTone === 'over' ? styles.scoreOver : null,
             scoreColTone === 'even' ? styles.scoreEven : null,
+            runningScore && runningColor ? { color: runningColor } : null,
           ]}>
           {scoreColValue}
         </Text>

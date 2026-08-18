@@ -110,6 +110,8 @@ export function HoleEditPane({
             name={s.name}
             runningScore={running}
             isYou={s.id === userScorerId}
+            round={round}
+            scorerId={s.id}
             scoreText={display.scoreText}
             scoreTone={display.tone}
             scoreSub={display.scoreSub}

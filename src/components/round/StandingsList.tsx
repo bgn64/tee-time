@@ -9,6 +9,11 @@ import {
   playerProgress,
   scorerIdForUser,
 } from '@/library/golf/scoring';
+import {
+  performanceToneColor,
+  useRoundPerformance,
+  userIdForScorer,
+} from '@/library/golf/performanceBenchmark';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useRequiredAccount } from '@/library/social/AccountContext';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -61,54 +66,79 @@ export function StandingsList({ round }: { round: Round }) {
   return (
     <View style={styles.list}>
       {standings.map((row, index) => {
-        const { scorer, rel, thru, birdies } = row;
-        const firstMember = scorer.members[0];
-        const handle = firstMember?.handle
-          ? `@${firstMember.handle}`
-          : firstMember?.name ?? scorer.name;
-        const scoreTone =
-          rel < 0
-            ? styles.scoreUnder
-            : rel > 0
-              ? styles.scoreOver
-              : styles.scoreEven;
-
         return (
-          <View
+          <StandingRowView
             key={row.id}
-            style={[
-              styles.row,
-              index === standings.length - 1 ? styles.lastRow : null,
-            ]}>
-            <TeamAvatarCluster
-              members={scorer.members}
-              size="md"
-              ringColor={colors.cardBg}
-            />
-            <View style={styles.body}>
-              <View style={styles.handleLine}>
-                <Text style={styles.handle} numberOfLines={1}>
-                  {handle}
-                </Text>
-                {scorer.id === myScorerId ? (
-                  <View style={styles.youPill}>
-                    <Text style={styles.youText}>YOU</Text>
-                  </View>
-                ) : null}
-              </View>
-              <Text style={styles.subline} numberOfLines={1}>
-                {formatSubline(rel, birdies)}
-              </Text>
-            </View>
-            <View style={styles.scoreCol}>
-              <NumericText style={[styles.scoreText, scoreTone]}>
-                {formatScore(rel)}
-              </NumericText>
-              <Text style={styles.thruText}>thru {thru}</Text>
-            </View>
-          </View>
+            round={round}
+            row={row}
+            isMe={row.scorer.id === myScorerId}
+            isLast={index === standings.length - 1}
+            styles={styles}
+            colors={colors}
+          />
         );
       })}
+    </View>
+  );
+}
+
+type StandingsStyles = ReturnType<typeof makeStyles>;
+
+function StandingRowView({
+  round,
+  row,
+  isMe,
+  isLast,
+  styles,
+  colors,
+}: {
+  round: Round;
+  row: StandingsRow;
+  isMe: boolean;
+  isLast: boolean;
+  styles: StandingsStyles;
+  colors: ThemeColors;
+}) {
+  const { scorer, rel, thru, birdies } = row;
+  const performance = useRoundPerformance(
+    round,
+    scorer.id,
+    userIdForScorer(round, scorer.id)
+  );
+  const scoreColor = performanceToneColor(colors, performance.tone);
+  const firstMember = scorer.members[0];
+  const handle = firstMember?.handle
+    ? `@${firstMember.handle}`
+    : firstMember?.name ?? scorer.name;
+
+  return (
+    <View style={[styles.row, isLast ? styles.lastRow : null]}>
+      <TeamAvatarCluster
+        members={scorer.members}
+        size="md"
+        ringColor={colors.cardBg}
+      />
+      <View style={styles.body}>
+        <View style={styles.handleLine}>
+          <Text style={styles.handle} numberOfLines={1}>
+            {handle}
+          </Text>
+          {isMe ? (
+            <View style={styles.youPill}>
+              <Text style={styles.youText}>YOU</Text>
+            </View>
+          ) : null}
+        </View>
+        <Text style={styles.subline} numberOfLines={1}>
+          {formatSubline(rel, birdies)}
+        </Text>
+      </View>
+      <View style={styles.scoreCol}>
+        <NumericText style={[styles.scoreText, { color: scoreColor }]}>
+          {formatScore(rel)}
+        </NumericText>
+        <Text style={styles.thruText}>thru {thru}</Text>
+      </View>
     </View>
   );
 }
@@ -181,15 +211,6 @@ function makeStyles(colors: ThemeColors) {
       fontSize: 24,
       fontWeight: '900',
       lineHeight: 27,
-    },
-    scoreUnder: {
-      color: colors.lime,
-    },
-    scoreOver: {
-      color: '#ffc08a',
-    },
-    scoreEven: {
-      color: colors.textTitle,
     },
     thruText: {
       marginTop: 2,
