@@ -5,7 +5,8 @@
  * local SQLite that filters scorecards through the local `friendships`
  * join (so unfriending hides cards immediately even before PowerSync
  * prunes the cached rows). Live rounds (in-flight) pin to the top
- * with a heartbeat status banner; completed rounds follow.
+ * with a heartbeat status banner; completed rounds follow as the
+ * same rich cards, grouped by completion month.
  * Each section is sorted newest-first by its own recency timestamp
  * (`lastScoreAt` for live, `completedAt` for done).
  *
@@ -31,15 +32,13 @@ import {
   Text,
   View,
 } from 'react-native';
-
 import { GlassCard, NeonButton, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
-import { CompletedRoundRow } from '@/components/round/CompletedRoundRow';
 import { RoundListCard } from '@/components/round/RoundListCard';
 import { IncomingRequestsBanner } from '@/components/social/IncomingRequestsBanner';
 import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrollView';
 import { useRefresh } from '@/library/data/useRefresh';
 import { useRound } from '@/library/golf/RoundContext';
-import { getScorerProgress, scorerIdForUser } from '@/library/golf/scoring';
+import { getScorerProgress, monthKey, scorerIdForUser } from '@/library/golf/scoring';
 import { useFeedRounds } from '@/library/golf/useFeedRounds';
 import { useFriends } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -59,6 +58,19 @@ export default function HomeFeedScreen() {
     () => [...liveRounds, ...completedRounds],
     [liveRounds, completedRounds]
   );
+  const completedGroups = React.useMemo(() => {
+    const groups: { key: string; rounds: Round[] }[] = [];
+    for (const round of completedRounds) {
+      const key = monthKey(new Date(round.completedAt ?? round.startedAt));
+      const last = groups[groups.length - 1];
+      if (last?.key === key) {
+        last.rounds.push(round);
+      } else {
+        groups.push({ key, rounds: [round] });
+      }
+    }
+    return groups;
+  }, [completedRounds]);
 
   // Don't decide between empty/populated states until BOTH the friend
   // list and the feed query have settled — otherwise the screen
@@ -139,6 +151,7 @@ export default function HomeFeedScreen() {
 
       {liveRounds.length > 0 ? (
         <>
+          <SectionLabel>Live now</SectionLabel>
           {liveRounds.map((round) => (
             <RoundListCard
               key={round.id}
@@ -152,15 +165,18 @@ export default function HomeFeedScreen() {
 
       {completedRounds.length > 0 ? (
         <>
-          <SectionLabel>Completed today</SectionLabel>
-          {completedRounds.map((round) => (
-            <CompletedRoundRow
-              key={round.id}
-              round={round}
-              onPress={() =>
-                router.push(`/(tabs)/(home)/round/${round.id}` as never)
-              }
-            />
+          {completedGroups.map((group) => (
+            <React.Fragment key={group.key}>
+              <SectionLabel>{group.key}</SectionLabel>
+              {group.rounds.map((round) => (
+                <RoundListCard
+                  key={round.id}
+                  round={round}
+                  detailRoutePrefix="/(tabs)/(home)/round"
+                  profileRoutePrefix="/(tabs)/(home)/profile"
+                />
+              ))}
+            </React.Fragment>
           ))}
         </>
       ) : null}

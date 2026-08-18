@@ -4,15 +4,16 @@
   Premium dark fitness-tech aesthetic: deep night gradient, frosted glass
   panels (backdrop-blur), neon lime + cyan accents, soft glows, big rounded
   forms, tabular numerics. Same backend model as the others.
-  Expanded to twelve screens: Feed, Live Scoring (Hole entry plus Card and Chat
+  Expanded screens: Feed (rich cards for both live and completed rounds), Live
+  Scoring (Hole entry plus Card and Chat
   lenses for mid-round standings, the running scorecard & live comments),
   Round Detail (full scorecard + comments), New Round setup, Search (People and
   Courses — friend requests plus a searchable course catalog), Course Detail
   (full course info: tees, ratings/slopes, hole-by-hole scorecard), Add Course
   (create a course that isn't in the catalog — scan its scorecard from a photo or
-  enter it by hand, then review a private course only you can play), Profile, and
-  a Handicap breakdown (World Handicap System differentials from your most recent
-  rounds).
+  enter it by hand, then review a private course only you can play), Profile,
+  All Rounds, and a Handicap breakdown (World Handicap System differentials from
+  your most recent rounds).
 -->
 <html lang="en">
 <head>
@@ -43,6 +44,8 @@
   .dot{display:flex;gap:5px}.dot i{width:6px;height:6px;border-radius:50%;background:#3a4658;display:block}
   .screen{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:2}
   .scrim{flex:1;overflow:hidden;padding:0 18px}
+  .scrim.scroll{overflow-y:auto;scrollbar-width:none}
+  .scrim.scroll::-webkit-scrollbar{display:none}
 
   .top{display:flex;align-items:center;justify-content:space-between;padding:6px 6px 14px}
   .top h1{font-size:18px;font-weight:700;letter-spacing:.4px;margin:0}
@@ -309,17 +312,18 @@
 </head>
 <body>
   <div class="stage">
-    <p class="cap">Exploration 04 — “Aurora Glass”, expanded to eleven screens. Row 1 · Browse &amp; play: the Feed and the live Scoring card — a <b>Hole · Card · Chat</b> header, with each partner’s running score on the hole.</p>
+    <p class="cap">Exploration 04 — “Aurora Glass”. Row 1 · Browse &amp; play: rich Feed cards for live and completed rounds, plus live Scoring with a <b>Hole · Card · Chat</b> header.</p>
 
     <!-- FEED -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
-      <div class="screen"><div class="scrim">
+      <div class="screen"><div class="scrim scroll">
         <div class="top"><h1>Tee<i>·</i>Time</h1><div class="me">B</div></div>
 
         <div class="resume"><span class="pl">▶</span>
           <div><div class="rt">Continue your round</div><div class="rs">Cedar Ridge G.C. · thru 7</div></div>
           <span class="chev">›</span></div>
 
+        <div class="label">Live now</div>
         <div class="card">
           <div class="row"><span class="av" style="background:#7cb342">M</span>
             <div><div class="hand">@marcus</div><div class="sub">Scramble · with @priya, @deshawn</div></div>
@@ -343,11 +347,49 @@
             <span class="react">💬 3</span><span class="openb">Open round →</span></div>
         </div>
 
-        <div class="label">Completed today</div>
-        <div class="mini"><div class="v">82<small> +10</small></div>
-          <div><div class="c">Aldwood Links</div><div class="m">@priya · stroke · 18 holes</div></div><span class="lk">♥ 12</span></div>
-        <div class="mini"><div class="v">76<small> +4</small></div>
-          <div><div class="c">Bethpage Black</div><div class="m">@deshawn · career low</div></div><span class="lk">♥ 21</span></div>
+        <div class="label">August 2026</div>
+        <div class="card">
+          <div class="row"><span class="av" style="background:#5c6bc0">P</span>
+            <div><div class="hand">@priya</div><div class="sub">Stroke play · with @deshawn</div></div></div>
+          <div class="course">Aldwood Links</div><div class="csub">Blue tees · 18 holes · Aug 16</div>
+          <div class="ring">
+            <div class="dial"><div class="inner"><div class="v">+10</div><div class="u">TO PAR</div></div></div>
+            <div class="legend">
+              <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>8/14</b></div>
+              <div><span class="pill" style="background:var(--cy)"></span>Greens <b>7/18</b></div>
+              <div><span class="pill" style="background:var(--vio)"></span>Putts <b>31</b></div>
+            </div>
+          </div>
+          <div class="holes">
+            <div>5<small>10</small></div><div>4<small>11</small></div><div>4<small>12</small></div>
+            <div>6<small>13</small></div><div class="b">3<small>14</small></div><div>5<small>15</small></div>
+            <div>4<small>16</small></div><div>5<small>17</small></div><div>4<small>18</small></div>
+          </div>
+          <div class="foot">
+            <span class="react liked"><svg width="14" height="14" viewBox="0 0 24 24" fill="#08121a"><path d="M12 21s-7-4.5-9.3-8.4C1 9.6 2.4 6.5 5.5 6.5c1.9 0 3.1 1 4.5 2.6 1.4-1.6 2.6-2.6 4.5-2.6 3.1 0 4.5 3.1 2.8 6.1C19 16.5 12 21 12 21z"/></svg>12</span>
+            <span class="react">💬 4</span><span class="openb">Open round →</span></div>
+        </div>
+
+        <div class="label">July 2026</div>
+        <div class="card">
+          <div class="row"><span class="av" style="background:#ff7043">D</span>
+            <div><div class="hand">@deshawn</div><div class="sub">Stroke play · solo round</div></div></div>
+          <div class="course">Bethpage Black</div><div class="csub">Black tees · 18 holes · Jul 29</div>
+          <div class="ring">
+            <div class="dial"><div class="inner"><div class="v">+4</div><div class="u">TO PAR</div></div></div>
+            <div class="legend">
+              <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>11/14</b></div>
+              <div><span class="pill" style="background:var(--cy)"></span>Greens <b>12/18</b></div>
+              <div><span class="pill" style="background:var(--vio)"></span>Putts <b>28</b></div>
+            </div>
+          </div>
+          <div class="holes">
+            <div>4<small>10</small></div><div class="b">3<small>11</small></div><div>4<small>12</small></div>
+            <div>5<small>13</small></div><div>4<small>14</small></div><div>4<small>15</small></div>
+            <div>4<small>16</small></div><div>5<small>17</small></div><div>4<small>18</small></div>
+          </div>
+          <div class="foot"><span class="react">♥ 21</span><span class="react">💬 6</span><span class="openb">Open round →</span></div>
+        </div>
       </div>
       <div class="tabs"><a class="on"><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
         <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
@@ -791,6 +833,55 @@
           <div><div class="c">Aldwood Links</div><div class="m">scramble · 18 · last week</div></div><span class="lk">♥ 14</span></div>
         <div class="mini"><div class="v">76<small> +4</small></div>
           <div><div class="c">Bethpage Black</div><div class="m">stroke · 18 · personal best</div></div><span class="lk">♥ 27</span></div>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a class="on"><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <!-- PROFILE · ALL ROUNDS -->
+    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim scroll">
+        <div class="top"><h1>‹&nbsp;All rounds</h1><div class="me" style="background:var(--glass2);color:var(--muted)">48</div></div>
+        <div class="label">August 2026<span class="r">3 rounds</span></div>
+        <div class="card">
+          <div class="row"><span class="av" style="background:linear-gradient(135deg,var(--lime),var(--cy))">B</span>
+            <div><div class="hand">@bengolf</div><div class="sub">Stroke play · solo round</div></div></div>
+          <div class="course">Pebble Creek</div><div class="csub">Blue tees · 18 holes · Aug 16</div>
+          <div class="ring">
+            <div class="dial"><div class="inner"><div class="v">+6</div><div class="u">TO PAR</div></div></div>
+            <div class="legend">
+              <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>10/14</b></div>
+              <div><span class="pill" style="background:var(--cy)"></span>Greens <b>9/18</b></div>
+              <div><span class="pill" style="background:var(--vio)"></span>Putts <b>29</b></div>
+            </div>
+          </div>
+          <div class="holes">
+            <div>4<small>10</small></div><div>5<small>11</small></div><div class="b">3<small>12</small></div>
+            <div>5<small>13</small></div><div>4<small>14</small></div><div>4<small>15</small></div>
+            <div>5<small>16</small></div><div>4<small>17</small></div><div>4<small>18</small></div>
+          </div>
+          <div class="foot"><span class="react">♥ 9</span><span class="react">💬 2</span><span class="openb">Open round →</span></div>
+        </div>
+        <div class="label">July 2026<span class="r">5 rounds</span></div>
+        <div class="card">
+          <div class="row"><span class="av" style="background:linear-gradient(135deg,var(--lime),var(--cy))">B</span>
+            <div><div class="hand">@bengolf</div><div class="sub">Scramble · with @marcus</div></div></div>
+          <div class="course">Aldwood Links</div><div class="csub">White tees · 18 holes · Jul 28</div>
+          <div class="ring">
+            <div class="dial"><div class="inner"><div class="v">+9</div><div class="u">TO PAR</div></div></div>
+            <div class="legend">
+              <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>8/14</b></div>
+              <div><span class="pill" style="background:var(--cy)"></span>Greens <b>8/18</b></div>
+              <div><span class="pill" style="background:var(--vio)"></span>Putts <b>32</b></div>
+            </div>
+          </div>
+          <div class="holes">
+            <div>5<small>10</small></div><div>4<small>11</small></div><div>5<small>12</small></div>
+            <div>5<small>13</small></div><div class="b">3<small>14</small></div><div>5<small>15</small></div>
+            <div>4<small>16</small></div><div>5<small>17</small></div><div>4<small>18</small></div>
+          </div>
+          <div class="foot"><span class="react">♥ 14</span><span class="react">💬 3</span><span class="openb">Open round →</span></div>
+        </div>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
         <a><span class="ic">⌕</span>Search</a><a class="on"><span class="ic">◔</span>You</a></div></div>
