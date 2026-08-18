@@ -11,16 +11,17 @@
  * the Stack supplies the chrome.
  */
 
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
+import React from 'react';
 import { Pressable, StyleSheet, Text } from 'react-native';
 
 import { AppHeader } from '@/components/AppHeader';
-import { signOut } from '@/library/supabase/auth';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 export default function YouLayout() {
   const { colors } = useTheme();
-  const styles = StyleSheet.create({
+  const router = useRouter();
+  const styles = React.useMemo(() => StyleSheet.create({
     gear: {
       width: 34,
       height: 34,
@@ -40,7 +41,7 @@ export default function YouLayout() {
       fontSize: 17,
       fontWeight: '800'
     }
-  });
+  }), [colors]);
 
   return (
     <Stack
@@ -58,11 +59,9 @@ export default function YouLayout() {
           headerRight: () => (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Sign out"
+              accessibilityLabel="Appearance"
               hitSlop={8}
-              onPress={() => {
-                void signOut();
-              }}
+              onPress={() => router.push('/(tabs)/(you)/appearance' as never)}
               style={({ pressed }) => [styles.gear, pressed ? styles.gearPressed : null]}>
               <Text style={styles.gearText}>⚙</Text>
             </Pressable>
@@ -70,6 +69,7 @@ export default function YouLayout() {
         }}
       />
       <Stack.Screen name="profile/[userId]" options={{ title: 'Profile' }} />
+      <Stack.Screen name="appearance" options={{ title: 'Appearance' }} />
       <Stack.Screen name="handicap" options={{ title: 'Handicap' }} />
       <Stack.Screen name="friends/index" options={{ title: 'Search' }} />
     </Stack>

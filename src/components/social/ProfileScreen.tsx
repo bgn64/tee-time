@@ -27,7 +27,6 @@ import { useScorecardStats } from '@/library/golf/useScorecardStats';
 import { userParticipantKey } from '@/library/golf/participantKey';
 import { useRequiredAccount } from '@/library/social/AccountContext';
 import { useProfile } from '@/library/social/FriendsContext';
-import { signOut } from '@/library/supabase/auth';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Round } from '@/types/golf';
 import { FriendActionPill } from './FriendActionPill';
@@ -211,16 +210,6 @@ export function ProfileScreen({ userId }: Props) {
         ))
       )}
 
-      {isOwn ? (
-        <NeonButton
-          label="Sign out"
-          variant="ghost"
-          style={styles.signOutBtn}
-          onPress={() => {
-            void signOut();
-          }}
-        />
-      ) : null}
     </PullToRefreshScrollView>
   );
 }
@@ -437,10 +426,6 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       color: colors.textMuted,
       fontSize: 13,
       textAlign: 'center'
-    },
-    signOutBtn: {
-      marginTop: 18,
-      alignSelf: 'center'
     },
     notFoundCard: {
       alignItems: 'center',

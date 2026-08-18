@@ -186,7 +186,7 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 999,
-      backgroundColor: 'rgba(190, 255, 102, 0.15)',
+      backgroundColor: colors.glowLime,
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: colors.lime,
     },

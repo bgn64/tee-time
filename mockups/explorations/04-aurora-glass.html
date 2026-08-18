@@ -11,7 +11,8 @@
   Courses — friend requests plus a searchable course catalog), Course Detail
   (full course info: tees, ratings/slopes, hole-by-hole scorecard), Add Course
   (create a course that isn't in the catalog — scan its scorecard from a photo or
-  enter it by hand, then review a private course only you can play), Profile,
+  enter it by hand, then review a private course only you can play), Appearance,
+  Profile,
   All Rounds, and a Handicap breakdown (World Handicap System differentials from
   your most recent rounds).
 -->
@@ -322,10 +323,130 @@
   .tips{font-size:12.5px;color:var(--muted);line-height:1.95}
   .tips b{color:var(--cy);font-weight:700;margin-right:6px}
   .tag{font-size:9px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;color:var(--cy);background:#39e6c614;border:1px solid #39e6c655;border-radius:8px;padding:2px 7px;margin-left:8px;vertical-align:middle}
+
+  /* light appearance preview */
+  .phone.light{
+    --ink:#15231f;--muted:#60746d;--lime:#4f8500;--cy:#007f73;--vio:#7257c7;--bad:#bd4e55;
+    --glass:rgba(255,255,255,.62);--glass2:rgba(255,255,255,.84);
+    --stroke:rgba(20,62,51,.14);--sheet:rgba(249,252,249,.97);
+    color:var(--ink);
+    background:linear-gradient(180deg,#f9fcf8,#e8f2ee);
+    box-shadow:0 0 0 11px #e2ebe7,0 0 0 12px #b8c8c2,0 40px 90px -30px #0008,0 0 60px -10px #8bc8b766
+  }
+  .phone.light .glow{background:radial-gradient(380px 220px at 78% 6%,#9edb3540,transparent 62%),radial-gradient(420px 280px at 8% 34%,#39cdb83d,transparent 62%)}
+  .phone.light .dot i{background:#8ba099}
+  .phone.light .card{box-shadow:0 1px 0 #fff inset,0 20px 40px -28px #42665a66}
+  .phone.light .ring .dial .inner{background:#f7fbf8}
+  .phone.light .ring .dial.good{background:conic-gradient(var(--lime) 0 67%,#173f3317 67% 100%)}
+  .phone.light .ring .dial.steady{background:conic-gradient(var(--cy) 0 67%,#173f3317 67% 100%)}
+  .phone.light .ring .dial.bad{background:conic-gradient(var(--bad) 0 67%,#173f3317 67% 100%)}
+  .phone.light .scorehalf .bird{box-shadow:0 0 0 1.5px #4f850066 inset}
+  .phone.light .scorehalf .bog{color:#a45512;box-shadow:0 0 0 1.5px #b66a2f55 inset}
+  .phone.light .scorehalf .empty{color:#93a49e}
+  .phone.light .tabs{background:rgba(247,251,248,.78)}
+  .phone.light .resume{background:linear-gradient(90deg,#90c92d2d,transparent);border-color:#659b1644}
+  .appearance-intro{font-size:13px;color:var(--muted);line-height:1.55;margin:0 6px 18px}
+  .appearance-list{background:var(--glass);border:1px solid var(--stroke);border-radius:22px;padding:4px 16px;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
+  .appearance-choice{display:flex;align-items:center;gap:13px;padding:16px 2px;border-bottom:1px solid var(--stroke)}
+  .appearance-choice:last-child{border-bottom:0}
+  .appearance-icon{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;background:var(--glass2);border:1px solid var(--stroke);font-size:17px}
+  .appearance-copy{flex:1}
+  .appearance-name{font-size:14px;font-weight:700}
+  .appearance-note{font-size:11px;color:var(--muted);margin-top:3px}
+  .radio{width:22px;height:22px;border-radius:50%;border:1.5px solid #89a099;display:grid;place-items:center}
+  .radio.on{border-color:var(--lime);box-shadow:0 0 0 4px #78ad1d1a}
+  .radio.on::after{content:"";width:10px;height:10px;border-radius:50%;background:var(--lime)}
+  .system-note{display:flex;gap:11px;margin-top:14px;padding:14px;border-radius:18px;background:#007f7310;border:1px solid #007f7330}
+  .system-note b{font-size:13px;color:var(--cy)}
+  .system-note span{display:block;font-size:11px;color:var(--muted);line-height:1.45;margin-top:3px}
+  .signout{width:100%;padding:14px;border-radius:16px;border:1px solid var(--bad);background:var(--glass);color:var(--bad);font-size:13px;font-weight:800}
 </style>
 </head>
 <body>
   <div class="stage">
+    <p class="cap">Appearance preview · Aurora Glass in daylight: cool paper-like depth, translucent white surfaces, dark ink, and restrained lime/cyan glows.</p>
+    <p class="reviewcap">Feedback update · Light Feed</p>
+
+    <!-- FEED · LIGHT APPEARANCE -->
+    <div class="phone light"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim scroll">
+        <div class="top"><h1>Tee<i>·</i>Time</h1><div class="me">B</div></div>
+
+        <div class="resume"><span class="pl">▶</span>
+          <div><div class="rt">Continue your round</div><div class="rs">Cedar Ridge G.C. · thru 7</div></div>
+          <span class="chev">›</span></div>
+
+        <div class="label">Live now</div>
+        <div class="card">
+          <div class="row"><span class="av" style="background:#7cb342">M</span>
+            <div><div class="hand">@marcus</div><div class="sub">Scramble · with @priya, @deshawn</div></div>
+            <span class="live"><b></b>LIVE</span></div>
+          <div class="course">Torrey Pines — South</div><div class="csub">Blue tees · thru 12 of 18</div>
+          <div class="ring">
+            <div class="dial good"><div class="inner"><div class="v">−1</div><div class="u">TO PAR</div></div></div>
+            <div class="legend">
+              <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>9/14</b></div>
+              <div><span class="pill" style="background:var(--cy)"></span>Greens <b>11/18</b></div>
+              <div><span class="pill" style="background:var(--vio)"></span>Putts <b>27</b></div>
+            </div>
+          </div>
+          <div class="cardscore">
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">1</span><span class="hn">2</span><span class="hn">3</span><span class="hn">4</span><span class="hn">5</span><span class="hn">6</span><span class="hn">7</span><span class="hn">8</span><span class="hn">9</span>
+              <span class="sl">SCORE</span><span>4</span><span class="bird">3</span><span>4</span><span>5</span><span>4</span><span class="bird">2</span><span>4</span><span class="bog">5</span><span>3</span></div>
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">10</span><span class="hn">11</span><span class="hn">12</span><span class="hn">13</span><span class="hn">14</span><span class="hn">15</span><span class="hn">16</span><span class="hn">17</span><span class="hn">18</span>
+              <span class="sl">SCORE</span><span>4</span><span>3</span><span>4</span><span class="empty">—</span><span class="empty">—</span><span class="empty">—</span><span class="empty">—</span><span class="empty">—</span><span class="empty">—</span></div>
+          </div>
+          <div class="foot"><span class="react">♥ 8</span><span class="react">💬 3</span><span class="openb">Open round →</span></div>
+        </div>
+
+        <div class="label">August 2026</div>
+        <div class="card">
+          <div class="row"><span class="av" style="background:#5c6bc0">P</span>
+            <div><div class="hand">@priya</div><div class="sub">Stroke play · with @deshawn</div></div></div>
+          <div class="course">Aldwood Links</div><div class="csub">Blue tees · 18 holes · Aug 16</div>
+          <div class="ring">
+            <div class="dial good"><div class="inner"><div class="v">+10</div><div class="u">TO PAR</div></div></div>
+            <div class="benchmark"><div class="total">82</div><div class="blab">Final score</div>
+              <div class="total" style="margin-top:10px;font-size:17px;color:var(--muted)">84.2</div><div class="blab">Scoring average</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="tabs"><a class="on"><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
+    </div>
+
+    <p class="reviewcap">Feedback update · Appearance</p>
+    <!-- APPEARANCE · LIGHT -->
+    <div class="phone light"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim">
+        <div class="top"><h1>‹&nbsp;Appearance</h1><div class="me" style="background:var(--glass2);color:var(--muted)">◐</div></div>
+        <p class="appearance-intro">Open from the gear on You. Choose how Tee·Time looks; your selection stays with this device.</p>
+        <div class="label">Color scheme</div>
+        <div class="appearance-list">
+          <div class="appearance-choice">
+            <span class="appearance-icon">◐</span>
+            <div class="appearance-copy"><div class="appearance-name">System</div><div class="appearance-note">Match this device automatically</div></div>
+            <span class="radio on"></span>
+          </div>
+          <div class="appearance-choice">
+            <span class="appearance-icon">☀</span>
+            <div class="appearance-copy"><div class="appearance-name">Light</div><div class="appearance-note">Always use the daylight palette</div></div>
+            <span class="radio"></span>
+          </div>
+          <div class="appearance-choice">
+            <span class="appearance-icon">☾</span>
+            <div class="appearance-copy"><div class="appearance-name">Dark</div><div class="appearance-note">Always use Aurora night</div></div>
+            <span class="radio"></span>
+          </div>
+        </div>
+        <div class="system-note"><b>◐</b><div><b>Following system · Light</b><span>If the device does not report a color scheme, Tee·Time uses Light.</span></div></div>
+        <div class="label">Account</div>
+        <button class="signout">Sign out</button>
+      </div>
+      <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a class="on"><span class="ic">◔</span>You</a></div></div>
+    </div>
+
     <p class="cap">Exploration 04 — “Aurora Glass”. Row 1 · Browse &amp; play: rich Feed cards for live and completed rounds, plus live Scoring with a <b>Hole · Card · Chat</b> header.</p>
     <p class="reviewcap">Feedback update · Feed</p>
 

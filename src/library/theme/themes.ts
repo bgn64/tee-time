@@ -44,6 +44,8 @@ export type ThemeColors = {
    * them per-View). Spread: `style={{...colors.shadowCard}}`.
    */
   shadowCard: ShadowSpec;
+  /** Shadow color that remains visible against the active palette. */
+  shadow: string;
   /**
    * Highlight colour for scorecard cells that diverge from the prior
    * tee group's par/hcp. Mockup uses the accent colour for this; we
@@ -111,6 +113,8 @@ export type ThemeColors = {
   glowLime: string;
   /** Soft cyan glow wash for secondary neon elements. */
   glowCyan: string;
+  /** Moving highlight used over vivid gradient surfaces. */
+  shine: string;
   /** Deepest night base for Aurora gradients. */
   night: string;
   /** Top-left blue-green night gradient stop. */
@@ -139,7 +143,7 @@ export type ThemeName = 'light' | 'dark';
 
 export const numericFontVariant = ['tabular-nums'] as const;
 
-const auroraGlassTheme: ThemeColors = {
+const auroraGlassDarkTheme: ThemeColors = {
   background: '#070a12',
   primary: '#b6ff3b',
   primaryDark: '#8fcf2e',
@@ -158,6 +162,7 @@ const auroraGlassTheme: ThemeColors = {
     shadowRadius: 30,
     elevation: 8,
   },
+  shadow: '#000000',
   divergent: '#39e6c6',
   teeBlue: '#6aa9e5',
   teeWhite: '#c2c8b8',
@@ -192,6 +197,7 @@ const auroraGlassTheme: ThemeColors = {
   glassStroke: 'rgba(255,255,255,0.15)',
   glowLime: 'rgba(182,255,59,0.14)',
   glowCyan: 'rgba(57,230,198,0.12)',
+  shine: 'rgba(255,255,255,0.44)',
   night: '#05070c',
   nightTop: '#13283a',
   nightViolet: '#231a44',
@@ -205,7 +211,75 @@ const auroraGlassTheme: ThemeColors = {
   pipBogeyRing: 'rgba(255,178,122,0.4)',
 };
 
+const auroraGlassLightTheme: ThemeColors = {
+  background: '#f3f8f5',
+  primary: '#4f8500',
+  primaryDark: '#3d6800',
+  accent: '#bd4e55',
+  textTitle: '#15231f',
+  textBody: '#344b44',
+  textMuted: '#60746d',
+  cardBg: '#f8fbf9',
+  chipBg: '#e8f1ed',
+  border: 'rgba(20,62,51,0.14)',
+  hairline: 'rgba(20,62,51,0.09)',
+  shadowCard: {
+    shadowColor: '#42665a',
+    shadowOffset: { width: 0, height: 18 },
+    shadowOpacity: 0.18,
+    shadowRadius: 30,
+    elevation: 5,
+  },
+  shadow: '#42665a',
+  divergent: '#007f73',
+  teeBlue: '#286b9f',
+  teeWhite: '#69736b',
+  teeRed: '#b84e45',
+  teeGold: '#8a6811',
+  teeGreen: '#397526',
+  teeBlack: '#303b37',
+  teeYellow: '#826d00',
+  teeBurgundy: '#87464f',
+  teeSilver: '#596963',
+  teeOrange: '#a45018',
+  teePurple: '#72509a',
+  teeFallback1: '#7d4e91',
+  teeFallback2: '#147a75',
+  teeFallback3: '#a45018',
+  teeFallback4: '#4e773d',
+  teeFallback5: '#a63e70',
+  teeFallback6: '#605c82',
+  tabBar: 'rgba(247,251,248,0.92)',
+  tabBarActive: '#4f8500',
+  tabBarInactive: '#60746d',
+  lime: '#4f8500',
+  cyan: '#007f73',
+  performanceGood: '#4f8500',
+  performanceSteady: '#007f73',
+  performanceBad: '#bd4e55',
+  violet: '#7257c7',
+  onNeon: '#f8fff4',
+  glassFill: 'rgba(255,255,255,0.62)',
+  glassFill2: 'rgba(255,255,255,0.84)',
+  sheetBg: 'rgba(249,252,249,0.97)',
+  glassStroke: 'rgba(20,62,51,0.14)',
+  glowLime: 'rgba(126,181,39,0.18)',
+  glowCyan: 'rgba(0,151,136,0.14)',
+  shine: 'rgba(21,35,31,0.18)',
+  night: '#dce9e3',
+  nightTop: '#dff0e8',
+  nightViolet: '#ebe6f8',
+  screenBgTop: '#f9fcf8',
+  screenBgBottom: '#e8f2ee',
+  pipBirdie: '#4f8500',
+  pipBirdieRing: 'rgba(79,133,0,0.4)',
+  pipEagleBg: '#4f8500',
+  pipEagleText: '#f8fff4',
+  pipBogey: '#a45512',
+  pipBogeyRing: 'rgba(164,85,18,0.4)',
+};
+
 export const themes: Record<ThemeName, ThemeColors> = {
-  light: auroraGlassTheme,
-  dark: auroraGlassTheme,
+  light: auroraGlassLightTheme,
+  dark: auroraGlassDarkTheme,
 };

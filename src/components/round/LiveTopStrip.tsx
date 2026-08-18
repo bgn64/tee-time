@@ -71,9 +71,9 @@ export function LiveTopStrip({ style }: Props) {
       {reducedMotion ? null : (
         <AnimatedLinearGradient
           colors={[
-            'rgba(255,255,255,0)',
-            'rgba(255,255,255,0.44)',
-            'rgba(255,255,255,0)',
+            'transparent',
+            colors.shine,
+            'transparent',
           ]}
           start={{ x: 0, y: 0.5 }}
           end={{ x: 1, y: 0.5 }}

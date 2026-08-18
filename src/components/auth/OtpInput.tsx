@@ -103,7 +103,7 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderRadius: 14,
       borderColor: colors.glassStroke,
       backgroundColor: colors.glassFill2,
-      shadowColor: colors.night,
+      shadowColor: colors.shadow,
       shadowOffset: { width: 0, height: 12 },
       shadowOpacity: 0.25,
       shadowRadius: 18,
