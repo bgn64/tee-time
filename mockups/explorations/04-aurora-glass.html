@@ -22,7 +22,7 @@
 <title>Tee Time — Aurora Glass</title>
 <style>
   :root{
-    --ink:#eaf2ee; --muted:#93a3b3; --lime:#b6ff3b; --cy:#39e6c6; --vio:#9d7bff;
+    --ink:#eaf2ee; --muted:#93a3b3; --lime:#b6ff3b; --cy:#39e6c6; --vio:#9d7bff; --bad:#ff8e8e;
     --glass:rgba(255,255,255,.06); --glass2:rgba(255,255,255,.09);
     --stroke:rgba(255,255,255,.12);
     --sheet:rgba(12,16,23,.96);
@@ -35,6 +35,7 @@
   .stage{display:flex;flex-wrap:wrap;gap:46px;justify-content:center;padding:56px 24px 80px;
     background:radial-gradient(1200px 600px at 20% -10%,#13283a 0,#05070c 55%),radial-gradient(900px 500px at 100% 10%,#231a44 0,transparent 50%)}
   .cap{width:100%;text-align:center;color:#7f8ea0;font-size:13px;margin:0 0 8px;letter-spacing:.3px}
+  .reviewcap{width:100%;text-align:center;color:var(--lime);font-size:11px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;margin:0 0 -30px}
   .phone{width:384px;height:812px;border-radius:46px;overflow:hidden;display:flex;flex-direction:column;position:relative;
     background:linear-gradient(180deg,#0c1018,#0a0e16);
     box-shadow:0 0 0 11px #0e1118,0 0 0 12px #1c2230,0 40px 90px -30px #000,0 0 60px -10px #1e3a5544}
@@ -69,13 +70,26 @@
   .ring .dial .inner{width:78px;height:78px;border-radius:50%;background:#0c121b;display:grid;place-items:center;text-align:center}
   .ring .dial .v{font-family:var(--num);font-size:30px;font-weight:800;color:var(--lime);line-height:1;font-variant-numeric:tabular-nums}
   .ring .dial .u{font-size:9px;color:var(--muted);letter-spacing:2px;margin-top:3px}
+  .ring .dial.good{background:conic-gradient(var(--lime) 0 67%,#ffffff14 67% 100%)}
+  .ring .dial.steady{background:conic-gradient(var(--cy) 0 67%,#ffffff14 67% 100%)}
+  .ring .dial.bad{background:conic-gradient(var(--bad) 0 67%,#ffffff14 67% 100%)}
+  .ring .dial.good .v{color:var(--lime)} .ring .dial.steady .v{color:var(--cy)} .ring .dial.bad .v{color:var(--bad)}
   .ring .legend div{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);margin:5px 0}
   .ring .legend b{color:var(--ink);font-variant-numeric:tabular-nums}
+  .benchmark{flex:1;background:var(--glass2);border:1px solid var(--stroke);border-radius:16px;padding:12px 14px}
+  .benchmark .total{font-family:var(--num);font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}
+  .benchmark .blab{font-size:9px;color:var(--muted);letter-spacing:1.4px;text-transform:uppercase;margin-top:1px}
+  .good{color:var(--lime)!important}.steady{color:var(--cy)!important}.bad{color:var(--bad)!important}
   .pill{width:9px;height:9px;border-radius:3px;display:inline-block}
-  .holes{display:flex;gap:5px;margin:6px 0 2px}
-  .holes div{flex:1;text-align:center;font-size:12px;padding:8px 0;border-radius:9px;background:var(--glass2);font-variant-numeric:tabular-nums;color:var(--ink)}
-  .holes div small{display:block;font-size:8px;color:var(--muted)}
-  .holes div.b{background:#b6ff3b1f;color:var(--lime);box-shadow:0 0 0 1px #b6ff3b40 inset}
+  .cardscore{margin:8px 0 2px;background:var(--glass);border:1px solid var(--stroke);border-radius:20px;padding:10px 9px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  .scorehalf{display:grid;grid-template-columns:30px repeat(9,1fr);align-items:center}
+  .scorehalf+.scorehalf{border-top:1px solid var(--stroke);margin-top:7px;padding-top:7px}
+  .scorehalf span{text-align:center;font-family:var(--num);font-size:11px;font-variant-numeric:tabular-nums;padding:4px 0}
+  .scorehalf .sl{text-align:left;font-family:var(--sans);font-size:8px;letter-spacing:1px;color:var(--muted);text-transform:uppercase}
+  .scorehalf .hn{font-size:9px;color:var(--muted)}
+  .scorehalf .bird{display:inline-grid;place-items:center;width:22px;height:22px;padding:0;border-radius:50%;color:var(--lime);box-shadow:0 0 0 1.5px #b6ff3b66 inset;margin:auto}
+  .scorehalf .bog{display:inline-grid;place-items:center;width:22px;height:22px;padding:0;border-radius:50%;color:#ffc08a;box-shadow:0 0 0 1.5px #ffb27a55 inset;margin:auto}
+  .scorehalf .empty{color:#46566a}
   .foot{display:flex;gap:10px;align-items:center;margin-top:16px}
   .react{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink);background:var(--glass2);border:1px solid var(--stroke);padding:8px 12px;border-radius:14px}
   .react.liked{color:#08121a;background:var(--lime);border-color:transparent}
@@ -313,6 +327,7 @@
 <body>
   <div class="stage">
     <p class="cap">Exploration 04 — “Aurora Glass”. Row 1 · Browse &amp; play: rich Feed cards for live and completed rounds, plus live Scoring with a <b>Hole · Card · Chat</b> header.</p>
+    <p class="reviewcap">Feedback update · Feed</p>
 
     <!-- FEED -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
@@ -330,17 +345,18 @@
             <span class="live"><b></b>LIVE</span></div>
           <div class="course">Torrey Pines — South</div><div class="csub">Blue tees · thru 12 of 18</div>
           <div class="ring">
-            <div class="dial"><div class="inner"><div class="v">−1</div><div class="u">TO PAR</div></div></div>
+            <div class="dial good"><div class="inner"><div class="v">−1</div><div class="u">TO PAR</div></div></div>
             <div class="legend">
               <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>9/14</b></div>
               <div><span class="pill" style="background:var(--cy)"></span>Greens <b>11/18</b></div>
               <div><span class="pill" style="background:var(--vio)"></span>Putts <b>27</b></div>
             </div>
           </div>
-          <div class="holes">
-            <div>4<small>1</small></div><div class="b">3<small>2</small></div><div>4<small>3</small></div>
-            <div>5<small>4</small></div><div>4<small>5</small></div><div class="b">2<small>6</small></div>
-            <div>4<small>7</small></div><div>5<small>8</small></div><div>3<small>9</small></div>
+          <div class="cardscore">
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">1</span><span class="hn">2</span><span class="hn">3</span><span class="hn">4</span><span class="hn">5</span><span class="hn">6</span><span class="hn">7</span><span class="hn">8</span><span class="hn">9</span>
+              <span class="sl">SCORE</span><span>4</span><span class="bird">3</span><span>4</span><span>5</span><span>4</span><span class="bird">2</span><span>4</span><span class="bog">5</span><span>3</span></div>
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">10</span><span class="hn">11</span><span class="hn">12</span><span class="hn">13</span><span class="hn">14</span><span class="hn">15</span><span class="hn">16</span><span class="hn">17</span><span class="hn">18</span>
+              <span class="sl">SCORE</span><span>4</span><span>3</span><span>4</span><span class="empty">—</span><span class="empty">—</span><span class="empty">—</span><span class="empty">—</span><span class="empty">—</span><span class="empty">—</span></div>
           </div>
           <div class="foot">
             <span class="react liked"><svg width="14" height="14" viewBox="0 0 24 24" fill="#08121a"><path d="M12 21s-7-4.5-9.3-8.4C1 9.6 2.4 6.5 5.5 6.5c1.9 0 3.1 1 4.5 2.6 1.4-1.6 2.6-2.6 4.5-2.6 3.1 0 4.5 3.1 2.8 6.1C19 16.5 12 21 12 21z"/></svg>8</span>
@@ -353,17 +369,15 @@
             <div><div class="hand">@priya</div><div class="sub">Stroke play · with @deshawn</div></div></div>
           <div class="course">Aldwood Links</div><div class="csub">Blue tees · 18 holes · Aug 16</div>
           <div class="ring">
-            <div class="dial"><div class="inner"><div class="v">+10</div><div class="u">TO PAR</div></div></div>
-            <div class="legend">
-              <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>8/14</b></div>
-              <div><span class="pill" style="background:var(--cy)"></span>Greens <b>7/18</b></div>
-              <div><span class="pill" style="background:var(--vio)"></span>Putts <b>31</b></div>
-            </div>
+            <div class="dial good"><div class="inner"><div class="v">+10</div><div class="u">TO PAR</div></div></div>
+            <div class="benchmark"><div class="total">82</div><div class="blab">Final score</div>
+              <div class="total" style="margin-top:10px;font-size:17px;color:var(--muted)">84.2</div><div class="blab">Scoring average</div></div>
           </div>
-          <div class="holes">
-            <div>5<small>10</small></div><div>4<small>11</small></div><div>4<small>12</small></div>
-            <div>6<small>13</small></div><div class="b">3<small>14</small></div><div>5<small>15</small></div>
-            <div>4<small>16</small></div><div>5<small>17</small></div><div>4<small>18</small></div>
+          <div class="cardscore">
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">1</span><span class="hn">2</span><span class="hn">3</span><span class="hn">4</span><span class="hn">5</span><span class="hn">6</span><span class="hn">7</span><span class="hn">8</span><span class="hn">9</span>
+              <span class="sl">SCORE</span><span class="bog">5</span><span>4</span><span>3</span><span class="bog">6</span><span>4</span><span class="bog">5</span><span>4</span><span>5</span><span>3</span></div>
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">10</span><span class="hn">11</span><span class="hn">12</span><span class="hn">13</span><span class="hn">14</span><span class="hn">15</span><span class="hn">16</span><span class="hn">17</span><span class="hn">18</span>
+              <span class="sl">SCORE</span><span class="bog">5</span><span>4</span><span>4</span><span class="bog">6</span><span class="bird">3</span><span class="bog">5</span><span>4</span><span class="bog">5</span><span>4</span></div>
           </div>
           <div class="foot">
             <span class="react liked"><svg width="14" height="14" viewBox="0 0 24 24" fill="#08121a"><path d="M12 21s-7-4.5-9.3-8.4C1 9.6 2.4 6.5 5.5 6.5c1.9 0 3.1 1 4.5 2.6 1.4-1.6 2.6-2.6 4.5-2.6 3.1 0 4.5 3.1 2.8 6.1C19 16.5 12 21 12 21z"/></svg>12</span>
@@ -376,17 +390,18 @@
             <div><div class="hand">@deshawn</div><div class="sub">Stroke play · solo round</div></div></div>
           <div class="course">Bethpage Black</div><div class="csub">Black tees · 18 holes · Jul 29</div>
           <div class="ring">
-            <div class="dial"><div class="inner"><div class="v">+4</div><div class="u">TO PAR</div></div></div>
+            <div class="dial bad"><div class="inner"><div class="v">+4</div><div class="u">TO PAR</div></div></div>
             <div class="legend">
               <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>11/14</b></div>
               <div><span class="pill" style="background:var(--cy)"></span>Greens <b>12/18</b></div>
               <div><span class="pill" style="background:var(--vio)"></span>Putts <b>28</b></div>
             </div>
           </div>
-          <div class="holes">
-            <div>4<small>10</small></div><div class="b">3<small>11</small></div><div>4<small>12</small></div>
-            <div>5<small>13</small></div><div>4<small>14</small></div><div>4<small>15</small></div>
-            <div>4<small>16</small></div><div>5<small>17</small></div><div>4<small>18</small></div>
+          <div class="cardscore">
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">1</span><span class="hn">2</span><span class="hn">3</span><span class="hn">4</span><span class="hn">5</span><span class="hn">6</span><span class="hn">7</span><span class="hn">8</span><span class="hn">9</span>
+              <span class="sl">SCORE</span><span>4</span><span class="bird">3</span><span>3</span><span>5</span><span>4</span><span>4</span><span>4</span><span class="bog">5</span><span>3</span></div>
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">10</span><span class="hn">11</span><span class="hn">12</span><span class="hn">13</span><span class="hn">14</span><span class="hn">15</span><span class="hn">16</span><span class="hn">17</span><span class="hn">18</span>
+              <span class="sl">SCORE</span><span>4</span><span class="bird">3</span><span>4</span><span class="bog">5</span><span>4</span><span>4</span><span>4</span><span class="bog">5</span><span>4</span></div>
           </div>
           <div class="foot"><span class="react">♥ 21</span><span class="react">💬 6</span><span class="openb">Open round →</span></div>
         </div>
@@ -395,6 +410,7 @@
         <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
     </div>
 
+    <p class="reviewcap">Feedback update · Scoring</p>
     <!-- SCORING -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim">
@@ -403,14 +419,14 @@
         <div class="seg"><a class="on">Hole</a><a>Card</a><a>💬 Chat</a></div>
         <div class="holehero"><span class="hn">13</span>
           <span class="meta">Par 4<br>438 yds<br>Hcp 3</span>
-          <span class="tot"><b>−1</b><span>TEAM</span></span></div>
+          <span class="tot"><b class="good">−1</b><span>TEAM</span></span></div>
         <div class="prow"><span class="av" style="background:#7cb342">M</span>
           <div><div class="hand">@marcus <span class="you">YOU</span></div><div class="sub">drive · 286y</div></div>
-          <div class="rc"><div class="run"><b>E</b><small>THRU 12</small></div>
+          <div class="rc"><div class="run"><b class="good">E</b><small>THRU 12</small></div>
             <div class="stp"><button>−</button><span class="v">4</span><button>+</button></div></div></div>
         <div class="prow"><span class="av" style="background:#5c6bc0">P</span>
           <div><div class="hand">@priya</div><div class="sub">to play</div></div>
-          <div class="rc"><div class="run"><b class="o">+6</b><small>THRU 12</small></div>
+          <div class="rc"><div class="run"><b class="steady">+6</b><small>THRU 12</small></div>
             <div class="stp"><button>−</button><span class="v empty">–</span><button>+</button></div></div></div>
         <div class="label">Stats · hole 13</div>
         <div class="tg"><span class="tog yes"><b>✓</b>Fairway</span><span class="tog"><b>–</b>Green</span>
@@ -425,6 +441,7 @@
 
     <p class="cap" style="margin-top:34px">Row 2 · Mid-round context, without leaving the scorecard: the <b>Card</b> lens (everyone’s running totals + the hole-by-hole grid) and the <b>Chat</b> lens (read &amp; reply to live comments on your round).</p>
 
+    <p class="reviewcap">Feedback update · Scoring Card lens</p>
     <!-- SCORING · CARD LENS -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim">
@@ -434,13 +451,13 @@
         <div class="label">Standings<span class="r">team −1</span></div>
         <div class="lead"><span class="av" style="background:#7cb342">M</span>
           <div><div class="hand">@marcus <span class="you">YOU</span></div><div class="sub">even par · 2 birdies</div></div>
-          <div class="rc2"><span class="topar">E</span><span class="thru">thru 12</span></div></div>
+          <div class="rc2"><span class="topar good">E</span><span class="thru">thru 12</span></div></div>
         <div class="lead"><span class="av" style="background:#ff7043">D</span>
           <div><div class="hand">@deshawn</div><div class="sub">+2 · 1 birdie</div></div>
-          <div class="rc2"><span class="topar o">+2</span><span class="thru">thru 12</span></div></div>
+          <div class="rc2"><span class="topar good">+2</span><span class="thru">thru 12</span></div></div>
         <div class="lead"><span class="av" style="background:#5c6bc0">P</span>
           <div><div class="hand">@priya</div><div class="sub">+6 · steady</div></div>
-          <div class="rc2"><span class="topar o">+6</span><span class="thru">thru 12</span></div></div>
+          <div class="rc2"><span class="topar steady">+6</span><span class="thru">thru 12</span></div></div>
         <div class="label">Round so far</div>
         <div class="scard">
           <div class="sgrid">
@@ -458,7 +475,7 @@
             <div class="rl">Hcp</div><div class="hn">8</div><div class="hn">14</div><div class="hn">4</div><div class="hn">3</div><div class="hn">6</div><div class="hn">12</div><div class="hn">16</div><div class="hn">10</div><div class="hn">2</div>
             <div class="rl">Team</div><div><span class="pip par">4</span></div><div><span class="pip par">3</span></div><div><span class="pip par">4</span></div><div class="pr cur">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div>
           </div>
-          <div class="stot"><span>Out <b>34</b> · In <b>—</b></span><span class="tp">−1 · thru 12</span></div>
+          <div class="stot"><span>Out <b>34</b> · In <b>—</b></span><span class="tp good">−1 · thru 12</span></div>
         </div>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
@@ -486,6 +503,7 @@
 
     <p class="cap" style="margin-top:34px">Row 3 · The round in full, and starting a new one.</p>
 
+    <p class="reviewcap">Feedback update · Round detail</p>
     <!-- ROUND DETAIL -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim">
@@ -495,7 +513,7 @@
             <div><div class="hand">@marcus</div><div class="sub">Scramble · @priya, @deshawn</div></div>
             <span class="live"><b></b>LIVE</span></div>
           <div class="course2">Torrey Pines — South</div><div class="csub2">Blue tees · 6,602y · thru 12 of 18</div>
-          <div class="hero2"><span class="big">−1</span><span class="biglab">to par<br>thru 12</span>
+          <div class="hero2"><span class="big good">−1</span><span class="biglab">to par<br>thru 12</span>
             <div class="quick"><div class="qd"><b>9/14</b><span>FIR</span></div><div class="qd"><b>11/18</b><span>GIR</span></div></div></div>
         </div>
         <div class="scard">
@@ -514,7 +532,7 @@
             <div class="rl">Hcp</div><div class="hn">8</div><div class="hn">14</div><div class="hn">4</div><div class="hn">3</div><div class="hn">6</div><div class="hn">12</div><div class="hn">16</div><div class="hn">10</div><div class="hn">2</div>
             <div class="rl">Team</div><div><span class="pip par">4</span></div><div><span class="pip par">3</span></div><div><span class="pip par">4</span></div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div><div class="pr">–</div>
           </div>
-          <div class="stot"><span>Out <b>34</b> · In <b>—</b></span><span class="tp">−1 · thru 12</span></div>
+          <div class="stot"><span>Out <b>34</b> · In <b>—</b></span><span class="tp good">−1 · thru 12</span></div>
         </div>
         <div class="label">Comments<span class="r">3</span></div>
         <div class="cmt"><span class="ca" style="background:#ff7043">D</span>
@@ -811,6 +829,7 @@
         <a class="on"><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div></div>
     </div>
 
+    <p class="reviewcap">Feedback update · You</p>
     <!-- PROFILE -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim">
@@ -827,17 +846,18 @@
           <div class="ptile more"><b>22.7</b><span>Handicap index</span></div>
         </div>
         <div class="label">Recent rounds<span class="r">All rounds ›</span></div>
-        <div class="mini"><div class="v">78<small> +6</small></div>
+        <div class="mini"><div class="v">78<small class="good"> +6</small></div>
           <div><div class="c">Pebble Creek</div><div class="m">stroke · 18 · 2 days ago</div></div><span class="lk">♥ 9</span></div>
-        <div class="mini"><div class="v">81<small> +9</small></div>
+        <div class="mini"><div class="v">81<small class="steady"> +9</small></div>
           <div><div class="c">Aldwood Links</div><div class="m">scramble · 18 · last week</div></div><span class="lk">♥ 14</span></div>
-        <div class="mini"><div class="v">76<small> +4</small></div>
+        <div class="mini"><div class="v">76<small class="bad"> +4</small></div>
           <div><div class="c">Bethpage Black</div><div class="m">stroke · 18 · personal best</div></div><span class="lk">♥ 27</span></div>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
         <a><span class="ic">⌕</span>Search</a><a class="on"><span class="ic">◔</span>You</a></div></div>
     </div>
 
+    <p class="reviewcap">Feedback update · All rounds</p>
     <!-- PROFILE · ALL ROUNDS -->
     <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim scroll">
@@ -848,17 +868,18 @@
             <div><div class="hand">@bengolf</div><div class="sub">Stroke play · solo round</div></div></div>
           <div class="course">Pebble Creek</div><div class="csub">Blue tees · 18 holes · Aug 16</div>
           <div class="ring">
-            <div class="dial"><div class="inner"><div class="v">+6</div><div class="u">TO PAR</div></div></div>
+            <div class="dial good"><div class="inner"><div class="v">+6</div><div class="u">TO PAR</div></div></div>
             <div class="legend">
               <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>10/14</b></div>
               <div><span class="pill" style="background:var(--cy)"></span>Greens <b>9/18</b></div>
               <div><span class="pill" style="background:var(--vio)"></span>Putts <b>29</b></div>
             </div>
           </div>
-          <div class="holes">
-            <div>4<small>10</small></div><div>5<small>11</small></div><div class="b">3<small>12</small></div>
-            <div>5<small>13</small></div><div>4<small>14</small></div><div>4<small>15</small></div>
-            <div>5<small>16</small></div><div>4<small>17</small></div><div>4<small>18</small></div>
+          <div class="cardscore">
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">1</span><span class="hn">2</span><span class="hn">3</span><span class="hn">4</span><span class="hn">5</span><span class="hn">6</span><span class="hn">7</span><span class="hn">8</span><span class="hn">9</span>
+              <span class="sl">SCORE</span><span>4</span><span class="bog">5</span><span class="bird">2</span><span>5</span><span>4</span><span>4</span><span class="bog">5</span><span>4</span><span>3</span></div>
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">10</span><span class="hn">11</span><span class="hn">12</span><span class="hn">13</span><span class="hn">14</span><span class="hn">15</span><span class="hn">16</span><span class="hn">17</span><span class="hn">18</span>
+              <span class="sl">SCORE</span><span>4</span><span class="bog">5</span><span class="bird">3</span><span>5</span><span>4</span><span>4</span><span class="bog">5</span><span>4</span><span>4</span></div>
           </div>
           <div class="foot"><span class="react">♥ 9</span><span class="react">💬 2</span><span class="openb">Open round →</span></div>
         </div>
@@ -868,17 +889,18 @@
             <div><div class="hand">@bengolf</div><div class="sub">Scramble · with @marcus</div></div></div>
           <div class="course">Aldwood Links</div><div class="csub">White tees · 18 holes · Jul 28</div>
           <div class="ring">
-            <div class="dial"><div class="inner"><div class="v">+9</div><div class="u">TO PAR</div></div></div>
+            <div class="dial bad"><div class="inner"><div class="v">+9</div><div class="u">TO PAR</div></div></div>
             <div class="legend">
               <div><span class="pill" style="background:var(--lime)"></span>Fairways <b>8/14</b></div>
               <div><span class="pill" style="background:var(--cy)"></span>Greens <b>8/18</b></div>
               <div><span class="pill" style="background:var(--vio)"></span>Putts <b>32</b></div>
             </div>
           </div>
-          <div class="holes">
-            <div>5<small>10</small></div><div>4<small>11</small></div><div>5<small>12</small></div>
-            <div>5<small>13</small></div><div class="b">3<small>14</small></div><div>5<small>15</small></div>
-            <div>4<small>16</small></div><div>5<small>17</small></div><div>4<small>18</small></div>
+          <div class="cardscore">
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">1</span><span class="hn">2</span><span class="hn">3</span><span class="hn">4</span><span class="hn">5</span><span class="hn">6</span><span class="hn">7</span><span class="hn">8</span><span class="hn">9</span>
+              <span class="sl">SCORE</span><span class="bog">5</span><span>4</span><span class="bog">5</span><span>5</span><span class="bird">3</span><span class="bog">5</span><span>4</span><span class="bog">5</span><span>4</span></div>
+            <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">10</span><span class="hn">11</span><span class="hn">12</span><span class="hn">13</span><span class="hn">14</span><span class="hn">15</span><span class="hn">16</span><span class="hn">17</span><span class="hn">18</span>
+              <span class="sl">SCORE</span><span class="bog">5</span><span>4</span><span class="bog">5</span><span>5</span><span class="bird">3</span><span class="bog">5</span><span>4</span><span class="bog">5</span><span>4</span></div>
           </div>
           <div class="foot"><span class="react">♥ 14</span><span class="react">💬 3</span><span class="openb">Open round →</span></div>
         </div>

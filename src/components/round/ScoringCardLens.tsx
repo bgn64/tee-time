@@ -11,6 +11,11 @@ import { StyleSheet, Text, View } from 'react-native';
 import { RoundScorecardGrid } from './RoundScorecardGrid';
 import { StandingsList } from './StandingsList';
 import { GlassCard, SectionLabel } from '@/components/aurora';
+import {
+  performanceToneColor,
+  useRoundPerformance,
+  userIdForScorer,
+} from '@/library/golf/performanceBenchmark';
 import { formatScore, playerProgress } from '@/library/golf/scoring';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -31,13 +36,25 @@ export function ScoringCardLens({
   // Scramble shares one team score; surface it on the Standings label so
   // the team total reads even when there's a single team row below.
   const teamRel = scorers[0] ? playerProgress(round, scorers[0].id).rel : 0;
+  const performance = useRoundPerformance(
+    round,
+    scorers[0]?.id,
+    userIdForScorer(round, scorers[0]?.id)
+  );
+  const performanceColor = performanceToneColor(colors, performance.tone);
   const teamTag =
     round.scoringRule === 'scramble' ? `team ${formatScore(teamRel)}` : null;
 
   return (
     <View style={styles.wrap}>
       <SectionLabel
-        right={teamTag ? <Text style={styles.teamTag}>{teamTag}</Text> : undefined}>
+        right={
+          teamTag ? (
+            <Text style={[styles.teamTag, { color: performanceColor }]}>
+              {teamTag}
+            </Text>
+          ) : undefined
+        }>
         Standings
       </SectionLabel>
       <StandingsList round={round} />
@@ -48,6 +65,7 @@ export function ScoringCardLens({
           round={round}
           scorers={scorers}
           currentHoleNumber={currentHoleNumber}
+          performanceColor={performanceColor}
         />
       </GlassCard>
     </View>

@@ -17,6 +17,10 @@ import { PullToRefreshScrollView } from '@/components/widgets/PullToRefreshScrol
 import { useRefresh } from '@/library/data/useRefresh';
 import { holesInRange, scoreForRoundsList, scorerIdForUser, formatRelativeTime, formatScore } from '@/library/golf/scoring';
 import { computeWhsHandicap, formatHandicapIndex } from '@/library/golf/handicap';
+import {
+  performanceToneColor,
+  useRoundPerformance,
+} from '@/library/golf/performanceBenchmark';
 import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useScorecardStats } from '@/library/golf/useScorecardStats';
@@ -198,7 +202,12 @@ export function ProfileScreen({ userId }: Props) {
         </GlassCard>
       ) : (
         recentRounds.map((metric) => (
-          <RecentRoundRow key={metric.round.id} metric={metric} styles={styles} />
+          <RecentRoundRow
+            key={metric.round.id}
+            metric={metric}
+            userId={userId}
+            styles={styles}
+          />
         ))
       )}
 
@@ -218,14 +227,29 @@ export function ProfileScreen({ userId }: Props) {
 
 type ProfileStyles = ReturnType<typeof makeStyles>;
 
-function RecentRoundRow({ metric, styles }: { metric: RoundMetric; styles: ProfileStyles }) {
+function RecentRoundRow({
+  metric,
+  userId,
+  styles,
+}: {
+  metric: RoundMetric;
+  userId: string;
+  styles: ProfileStyles;
+}) {
+  const { colors } = useTheme();
   const { count: likeCount } = useRoundLikes(metric.round.id);
+  const scorerId = scorerIdForUser(metric.round, userId);
+  const performance = useRoundPerformance(metric.round, scorerId, userId);
+  const relativeColor = performanceToneColor(colors, performance.tone);
 
   return (
     <GlassCard padded={false} style={styles.roundRow}>
       <View style={styles.roundScore}>
         <NumericText style={styles.roundTotal}>{metric.total}</NumericText>
-        <NumericText style={styles.roundRelative}>{formatScore(metric.relative)}</NumericText>
+        <NumericText
+          style={[styles.roundRelative, { color: relativeColor }]}>
+          {formatScore(metric.relative)}
+        </NumericText>
       </View>
       <View style={styles.roundBody}>
         <Text style={styles.courseName} numberOfLines={1}>

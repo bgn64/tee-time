@@ -28,6 +28,11 @@ import { LensSwitcher, type ScoringLens } from './LensSwitcher';
 import { SwipeableHoleEditor } from './SwipeableHoleEditor';
 import { GlassCard, NeonButton, NumericText } from '@/components/aurora';
 import { findTee } from '@/library/golf/courseHelpers';
+import {
+  performanceToneColor,
+  useRoundPerformance,
+  userIdForScorer,
+} from '@/library/golf/performanceBenchmark';
 import { formatScore, getScorerProgress } from '@/library/golf/scoring';
 import { getHoleStats } from '@/library/golf/teeGrouping';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -115,6 +120,12 @@ export function ScoringRoundView({
       ? round.teams?.[0]?.id
       : round.playerIds[0];
   const progress = getScorerProgress(round, primaryScorerId);
+  const performance = useRoundPerformance(
+    round,
+    primaryScorerId,
+    userIdForScorer(round, primaryScorerId)
+  );
+  const performanceColor = performanceToneColor(colors, performance.tone);
   const formatLabel = round.scoringRule === 'scramble' ? 'Scramble' : 'Stroke';
   const firstParticipantKey =
     round.scoringRule === 'scramble' && (round.teams?.length ?? 0) > 0
@@ -171,7 +182,8 @@ export function ScoringRoundView({
                   ) : null}
                 </View>
                 <View style={styles.toPar}>
-                  <NumericText style={styles.toParValue}>
+                  <NumericText
+                    style={[styles.toParValue, { color: performanceColor }]}>
                     {formatScore(progress.relativeScore)}
                   </NumericText>
                   <Text style={styles.toParLabel}>

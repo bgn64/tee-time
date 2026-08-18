@@ -13,6 +13,11 @@ import { RoundScorecardGrid } from './RoundScorecardGrid';
 import { GlassCard, NumericText, SectionLabel, StatChip } from '@/components/aurora';
 import { applicableStatsForHole } from '@/library/golf/builtInStats';
 import { yardageForHoleRange } from '@/library/golf/courseHelpers';
+import {
+  performanceToneColor,
+  useRoundPerformance,
+  userIdForScorer,
+} from '@/library/golf/performanceBenchmark';
 import { formatRelativeTime, formatScore, holesInRange, playerProgress } from '@/library/golf/scoring';
 import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundScorers, type RoundScorer } from '@/library/golf/useRoundScorers';
@@ -61,6 +66,12 @@ export function RoundDetailView({
 
   const primaryScorer = scorers[0];
   const progress = primaryScorer ? playerProgress(round, primaryScorer.id) : { rel: 0, thru: 0 };
+  const performance = useRoundPerformance(
+    round,
+    primaryScorer?.id,
+    userIdForScorer(round, primaryScorer?.id)
+  );
+  const performanceColor = performanceToneColor(colors, performance.tone);
   const quickStats = useMemo(
     () => computeQuickStats(round, primaryScorer, getValues),
     [round, primaryScorer, getValues]
@@ -92,7 +103,9 @@ export function RoundDetailView({
           <Text style={styles.courseSubline}>{courseSubline}</Text>
         </View>
         <View style={styles.heroStrip}>
-          <NumericText style={styles.heroScore}>{formatScore(progress.rel)}</NumericText>
+          <NumericText style={[styles.heroScore, { color: performanceColor }]}>
+            {formatScore(progress.rel)}
+          </NumericText>
           <Text style={styles.heroLabel}>to par{progress.thru ? `\nthru ${progress.thru}` : ''}</Text>
           <View style={styles.quickStats}>
             <StatChip label="FIR" value={quickStats.fir} state={quickStats.firState} style={styles.quickChip} />
@@ -102,7 +115,11 @@ export function RoundDetailView({
       </GlassCard>
 
       <GlassCard padded={false} style={styles.detailCard}>
-        <RoundScorecardGrid round={round} scorers={scorers} />
+        <RoundScorecardGrid
+          round={round}
+          scorers={scorers}
+          performanceColor={performanceColor}
+        />
       </GlassCard>
 
       <View style={styles.commentsWrap}>

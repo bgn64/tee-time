@@ -27,9 +27,14 @@ import type {
   StatValue,
   StatValueMap,
 } from '@/library/golf/builtInStats';
+import {
+  performanceToneColor,
+  useRoundPerformance,
+  userIdForScorer,
+} from '@/library/golf/performanceBenchmark';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
-import type { Tee } from '@/types/golf';
+import type { Round, Tee } from '@/types/golf';
 
 type Props = {
   // Identity / summary props
@@ -48,6 +53,8 @@ type Props = {
    */
   runningScore?: { rel: number; thru: number };
   isYou?: boolean;
+  round: Round;
+  scorerId: string;
 
   // Score-chip props (current hole context)
   holeNumber: number;
@@ -85,6 +92,8 @@ export function ScoreEntryAccordion({
   tee,
   runningScore,
   isYou,
+  round,
+  scorerId,
   par,
   strokes,
   onChange,
@@ -97,6 +106,12 @@ export function ScoreEntryAccordion({
 }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
+  const performance = useRoundPerformance(
+    round,
+    scorerId,
+    userIdForScorer(round, scorerId)
+  );
+  const runningColor = performanceToneColor(colors, performance.tone);
 
   const showShotPicker =
     teamMembers !== undefined &&
@@ -118,6 +133,7 @@ export function ScoreEntryAccordion({
         scoreSub={scoreSub}
         subtitleOverride={strokes == null ? 'to play' : null}
         runningScore={runningScore}
+        runningColor={runningColor}
         isYou={isYou}
       />
       {onChange ? (

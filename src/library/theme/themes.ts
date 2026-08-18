@@ -89,6 +89,12 @@ export type ThemeColors = {
   lime: string;
   /** Electric cyan accent for contrast against danger red. */
   cyan: string;
+  /** Player-relative score tone for a better-than-benchmark round. */
+  performanceGood: string;
+  /** Player-relative score tone for a round near the benchmark. */
+  performanceSteady: string;
+  /** Player-relative score tone for a worse-than-benchmark round. */
+  performanceBad: string;
   /** Aurora violet accent for gradient depth and highlights. */
   violet: string;
   /** Dark text/icon color for use on neon lime or cyan fills. */
@@ -175,6 +181,9 @@ const auroraGlassTheme: ThemeColors = {
   tabBarInactive: '#93a3b3',
   lime: '#b6ff3b',
   cyan: '#39e6c6',
+  performanceGood: '#b6ff3b',
+  performanceSteady: '#39e6c6',
+  performanceBad: '#ff8e8e',
   violet: '#9d7bff',
   onNeon: '#08121a',
   glassFill: 'rgba(255,255,255,0.06)',
