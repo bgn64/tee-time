@@ -15,7 +15,7 @@ Date: <YYYY-MM-DD>
 
 - Verbatim: "<exact user feedback>"
 - Triage: clean | needs-backend | redesign | decline
-- Proposed mockup change: <what changes in 04-aurora-glass.html>
+- Proposed mockup change: <what changes in aurora-screens.html / aurora-components.html>
 - Decision: accepted | overridden → <final decision, if the user changed it>
 - Backend: none | <migration / RPC / policy required> (requires explicit approval)
 

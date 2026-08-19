@@ -1,7 +1,7 @@
 /**
  * CourseBanner — the round header row.
  *
- * A compact, social-app header (mockup `feed-card-header-redesign.html`):
+ * A compact, social-app header (Feed mockup in `mockups/aurora-screens.html`):
  *
  *   [avatar]  @handle                         ⋯
  *             Course Name · 2h ago

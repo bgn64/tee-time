@@ -3,7 +3,7 @@
  * sheet for the editing screens. Opened by the footer's "Scorecard"
  * button.
  *
- * Per the mockup (`mockups/scoring-screen-redesign.html`): the Front 9
+ * Per the scoring Card mockup (`mockups/aurora-screens.html`): the Front 9
  * is stacked over the Back 9 (no swiping) and the body scrolls if it
  * overflows. Reuses `HorizontalScorecard layout="single"` (fit-to-width,
  * no horizontal scroll) so the grid matches the feed card's scorecard.

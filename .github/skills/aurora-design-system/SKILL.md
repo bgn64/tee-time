@@ -15,6 +15,11 @@ How the "Aurora Glass" look is implemented in the React Native (Expo, web-first)
 app. The visual spec lives in the mockup (`mockup-driven-design`); this skill is
 how to realize it in code.
 
+Use `mockups/aurora-screens.html` for complete screens and
+`mockups/aurora-components.html` for palette and primitive states. Both share
+`mockups/aurora.css`, which should stay semantically aligned with
+`src/library/theme/themes.ts`.
+
 Validate every change with `npx tsc --noEmit` and `npm run lint`.
 
 ## Color tokens

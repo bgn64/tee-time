@@ -2,9 +2,8 @@
  * ScoringRoundView — the shared full-screen editing surface for both
  * the live-scoring screen and the completed-round edit screen.
  *
- * Edge-to-edge (no card), mirroring the feed card's chrome but for
- * editing (mockups `scoring-banner.html`,
- * `scoring-screen-redesign.html`, `edit-round-screen-redesign.html`):
+ * Edge-to-edge (no card), mirroring the canonical scoring screens in
+ * `mockups/aurora-screens.html`:
  *
  *   [compact info bar]           course + format / round tee / autosave
  *   [hole hero]                  focused hole number, meta, running score
@@ -72,14 +71,14 @@ type Props = {
   /**
    * Inline destructive link rendered under the primary button — the
    * live-scoring screen wires "Abandon round" here (mockup
-   * `04-aurora-glass.html`, the `.abandon` link beneath Finish). Omit
+   * `mockups/aurora-screens.html`, the `.abandon` link beneath Finish). Omit
    * both to hide it; the edit-round screen keeps Delete in its header
    * instead.
    */
   secondaryLabel?: string;
   onSecondary?: () => void;
   /**
-   * Live-scoring lens system (mockup `04-aurora-glass.html`): when
+   * Live-scoring lens system (mockup `mockups/aurora-screens.html`): when
    * `onChangeLens` is provided, the header shows a Hole · Card · Chat
    * switcher and the `card`/`chat` lenses swap the Hole body for the
    * injected `cardLens` / `chatLens`. The edit-round screen omits these

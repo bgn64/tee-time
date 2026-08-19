@@ -3,7 +3,7 @@
  * `HoleStatsLine` renders a scorer's per-hole stats as read-only chips on
  * the viewing surface, this renders the SAME `StatChip` row on the
  * scoring / edit surface but tappable, so the two surfaces read as one
- * design language (mockup `04-aurora-glass.html`, scoring screen: a
+ * design language (mockup `mockups/aurora-screens.html`, scoring screen: a
  * "Stats" label above a wrapped `.tg` chip row).
  *
  * Single-chip interaction (the redesign dropped the radio-pair + stepper):

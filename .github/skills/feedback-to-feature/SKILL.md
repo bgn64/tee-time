@@ -22,7 +22,7 @@ code.
 
 Load these as each phase needs them:
 
-- `mockup-driven-design` — how to read/edit `mockups/explorations/04-aurora-glass.html` (the design source of truth). Used in phases 2–4.
+- `mockup-driven-design` — how to read/edit `mockups/aurora-screens.html` and the shared component catalog. Used in phases 2–4.
 - `aurora-design-system` — theme tokens, the background contract, and the shared `components/aurora/*` primitives. Used when judging feasibility (phase 2) and implementing (phase 5).
 - `visual-verification` — the ui-automation / Microsoft Edge screenshot loop for comparing the mockup to the running app. Used in phases 4–5.
 
@@ -45,7 +45,7 @@ Branch naming is `bgn64/<topic>` (see `AGENTS.md`).
 
 ## Phase 1 — Log the feedback
 
-Create `mockups/explorations/feedback/<topic>.md` from the template in that
+Create `mockups/feedback/<topic>.md` from the template in that
 folder. Record each feedback item verbatim, one entry each, with an id (F1, F2,
 …). This file is committed with the feature.
 
@@ -62,7 +62,7 @@ UI or requiring backend work. Classify each as one of:
 
 Present every decision to the user to accept or override. Record the finalized
 decision (including any override) in the feedback log. Then update
-`mockups/explorations/04-aurora-glass.html` so it addresses every accepted item,
+`mockups/aurora-screens.html` so it addresses every accepted item,
 following `mockup-driven-design`.
 
 ## Phase 3 — Mockup approval

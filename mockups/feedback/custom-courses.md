@@ -115,7 +115,7 @@ Phase-2 design decisions (confirmed with the user):
 - Visibility: a custom course is **private to the creator** (only they can find
   and play it).
 
-Mockup edits in `04-aurora-glass.html` (2026-06-23):
+Mockup edits now represented in `aurora-screens.html` (2026-06-23):
 - Design-doc comment: eleven → twelve screens; added the Add Course description.
 - **SEARCH · COURSES**: added a "＋ Add a course not in the catalog" entry row,
   and a "Pebble Hills Muni · Personal" example to show personal courses surface
