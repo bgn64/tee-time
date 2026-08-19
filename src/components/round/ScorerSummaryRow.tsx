@@ -75,7 +75,7 @@ type Props = {
   subtitleOverride?: string | null;
   /**
    * Per-scorer running ROUND score for the live Hole lens (mockup
-   * `04-aurora-glass.html`). When set, the right score column shows the
+   * `mockups/aurora-screens.html`). When set, the right score column shows the
    * running to-par + "THRU N" instead of the per-hole `scoreText` /
    * `scoreSub`. Viewing surfaces omit it.
    */

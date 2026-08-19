@@ -4,7 +4,7 @@
  * hole-number pill on the scorecard (or the caption link, which defaults
  * to the first playable hole).
  *
- * Per the mockup (`mockups/feed-card-redesign.html`):
+ * Per the Round detail mockup (`mockups/aurora-screens.html`):
  *   - Swipe / drag between holes (PanResponder + Animated track) — a swipe
  *     advances at most one hole; taps on dots/arrows may jump further.
  *   - Web-only hover edge arrows + arrow-key / Escape support.

@@ -1,7 +1,7 @@
 /**
  * ScoringCardLens — the "Card" lens on the live scoring screen: mid-round
  * Standings (everyone's running to-par) above the running scorecard grid
- * with the current hole marked (mockup `04-aurora-glass.html`, the
+ * with the current hole marked (mockup `mockups/aurora-screens.html`, the
  * Scoring · Card lens). Read-only — score entry stays on the Hole lens.
  */
 

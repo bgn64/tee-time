@@ -72,7 +72,7 @@ Both items are about the Scoring screen and are intertwined: F2 adds a visible
 per-hole `Yds` row, and F1 requires that those yardages (and the Hole-lens
 holehero's) reflect the round's played tee rather than the course default.
 
-Mockup edits in `04-aurora-glass.html` (2026-06-21):
+Mockup edits now represented in `aurora-screens.html` (2026-06-21):
 
 - **F2 — per-hole Yds + Hcp on the scoring grid.** Added `Yds` and `Hcp` rows
   (front + back nine) to the **SCORING · CARD LENS** hole-by-hole grid, in the
@@ -96,4 +96,3 @@ Phase-4 callouts:
   `tee-view-and-stat-fixes` run).
 - F2: confirm per-hole handicap/stroke index is available to the scoring +
   round-detail scorecards (the Course-detail scorecard already renders it).
-

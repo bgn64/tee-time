@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<!--
+  Canonical Aurora component and token catalog.
+  Uses the same local CSS and theme behavior as aurora-screens.html.
+-->
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Tee Time — Aurora component catalog</title>
+<link rel="stylesheet" href="aurora.css" />
+</head>
+<body>
+  <header class="spec-header">
+    <div class="spec-bar">
+      <div class="spec-title">
+        <h1>Tee·Time · Aurora components</h1>
+        <p>Canonical tokens and reusable visual primitives</p>
+      </div>
+      <div class="control-group" aria-label="Preview color scheme">
+        <button type="button" data-theme-choice="system" aria-pressed="true">System</button>
+        <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+        <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+      </div>
+      <span class="resolved-theme" id="resolvedTheme"></span>
+      <a class="spec-link" href="aurora-screens.html">Screens →</a>
+    </div>
+  </header>
+
+  <main class="catalog">
+    <h2>Color tokens</h2>
+    <p>The preview switch changes this entire catalog. Components must remain
+      equally legible in both palettes and consume semantic tokens rather than
+      palette-specific values.</p>
+    <div class="swatches">
+      <div class="swatch"><i style="background:var(--page)"></i><span>page / background</span></div>
+      <div class="swatch"><i style="background:var(--ink)"></i><span>ink / title</span></div>
+      <div class="swatch"><i style="background:var(--muted)"></i><span>muted text</span></div>
+      <div class="swatch"><i style="background:var(--lime)"></i><span>lime / primary</span></div>
+      <div class="swatch"><i style="background:var(--cy)"></i><span>cyan / steady</span></div>
+      <div class="swatch"><i style="background:var(--vio)"></i><span>violet</span></div>
+      <div class="swatch"><i style="background:var(--bad)"></i><span>danger / bad</span></div>
+      <div class="swatch"><i style="background:var(--glass)"></i><span>glass fill</span></div>
+      <div class="swatch"><i style="background:var(--glass2)"></i><span>strong glass</span></div>
+      <div class="swatch"><i style="background:var(--sheet)"></i><span>sheet surface</span></div>
+    </div>
+
+    <h2>Typography and actions</h2>
+    <div class="catalog-grid">
+      <section class="sample">
+        <h3>Type scale</h3>
+        <div class="sample-stack">
+          <span class="type-display">−1</span>
+          <span class="type-title">Torrey Pines — South</span>
+          <span class="type-body">Body and supporting text use the system sans;
+            scores and statistics use tabular numerics.</span>
+        </div>
+      </section>
+      <section class="sample">
+        <h3>Buttons</h3>
+        <div class="button-row">
+          <button class="sample-button primary">Primary action</button>
+          <button class="sample-button">Ghost action</button>
+          <button class="signout">Destructive action</button>
+        </div>
+      </section>
+      <section class="sample">
+        <h3>Status and identity</h3>
+        <div class="button-row">
+          <span class="av" style="background:#7cb342">M</span>
+          <span class="av" style="background:linear-gradient(135deg,var(--lime),var(--cy))">B</span>
+          <span class="live"><b></b>LIVE</span>
+          <span class="tag">Private</span>
+        </div>
+      </section>
+    </div>
+
+    <h2>Glass, progress, and stats</h2>
+    <div class="catalog-grid">
+      <section class="sample">
+        <h3>Glass surfaces</h3>
+        <div class="card" style="margin:0">
+          <div class="course">Aldwood Links</div>
+          <div class="csub">Blue tees · 18 holes</div>
+          <div class="foot"><span class="react">♥ 12</span><span class="react">💬 4</span></div>
+        </div>
+      </section>
+      <section class="sample">
+        <h3>Performance dial</h3>
+        <div class="ring" style="margin:0">
+          <div class="dial good"><div class="inner"><div class="v">+6</div><div class="u">TO PAR</div></div></div>
+          <div class="legend">
+            <div><span class="pill" style="background:var(--lime)"></span>Good <b>78</b></div>
+            <div><span class="pill" style="background:var(--cy)"></span>Steady <b>84</b></div>
+            <div><span class="pill" style="background:var(--bad)"></span>Bad <b>91</b></div>
+          </div>
+        </div>
+      </section>
+      <section class="sample">
+        <h3>Stat tiles</h3>
+        <div class="ptiles" style="margin:0">
+          <div class="ptile"><b class="lime">10/14</b><span>Fairways</span></div>
+          <div class="ptile"><b class="cy">9/18</b><span>Greens</span></div>
+          <div class="ptile"><b>29</b><span>Putts</span></div>
+          <div class="ptile"><b class="bad">2</b><span>Penalties</span></div>
+        </div>
+      </section>
+    </div>
+
+    <h2>Controls and score display</h2>
+    <div class="catalog-grid">
+      <section class="sample">
+        <h3>Segmented control</h3>
+        <div class="seg"><a class="on">Hole</a><a>Card</a><a>💬 Chat</a></div>
+        <div class="tg"><span class="tog yes"><b>✓</b>Fairway</span><span class="tog"><b>–</b>Green</span></div>
+      </section>
+      <section class="sample">
+        <h3>Selection</h3>
+        <div class="appearance-list">
+          <div class="appearance-choice">
+            <span class="appearance-icon">◐</span>
+            <div class="appearance-copy"><div class="appearance-name">System</div><div class="appearance-note">Match this device</div></div>
+            <span class="radio on"></span>
+          </div>
+          <div class="appearance-choice">
+            <span class="appearance-icon">☾</span>
+            <div class="appearance-copy"><div class="appearance-name">Dark</div></div>
+            <span class="radio"></span>
+          </div>
+        </div>
+      </section>
+      <section class="sample">
+        <h3>Score pips</h3>
+        <div class="button-row">
+          <span class="pip eagle">2</span>
+          <span class="pip bird">3</span>
+          <span class="pip par">4</span>
+          <span class="pip bog">5</span>
+        </div>
+        <div class="cardscore">
+          <div class="scorehalf"><span class="sl">HOLE</span><span class="hn">1</span><span class="hn">2</span><span class="hn">3</span><span class="hn">4</span><span class="hn">5</span><span class="hn">6</span><span class="hn">7</span><span class="hn">8</span><span class="hn">9</span>
+            <span class="sl">SCORE</span><span>4</span><span class="bird">3</span><span>4</span><span class="bog">5</span><span>4</span><span class="bird">3</span><span>4</span><span>5</span><span>3</span></div>
+        </div>
+      </section>
+    </div>
+
+    <h2>Navigation chrome</h2>
+    <div class="sample catalog-tabs">
+      <div class="tabs"><a class="on"><span class="ic">◎</span>Feed</a><a><span class="ic">＋</span>Score</a>
+        <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div>
+    </div>
+  </main>
+  <script src="aurora.js"></script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 /**
  * LensSwitcher — the Hole · Card · Chat segmented control on the live
- * scoring screen (mockup `04-aurora-glass.html`, the `.seg` control under
+ * scoring screen (mockup `mockups/aurora-screens.html`, the `.seg` control under
  * the course bar). Switches the scoring surface between per-hole entry,
  * the mid-round standings + running scorecard, and the live comment
  * thread, without leaving scoring.

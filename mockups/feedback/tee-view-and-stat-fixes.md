@@ -84,7 +84,7 @@ Visual verification completed in Edge (localhost:8081) against the mockup:
 
 ## Notes
 
-Mockup edits in `04-aurora-glass.html` (2026-06-20):
+Mockup edits now represented in `aurora-screens.html` (2026-06-20):
 
 - **F1 — Course Detail tees → scorecard.** The Tees card rows are now selectable
   (`.trow.sel` lime highlight + ✓). A small inline script swaps the Scorecard's

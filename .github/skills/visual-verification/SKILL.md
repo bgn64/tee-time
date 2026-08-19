@@ -19,7 +19,7 @@ app and the mockup, plus the ui-automation MCP tools.
 - Dev server running on `localhost:8081` (`npm run web`; it may already be up —
   check with `Get-NetTCPConnection -LocalPort 8081 -State Listen`).
 - One Edge window with (at least) two tabs: the live app (`localhost:8081`) and
-  the mockup (`mockups/explorations/04-aurora-glass.html` as a `file://`).
+  the mockup (`mockups/aurora-screens.html` as a `file://`).
 - Tools: `ui-automation-*` (list_windows, find_element, query_elements,
   take_screenshot, send_keys, click_element, click_at_point, select_element, …).
 

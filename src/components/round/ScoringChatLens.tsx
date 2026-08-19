@@ -1,7 +1,7 @@
 /**
  * ScoringChatLens — the "Chat" lens on the live scoring screen: the
  * round's live comment thread + reply composer, so players can read and
- * respond mid-round without leaving scoring (mockup `04-aurora-glass.html`,
+ * respond mid-round without leaving scoring (mockup `mockups/aurora-screens.html`,
  * the Scoring · Chat lens). Reuses the round-detail `CommentsSection`.
  */
 
