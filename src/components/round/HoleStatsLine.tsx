@@ -28,6 +28,7 @@ import {
   type StatDefinition,
   type StatValueMap,
 } from '@/library/golf/builtInStats';
+import { isCustomStatKey } from '@/library/golf/customStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 import { displayStatLabel } from '@/library/golf/statDisplay';
@@ -69,11 +70,15 @@ function StatToken({
   styles: StylesShape;
 }) {
   const label = displayStatLabel(stat.label);
+  const chipStyle = [
+    styles.chip,
+    isCustomStatKey(stat.key) && styles.customChip,
+  ];
 
   if (stat.type === 'binary') {
     if (typeof value !== 'boolean') {
       return (
-        <StatChip label={label} value="—" state="neutral" style={styles.chip} />
+        <StatChip label={label} value="—" state="neutral" style={chipStyle} />
       );
     }
     // yesTone='good': Yes good, No bad
@@ -86,7 +91,7 @@ function StatToken({
         label={label}
         value={value ? 'Yes' : 'No'}
         state={positive === true ? 'on' : positive === false ? 'no' : 'neutral'}
-        style={styles.chip}
+        style={chipStyle}
       />
     );
   }
@@ -106,7 +111,7 @@ function StatToken({
             ? 'no'
             : 'neutral'
       }
-      style={styles.chip}
+      style={chipStyle}
     />
   );
 }
@@ -123,6 +128,9 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 10,
       paddingVertical: 7,
       borderRadius: 999,
+    },
+    customChip: {
+      borderStyle: 'dashed',
     },
   });
 }

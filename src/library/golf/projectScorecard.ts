@@ -28,6 +28,7 @@ import type {
   ScoringRule,
   Team,
 } from '@/types/golf';
+import { parseCustomStatDefinitions } from './customStats';
 
 export type ScorecardRowShape = {
   id: string;
@@ -41,6 +42,7 @@ export type ScorecardRowShape = {
   hole_range: string | null;
   enabled_stat_keys: string | null;
   tracked_scorer_ids: string | null;
+  custom_stat_definitions: string | null;
   started_at: string | null;
   completed_at: string | null;
   updated_at: string | null;
@@ -90,6 +92,13 @@ export function projectScorecardRow(
     [],
     'scorecards.tracked_scorer_ids'
   );
+  const customStatDefinitions = parseCustomStatDefinitions(
+    safeParse<unknown[]>(
+      row.custom_stat_definitions,
+      [],
+      'scorecards.custom_stat_definitions'
+    )
+  );
   return {
     id: row.id,
     ownerUserId: row.owner_user_id,
@@ -106,5 +115,6 @@ export function projectScorecardRow(
     completedAt: row.completed_at ?? undefined,
     enabledStatKeys,
     trackedScorerIds,
+    customStatDefinitions,
   };
 }

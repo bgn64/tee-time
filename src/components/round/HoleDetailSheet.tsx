@@ -270,7 +270,11 @@ export function HoleDetailSheet({ round, visible, initialHole, onClose }: Props)
                             ? getValues(s.id, hole.number)
                             : {};
                           const applicableStats = tracked
-                            ? applicableStatsForHole(round.enabledStatKeys, hole)
+                            ? applicableStatsForHole(
+                                round.enabledStatKeys,
+                                hole,
+                                round.customStatDefinitions
+                              )
                             : [];
                           const contributorIds = isScramble
                             ? getContributors(s.id, hole.number)

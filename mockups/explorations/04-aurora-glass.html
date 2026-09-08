@@ -7,7 +7,8 @@
   Expanded screens: Feed (rich cards for both live and completed rounds), Live
   Scoring (Hole entry plus Card and Chat
   lenses for mid-round standings, the running scorecard & live comments),
-  Round Detail (full scorecard + comments), New Round setup, Search (People and
+  Round Detail (full scorecard + tracked-stat results + comments), New Round
+  setup plus custom-stat creation, Search (People and
   Courses — friend requests plus a searchable course catalog), Course Detail
   (full course info: tees, ratings/slopes, hole-by-hole scorecard), Add Course
   (create a course that isn't in the catalog — scan its scorecard from a photo or
@@ -136,6 +137,7 @@
   .tog b{font-weight:700;font-variant-numeric:tabular-nums}
   .tog.yes{border-color:#b6ff3b55;background:#b6ff3b14;color:var(--lime)}
   .tog.no{border-color:#ff6b6b55;background:#ff6b6b12;color:#ff8e8e}
+  .tog.custom{border-style:dashed}
   .nv{display:flex;gap:11px;margin-top:16px}
   .nv button{flex:1;padding:15px;border-radius:16px;border:1px solid var(--stroke);background:var(--glass2);color:var(--ink);font-size:14px;font-weight:600;cursor:pointer}
   .nv button.go{background:var(--lime);color:#08121a;border-color:transparent;box-shadow:0 0 24px -4px #b6ff3b88}
@@ -176,6 +178,12 @@
   .qd{text-align:center;background:var(--glass2);border:1px solid var(--stroke);border-radius:12px;padding:8px 10px;min-width:52px}
   .qd b{display:block;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
   .qd span{font-size:9px;color:var(--muted);letter-spacing:1px}
+  .statresults{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-bottom:13px}
+  .statresult{background:var(--glass);border:1px solid var(--stroke);border-radius:16px;padding:11px 12px;backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+  .statresult b{display:block;font-family:var(--num);font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;color:var(--ink)}
+  .statresult span{display:block;font-size:10px;color:var(--muted);margin-top:3px;line-height:1.25}
+  .statresult.custom{border-style:dashed;border-color:#39e6c655}
+  .statresult.custom b{color:var(--cy)}
 
   /* scorecard */
   .scard{background:var(--glass);border:1px solid var(--stroke);border-radius:20px;padding:14px 12px;margin-bottom:13px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
@@ -222,6 +230,8 @@
   .check.on{background:var(--lime);border-color:transparent;color:#08121a}
   .addp{display:flex;align-items:center;gap:11px;padding:11px 2px;color:var(--cy);font-size:13px;font-weight:600}
   .addp .pl{width:30px;height:30px;border-radius:10px;border:1px dashed var(--stroke);display:grid;place-items:center;color:var(--muted)}
+  .addstat{display:flex;align-items:center;gap:10px;margin-top:9px;padding:10px 12px;border:1px dashed #39e6c677;border-radius:14px;color:var(--cy);font-size:12px;font-weight:700;background:#39e6c60d}
+  .addstat .pl{width:24px;height:24px;border-radius:8px;background:#39e6c61f;display:grid;place-items:center;font-size:14px}
   .start{width:100%;margin-top:16px;padding:16px;border-radius:16px;border:0;background:var(--lime);color:#08121a;font-size:15px;font-weight:700;cursor:pointer;box-shadow:0 0 28px -4px #b6ff3b88}
 
   /* friends + search */
@@ -283,6 +293,15 @@
   .sheet .grab{width:40px;height:4px;border-radius:3px;background:#46566a;margin:4px auto 12px}
   .sheet h3{font-size:16px;font-weight:700;margin:0}
   .sheet .ssub{font-size:11px;color:var(--muted);margin:3px 0 8px}
+  .sheet .field{margin-top:14px}
+  .typechoice{display:flex;gap:9px;margin-top:8px}
+  .typeopt{flex:1;background:var(--glass);border:1px solid var(--stroke);border-radius:14px;padding:11px 12px}
+  .typeopt b{display:block;font-size:13px}
+  .typeopt span{display:block;font-size:10px;color:var(--muted);margin-top:3px}
+  .typeopt.sel{border-color:#b6ff3b66;background:#b6ff3b14}
+  .typeopt.sel b{color:var(--lime)}
+  .typeopt.later{opacity:.58}
+  .saveStat{width:100%;margin-top:14px;padding:14px;border-radius:15px;border:0;background:var(--lime);color:#08121a;font-size:14px;font-weight:800}
 
   /* add course (custom / scanned) */
   .scan{display:flex;align-items:center;gap:13px;background:linear-gradient(90deg,#39e6c61f,transparent);border:1px solid #39e6c655;border-radius:18px;padding:14px;margin:2px 0 0;cursor:pointer}
@@ -533,7 +552,7 @@
 
     <p class="reviewcap">Feedback update · Scoring</p>
     <!-- SCORING -->
-    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+    <div class="phone" id="scoring-stats"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
       <div class="screen"><div class="scrim">
         <div class="top"><h1>Scoring</h1><div class="me" style="background:var(--glass2);color:var(--muted)">⋯</div></div>
         <div class="sb"><div class="c">Torrey Pines — South</div><div class="m">Scramble · Blue 6,602y · autosaving ●</div></div>
@@ -549,9 +568,11 @@
           <div><div class="hand">@priya</div><div class="sub">to play</div></div>
           <div class="rc"><div class="run"><b class="steady">+6</b><small>THRU 12</small></div>
             <div class="stp"><button>−</button><span class="v empty">–</span><button>+</button></div></div></div>
-        <div class="label">Stats · hole 13</div>
+        <div class="label">Stats · hole 13<span class="r">4 built-in · 2 custom</span></div>
         <div class="tg"><span class="tog yes"><b>✓</b>Fairway</span><span class="tog"><b>–</b>Green</span>
-          <span class="tog"><b>–</b>Putts</span><span class="tog"><b>0</b>Penalties</span><span class="tog"><b>0</b>Sand</span></div>
+          <span class="tog"><b>1</b>Penalties</span><span class="tog"><b>0</b>Sand</span>
+          <span class="tog yes custom"><b>✓</b>Two putts or less</span>
+          <span class="tog no custom"><b>×</b>Bogey GIR</span></div>
         <div class="nv"><button>‹ Prev</button><button class="go">Next ›</button></div>
         <button class="finish">Finish round ›</button>
         <div class="abandon">Abandon round</div>
@@ -626,8 +647,8 @@
 
     <p class="reviewcap">Feedback update · Round detail</p>
     <!-- ROUND DETAIL -->
-    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
-      <div class="screen"><div class="scrim">
+    <div class="phone" id="round-detail-stats"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim scroll">
         <div class="top"><h1>‹&nbsp;Round</h1><div class="me" style="background:var(--glass2);color:var(--muted)">⋯</div></div>
         <div class="banner">
           <div class="row"><span class="av" style="background:#7cb342">M</span>
@@ -655,6 +676,15 @@
           </div>
           <div class="stot"><span>Out <b>34</b> · In <b>—</b></span><span class="tp good">−1 · thru 12</span></div>
         </div>
+        <div class="label">Tracked stats<span class="r">thru 12</span></div>
+        <div class="statresults">
+          <div class="statresult"><b>7/10</b><span>Fairways</span></div>
+          <div class="statresult"><b>8/12</b><span>Greens</span></div>
+          <div class="statresult"><b>2</b><span>Penalties</span></div>
+          <div class="statresult"><b>3</b><span>Sand</span></div>
+          <div class="statresult custom"><b>10/12</b><span>Two putts or less</span></div>
+          <div class="statresult custom"><b>8/12</b><span>Bogey GIR</span></div>
+        </div>
         <div class="label">Comments<span class="r">3</span></div>
         <div class="cmt"><span class="ca" style="background:#ff7043">D</span>
           <div class="cbub"><div class="cwho">@deshawn<span>now</span></div><div class="ctx">That eagle on 6 was unreal 🦅</div></div></div>
@@ -669,8 +699,8 @@
     </div>
 
     <!-- NEW ROUND -->
-    <div class="phone"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
-      <div class="screen"><div class="scrim">
+    <div class="phone" id="new-round-stats"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen"><div class="scrim scroll">
         <div class="top"><h1>New round</h1><div class="me" style="background:var(--glass2);color:var(--muted)">✕</div></div>
         <div class="label">Course</div>
         <div class="field"><span class="ic2">⛳</span>
@@ -695,10 +725,12 @@
         <div class="psel"><span class="av" style="background:#26a69a">G</span>
           <div><div class="hand">Dad</div><div class="sub">guest · custom player</div></div><span class="check">✓</span></div>
         <div class="addp"><span class="pl">＋</span>Add custom player</div>
-        <div class="label">Track stats</div>
+        <div class="label">Track stats<span class="r">4 built-in · 2 custom</span></div>
         <div class="tg">
           <span class="tog yes"><b>✓</b>Fairways</span><span class="tog yes"><b>✓</b>Greens</span>
-          <span class="tog yes"><b>✓</b>Putts</span><span class="tog yes"><b>✓</b>Penalties</span><span class="tog yes"><b>✓</b>Sand</span></div>
+          <span class="tog"><b>–</b>Putts</span><span class="tog yes"><b>✓</b>Penalties</span><span class="tog yes"><b>✓</b>Sand</span>
+          <span class="tog yes custom"><b>✓</b>Two putts or less</span><span class="tog yes custom"><b>✓</b>Bogey GIR</span></div>
+        <div class="addstat"><span class="pl">＋</span>Add custom stat</div>
         <button class="start">Start round ›</button>
       </div>
       <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
@@ -731,10 +763,12 @@
           <div class="psel"><span class="av" style="background:#ff7043">D</span>
             <div><div class="hand">@deshawn</div><div class="sub">friend</div></div><span class="check on">✓</span></div>
           <div class="addp"><span class="pl">＋</span>Add custom player</div>
-          <div class="label">Track stats</div>
+          <div class="label">Track stats<span class="r">4 built-in · 2 custom</span></div>
           <div class="tg">
             <span class="tog yes"><b>✓</b>Fairways</span><span class="tog yes"><b>✓</b>Greens</span>
-            <span class="tog yes"><b>✓</b>Putts</span><span class="tog yes"><b>✓</b>Penalties</span><span class="tog yes"><b>✓</b>Sand</span></div>
+            <span class="tog"><b>–</b>Putts</span><span class="tog yes"><b>✓</b>Penalties</span><span class="tog yes"><b>✓</b>Sand</span>
+            <span class="tog yes custom"><b>✓</b>Two putts or less</span><span class="tog yes custom"><b>✓</b>Bogey GIR</span></div>
+          <div class="addstat"><span class="pl">＋</span>Add custom stat</div>
           <button class="start">Start round ›</button>
         </div>
         <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
@@ -748,6 +782,50 @@
           <div class="trow sel"><span class="tdot" style="background:#5b8def"></span><div class="tn">Blue</div><div class="trs">73.9 / 138</div><div class="tyd">6,602 yds</div><span class="schk">✓</span></div>
           <div class="trow"><span class="tdot" style="background:#eaf2ee"></span><div class="tn">White</div><div class="trs">71.8 / 131</div><div class="tyd">6,089 yds</div></div>
           <div class="trow"><span class="tdot" style="background:#ff5d6c"></span><div class="tn">Red</div><div class="trs">70.4 / 124</div><div class="tyd">5,478 yds</div></div>
+        </div>
+      </div>
+    </div>
+
+    <p class="reviewcap">Feedback update · Custom stat</p>
+    <!-- NEW ROUND · CUSTOM STAT SHEET -->
+    <div class="phone" id="custom-stat-sheet"><div class="glow"></div><div class="bar"><span>9:41</span><span class="dot"><i></i><i></i><i></i></span></div>
+      <div class="screen">
+        <div class="scrim">
+          <div class="top"><h1>New round</h1><div class="me" style="background:var(--glass2);color:var(--muted)">✕</div></div>
+          <div class="label">Course</div>
+          <div class="field"><span class="ic2">⛳</span>
+            <div><div class="lab">Selected course</div><div class="val">Torrey Pines — South</div></div>
+            <span class="chev">›</span></div>
+          <div class="label">Format</div>
+          <div class="choice">
+            <div class="opt"><b>Stroke</b><small>solo / individual</small></div>
+            <div class="opt sel"><b>Scramble</b><small>teams · best ball</small></div>
+          </div>
+          <div class="field"><span class="ic2">⚑</span>
+            <div><div class="lab">Tees</div><div class="val">Blue · 6,602 yds</div></div>
+            <span class="chev">›</span></div>
+          <div class="label">Track stats<span class="r">4 built-in · 1 custom</span></div>
+          <div class="tg">
+            <span class="tog yes"><b>✓</b>Fairways</span><span class="tog yes"><b>✓</b>Greens</span>
+            <span class="tog yes"><b>✓</b>Penalties</span><span class="tog yes"><b>✓</b>Sand</span>
+            <span class="tog yes custom"><b>✓</b>Two putts or less</span></div>
+          <div class="addstat" style="border-color:#b6ff3b77;background:#b6ff3b0d;color:var(--lime)"><span class="pl">＋</span>Add custom stat</div>
+        </div>
+        <div class="tabs"><a><span class="ic">◎</span>Feed</a><a class="on"><span class="ic">＋</span>Score</a>
+          <a><span class="ic">⌕</span>Search</a><a><span class="ic">◔</span>You</a></div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h3>Add custom stat</h3>
+          <div class="ssub">Save it once, then choose it for any future round.</div>
+          <div class="field"><span class="ic2">✦</span>
+            <div style="flex:1"><div class="lab">Stat name</div><input class="tin" value="Bogey GIR" /></div></div>
+          <div class="label">Stat type</div>
+          <div class="typechoice">
+            <div class="typeopt sel"><b>Yes / no</b><span>Mark each hole</span></div>
+            <div class="typeopt later"><b>Integer</b><span>Coming later</span></div>
+          </div>
+          <button class="saveStat">Save &amp; track</button>
         </div>
       </div>
     </div>

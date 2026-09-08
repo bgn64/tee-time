@@ -32,6 +32,7 @@ import {
   type StatValueMap,
 } from '@/library/golf/builtInStats';
 import { displayStatLabel } from '@/library/golf/statDisplay';
+import { isCustomStatKey } from '@/library/golf/customStats';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 
@@ -65,6 +66,7 @@ export function EditableHoleStats({ stats, values, onChangeStat }: Props) {
             value={values[stat.key]}
             onChangeStat={onChangeStat}
             styles={styles}
+            custom={isCustomStatKey(stat.key)}
           />
         ))}
       </View>
@@ -90,11 +92,13 @@ function EditableStatChip({
   value,
   onChangeStat,
   styles,
+  custom,
 }: {
   stat: StatDefinition;
   value: StatValue | undefined;
   onChangeStat: (statKey: StatKey, value: StatValue | null) => void;
   styles: StylesShape;
+  custom: boolean;
 }) {
   const label = displayStatLabel(stat.label);
 
@@ -107,7 +111,7 @@ function EditableStatChip({
           value="—"
           state="neutral"
           onPress={() => onChangeStat(stat.key, cycleBinary(bool))}
-          style={styles.chip}
+          style={[styles.chip, custom && styles.customChip]}
         />
       );
     }
@@ -120,7 +124,7 @@ function EditableStatChip({
         value={bool ? 'Yes' : 'No'}
         state={positive === true ? 'on' : positive === false ? 'no' : 'neutral'}
         onPress={() => onChangeStat(stat.key, cycleBinary(bool))}
-        style={styles.chip}
+        style={[styles.chip, custom && styles.customChip]}
       />
     );
   }
@@ -140,7 +144,7 @@ function EditableStatChip({
             : 'neutral'
       }
       onPress={() => onChangeStat(stat.key, nextInteger(stat, display))}
-      style={styles.chip}
+      style={[styles.chip, custom && styles.customChip]}
     />
   );
 }
@@ -164,6 +168,9 @@ function makeStyles(colors: ThemeColors) {
       paddingHorizontal: 13,
       paddingVertical: 10,
       borderRadius: 14,
+    },
+    customChip: {
+      borderStyle: 'dashed',
     },
   });
 }

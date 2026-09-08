@@ -24,6 +24,11 @@ export function newCustomPlayerId(): string {
   return uuid();
 }
 
+/** Stable id for a reusable custom stat definition. */
+export function newCustomStatId(): string {
+  return uuid();
+}
+
 /**
  * Stable id for a scramble team. Persisted as the `scorer_id` on
  * every `scorecard_scores` row for that team, so it has to be unique

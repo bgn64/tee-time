@@ -78,8 +78,13 @@ export function HoleEditPane({
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const statsForThisHole = useMemo(
-    () => applicableStatsForHole(round.enabledStatKeys, hole),
-    [round.enabledStatKeys, hole]
+    () =>
+      applicableStatsForHole(
+        round.enabledStatKeys,
+        hole,
+        round.customStatDefinitions
+      ),
+    [round.enabledStatKeys, round.customStatDefinitions, hole]
   );
 
   return (

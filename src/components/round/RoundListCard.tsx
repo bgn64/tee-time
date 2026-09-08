@@ -17,7 +17,8 @@ import {
   aggregateBinary,
   aggregateInteger,
 } from '@/library/golf/aggregateHoleDetails';
-import { getStat } from '@/library/golf/builtInStats';
+import { enabledStatDefinitions } from '@/library/golf/builtInStats';
+import { isCustomStatKey } from '@/library/golf/customStats';
 import {
   formatRelativeTime,
   formatScore,
@@ -33,6 +34,7 @@ import {
 import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundLikes } from '@/library/golf/useRoundLikes';
 import { useRoundScorers } from '@/library/golf/useRoundScorers';
+import { displayStatName } from '@/library/golf/statDisplay';
 import { useAccount } from '@/library/social/AccountContext';
 import { useProfile } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -147,51 +149,57 @@ export function RoundListCard({
     .join(' · ');
 
   const legend = useMemo(() => {
-    if (!primaryScorerId) return [];
-    const fir = getStat('fir');
-    const gir = getStat('gir');
-    const putts = getStat('putts');
+    if (
+      !primaryScorerId ||
+      !round.trackedScorerIds.includes(primaryScorerId)
+    ) {
+      return [];
+    }
     const items: { key: string; label: string; value: string; color: string }[] = [];
-    if (fir?.type === 'binary') {
-      const agg = aggregateBinary(detailsRows, primaryScorerId, fir, visibleHoles);
-      if (agg.denom > 0) {
+    const definitions = enabledStatDefinitions(
+      round.enabledStatKeys,
+      round.customStatDefinitions
+    );
+    for (const stat of definitions) {
+      if (stat.type === 'binary') {
+        const agg = aggregateBinary(
+          detailsRows,
+          primaryScorerId,
+          stat,
+          visibleHoles
+        );
+        if (agg.denom === 0) continue;
         items.push({
-          key: 'fir',
-          label: 'Fairways',
+          key: stat.key,
+          label: displayStatName(stat.key, stat.label),
           value: `${agg.num}/${agg.denom}`,
-          color: colors.lime,
+          color: legendColor(stat.key, stat.yesTone, colors),
         });
-      }
-    }
-    if (gir?.type === 'binary') {
-      const agg = aggregateBinary(detailsRows, primaryScorerId, gir, visibleHoles);
-      if (agg.denom > 0) {
+      } else {
+        const agg = aggregateInteger(
+          detailsRows,
+          primaryScorerId,
+          stat,
+          visibleHoles
+        );
+        if (agg.taggedCount === 0) continue;
         items.push({
-          key: 'gir',
-          label: 'Greens',
-          value: `${agg.num}/${agg.denom}`,
-          color: colors.cyan,
-        });
-      }
-    }
-    if (putts?.type === 'integer') {
-      const agg = aggregateInteger(detailsRows, primaryScorerId, putts, visibleHoles);
-      if (agg.taggedCount > 0) {
-        items.push({
-          key: 'putts',
-          label: 'Putts',
+          key: stat.key,
+          label: displayStatName(stat.key, stat.label),
           value: String(agg.sum),
-          color: colors.violet,
+          color: legendColor(stat.key, stat.aggregateTone, colors),
         });
       }
+      if (items.length === 3) break;
     }
     return items;
   }, [
-    colors.cyan,
-    colors.lime,
-    colors.violet,
+    colors,
     detailsRows,
     primaryScorerId,
+    round.customStatDefinitions,
+    round.enabledStatKeys,
+    round.trackedScorerIds,
     visibleHoles,
   ]);
 
@@ -300,6 +308,20 @@ export function RoundListCard({
       />
     </GlassCard>
   );
+}
+
+function legendColor(
+  key: string,
+  tone: 'good' | 'bad' | 'neutral',
+  colors: ThemeColors
+): string {
+  if (key === 'fir') return colors.lime;
+  if (key === 'gir') return colors.cyan;
+  if (key === 'putts') return colors.violet;
+  if (isCustomStatKey(key)) return colors.cyan;
+  if (tone === 'bad') return colors.accent;
+  if (tone === 'good') return colors.lime;
+  return colors.violet;
 }
 
 function makeStyles(colors: ThemeColors) {

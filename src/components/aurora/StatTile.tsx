@@ -14,7 +14,8 @@ import { NumericText } from './NumericText';
 export function StatTile(props: {
   value: string | number;
   label: string;
-  tone?: 'default' | 'lime' | 'cyan';
+  tone?: 'default' | 'lime' | 'cyan' | 'danger';
+  custom?: boolean;
   style?: StyleProp<ViewStyle>;
   /** When provided, the tile becomes pressable and shows a corner chevron. */
   onPress?: () => void;
@@ -24,7 +25,17 @@ export function StatTile(props: {
   const tone = props.tone ?? 'default';
 
   const valueNode = (
-    <NumericText style={[styles.value, tone === 'lime' ? styles.lime : tone === 'cyan' ? styles.cyan : null]}>
+    <NumericText
+      style={[
+        styles.value,
+        tone === 'lime'
+          ? styles.lime
+          : tone === 'cyan'
+            ? styles.cyan
+            : tone === 'danger'
+              ? styles.danger
+              : null,
+      ]}>
       {props.value}
     </NumericText>
   );
@@ -32,7 +43,7 @@ export function StatTile(props: {
 
   if (!props.onPress) {
     return (
-      <GlassSurface style={[styles.tile, props.style]}>
+      <GlassSurface style={[styles.tile, props.custom && styles.custom, props.style]}>
         {valueNode}
         {labelNode}
       </GlassSurface>
@@ -45,7 +56,7 @@ export function StatTile(props: {
       accessibilityLabel={props.label}
       onPress={props.onPress}
       style={({ pressed }) => [props.style, pressed ? styles.pressed : null]}>
-      <GlassSurface style={[styles.tile, styles.pressFill]}>
+      <GlassSurface style={[styles.tile, props.custom && styles.custom, styles.pressFill]}>
         {valueNode}
         {labelNode}
         <Text style={styles.chevron}>›</Text>
@@ -84,6 +95,13 @@ function makeStyles(colors: ThemeColors) {
     },
     cyan: {
       color: colors.cyan,
+    },
+    danger: {
+      color: colors.accent,
+    },
+    custom: {
+      borderStyle: 'dashed',
+      borderColor: colors.cyan,
     },
     label: {
       marginTop: 3,
