@@ -12,8 +12,7 @@
 
 import {
   applicableStatsForHole,
-  BUILT_IN_STATS,
-  getStat,
+  enabledStatDefinitions,
   isStatEntered,
   type StatDefinition,
   type StatKey,
@@ -107,9 +106,9 @@ export function computeRoundCompletionGaps(
   // ---- Stat gaps ----
   const statGaps: MissingStatScope[] = [];
   const trackedSet = new Set(round.trackedScorerIds);
-  const enabledSet = new Set(round.enabledStatKeys);
-  const enabledStats: StatDefinition[] = BUILT_IN_STATS.filter((s) =>
-    enabledSet.has(s.key)
+  const enabledStats: StatDefinition[] = enabledStatDefinitions(
+    round.enabledStatKeys,
+    round.customStatDefinitions
   );
   if (enabledStats.length > 0 && trackedSet.size > 0) {
     // Pre-bucket the rows for O(scorerCount * holeCount * statCount)
@@ -121,15 +120,18 @@ export function computeRoundCompletionGaps(
     for (const scorerId of trackedSet) {
       const scorerName = nameForScorerId(round, scorerId, nameForParticipant);
       for (const stat of enabledStats) {
-        const def = getStat(stat.key);
-        if (!def) continue;
         const missingHoles: number[] = [];
         for (const h of inRange) {
-          const applicable = applicableStatsForHole([stat.key], h).length > 0;
+          const applicable =
+            applicableStatsForHole(
+              [stat.key],
+              h,
+              round.customStatDefinitions
+            ).length > 0;
           if (!applicable) continue;
           const values =
             valuesByTuple.get(`${scorerId}::${h.number}`) ?? {};
-          if (!isStatEntered(def, values)) {
+          if (!isStatEntered(stat, values)) {
             missingHoles.push(h.number);
           }
         }

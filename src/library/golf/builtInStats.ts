@@ -2,19 +2,15 @@
  * Built-in stat registry — single source of truth for per-hole
  * detail stats the app knows how to render and aggregate.
  *
- * The registry is intentionally TypeScript-only for now. Storage
- * (`scorecard_hole_details.details`) is open — any stat_key string
- * may be written. The registry defines:
+ * Storage (`scorecard_hole_details.details`) is open — any stat_key
+ * string may be written. This registry defines the built-in set;
+ * reusable user definitions load from `custom_stat_definitions` and
+ * are snapshotted onto each round.
  *
  *   - Which built-in stats exist for v1 (GIR, FIR, Putts, Penalties, Sand).
  *   - Per-stat metadata: type (binary | integer), par applicability,
  *     tone (drives tile + pill color), default-enabled flag, and
  *     for integer stats the quick-pick values for the chip row.
- *
- * Future work: a `stat_definitions` table can layer user-defined
- * custom stats on top without any storage migration — the
- * generic engine here handles arbitrary stat_keys as long as they
- * conform to the two primitive types.
  *
  * What's intentionally NOT in the registry:
  *
@@ -108,18 +104,18 @@ export type StatValueMap = { [K in StatKey]?: StatValue };
  */
 export const BUILT_IN_STATS: readonly StatDefinition[] = [
   {
-    key: 'gir',
-    label: 'GIR',
-    type: 'binary',
-    yesTone: 'good',
-    defaultEnabled: true,
-  },
-  {
     key: 'fir',
     label: 'FIR',
     type: 'binary',
     yesTone: 'good',
     appliesToPar: [4, 5],
+    defaultEnabled: true,
+  },
+  {
+    key: 'gir',
+    label: 'GIR',
+    type: 'binary',
+    yesTone: 'good',
     defaultEnabled: true,
   },
   {
@@ -138,7 +134,7 @@ export const BUILT_IN_STATS: readonly StatDefinition[] = [
     defaultValue: 0,
     min: 0,
     aggregateTone: 'bad',
-    defaultEnabled: true,
+    defaultEnabled: false,
   },
   {
     key: 'sand',
@@ -155,8 +151,20 @@ const BUILT_IN_STATS_BY_KEY: ReadonlyMap<StatKey, StatDefinition> = new Map(
   BUILT_IN_STATS.map((s) => [s.key, s])
 );
 
-export function getStat(key: StatKey): StatDefinition | undefined {
-  return BUILT_IN_STATS_BY_KEY.get(key);
+export function allStatDefinitions(
+  customDefinitions: readonly StatDefinition[] = []
+): StatDefinition[] {
+  return [...BUILT_IN_STATS, ...customDefinitions];
+}
+
+export function getStat(
+  key: StatKey,
+  customDefinitions: readonly StatDefinition[] = []
+): StatDefinition | undefined {
+  return (
+    BUILT_IN_STATS_BY_KEY.get(key) ??
+    customDefinitions.find((definition) => definition.key === key)
+  );
 }
 
 /**
@@ -166,6 +174,16 @@ export function getStat(key: StatKey): StatDefinition | undefined {
  */
 export function defaultEnabledStatKeys(): readonly StatKey[] {
   return BUILT_IN_STATS.filter((s) => s.defaultEnabled).map((s) => s.key);
+}
+
+export function enabledStatDefinitions(
+  enabledKeys: readonly StatKey[],
+  customDefinitions: readonly StatDefinition[] = []
+): StatDefinition[] {
+  const enabled = new Set(enabledKeys);
+  return allStatDefinitions(customDefinitions).filter((stat) =>
+    enabled.has(stat.key)
+  );
 }
 
 /**
@@ -201,14 +219,10 @@ export function isStatEntered(
  */
 export function applicableStatsForHole(
   enabledKeys: readonly StatKey[],
-  hole: Pick<Hole, 'par'>
+  hole: Pick<Hole, 'par'>,
+  customDefinitions: readonly StatDefinition[] = []
 ): StatDefinition[] {
-  const enabled = new Set(enabledKeys);
-  const out: StatDefinition[] = [];
-  for (const stat of BUILT_IN_STATS) {
-    if (!enabled.has(stat.key)) continue;
-    if (!appliesToHole(stat, hole)) continue;
-    out.push(stat);
-  }
-  return out;
+  return enabledStatDefinitions(enabledKeys, customDefinitions).filter((stat) =>
+    appliesToHole(stat, hole)
+  );
 }

@@ -1,3 +1,5 @@
+import type { StatDefinition } from '@/library/golf/builtInStats';
+
 /**
  * Domain types for the Score tab.
  *
@@ -205,6 +207,12 @@ export type Round = {
    * Same set applies to every scorer in `trackedScorerIds`.
    */
   enabledStatKeys: string[];
+  /**
+   * Immutable custom-stat definitions selected when this round started.
+   * Built-ins remain code-defined; snapshots preserve custom labels and types
+   * for historical and friend-visible rounds.
+   */
+  customStatDefinitions: StatDefinition[];
   /**
    * Scorer ids that have stats tracked for them. Empty array = no
    * tracking. For the common "track stats for myself only" case

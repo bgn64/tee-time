@@ -16,3 +16,9 @@ export function displayStatLabel(label: string): string {
   if (/^[A-Z]+$/.test(label)) return label;
   return label.toLowerCase();
 }
+
+export function displayStatName(key: string, label: string): string {
+  if (key === 'fir') return 'Fairways';
+  if (key === 'gir') return 'Greens';
+  return label;
+}

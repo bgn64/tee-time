@@ -31,6 +31,7 @@ type DetailScorecardRow = {
   hole_range: string | null;
   enabled_stat_keys: unknown;
   tracked_scorer_ids: unknown;
+  custom_stat_definitions: unknown;
   started_at: string | null;
   completed_at: string | null;
   updated_at: string | null;
@@ -66,6 +67,7 @@ function toScorecardRowShape(row: DetailScorecardRow): ScorecardRowShape {
     hole_range: row.hole_range,
     enabled_stat_keys: jsonbForProjector(row.enabled_stat_keys),
     tracked_scorer_ids: jsonbForProjector(row.tracked_scorer_ids),
+    custom_stat_definitions: jsonbForProjector(row.custom_stat_definitions),
     started_at: row.started_at,
     completed_at: row.completed_at,
     updated_at: row.updated_at,

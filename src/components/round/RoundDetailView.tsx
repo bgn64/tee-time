@@ -10,16 +10,34 @@ import { CommentsSection } from './CommentsSection';
 import { CourseBanner } from './CourseBanner';
 import type { OverflowItem } from './HeaderOverflowMenu';
 import { RoundScorecardGrid } from './RoundScorecardGrid';
-import { GlassCard, NumericText, SectionLabel, StatChip } from '@/components/aurora';
-import { applicableStatsForHole } from '@/library/golf/builtInStats';
+import { GlassCard, NumericText, SectionLabel, StatChip, StatTile } from '@/components/aurora';
+import {
+  aggregateBinary,
+  aggregateInteger,
+} from '@/library/golf/aggregateHoleDetails';
+import {
+  applicableStatsForHole,
+  enabledStatDefinitions,
+} from '@/library/golf/builtInStats';
 import { yardageForHoleRange } from '@/library/golf/courseHelpers';
+import { isCustomStatKey } from '@/library/golf/customStats';
+import { displayStatName } from '@/library/golf/statDisplay';
 import {
   performanceToneColor,
   useRoundPerformance,
   userIdForScorer,
 } from '@/library/golf/performanceBenchmark';
-import { formatRelativeTime, formatScore, holesInRange, playerProgress } from '@/library/golf/scoring';
-import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
+import {
+  formatRelativeTime,
+  formatScore,
+  holesInRange,
+  playerProgress,
+  scorerIdForUser,
+} from '@/library/golf/scoring';
+import {
+  useRoundHoleDetails,
+  type HoleDetailsRow,
+} from '@/library/golf/useRoundHoleDetails';
 import { useRoundScorers, type RoundScorer } from '@/library/golf/useRoundScorers';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import { useProfile } from '@/library/social/FriendsContext';
@@ -40,6 +58,14 @@ type QuickStats = {
   girState: 'on' | 'no' | 'neutral';
 };
 
+type StatSummary = {
+  key: string;
+  label: string;
+  value: string;
+  tone: 'default' | 'lime' | 'cyan' | 'danger';
+  custom: boolean;
+};
+
 export function RoundDetailView({
   round,
   profileRoutePrefix,
@@ -52,7 +78,7 @@ export function RoundDetailView({
   const { profile: ownerProfile } = useProfile(round.ownerUserId ?? null);
   const { count: commentCount } = useCommentSummary(round.id);
   const scorers = useRoundScorers(round);
-  const { getValues } = useRoundHoleDetails(round.id);
+  const { rows: detailRows, getValues } = useRoundHoleDetails(round.id);
 
   const isInProgress = !round.completedAt;
   const timeText = formatRelativeTime(
@@ -64,7 +90,13 @@ export function RoundDetailView({
     ? () => router.push(`${profileRoutePrefix}/${ownerUserId}` as never)
     : undefined;
 
-  const primaryScorer = scorers[0];
+  const primaryScorerId =
+    (round.ownerUserId
+      ? scorerIdForUser(round, round.ownerUserId)
+      : undefined) ?? scorers[0]?.id;
+  const primaryScorer = scorers.find(
+    (scorer) => scorer.id === primaryScorerId
+  );
   const progress = primaryScorer ? playerProgress(round, primaryScorer.id) : { rel: 0, thru: 0 };
   const performance = useRoundPerformance(
     round,
@@ -72,9 +104,11 @@ export function RoundDetailView({
     userIdForScorer(round, primaryScorer?.id)
   );
   const performanceColor = performanceToneColor(colors, performance.tone);
-  const quickStats = useMemo(
-    () => computeQuickStats(round, primaryScorer, getValues),
-    [round, primaryScorer, getValues]
+  const quickStats = computeQuickStats(round, primaryScorer, getValues);
+  const statSummaries = computeStatSummaries(
+    round,
+    primaryScorer,
+    detailRows
   );
   const courseSubline = formatCourseSubline(round, primaryScorer, progress.thru);
   const ownerKey = round.ownerUserId ? `user:${round.ownerUserId}` : null;
@@ -122,6 +156,34 @@ export function RoundDetailView({
         />
       </GlassCard>
 
+      {statSummaries.length > 0 ? (
+        <View>
+          <SectionLabel
+            right={
+              <Text style={styles.statProgressLabel}>
+                {scorers.length > 1 && primaryScorer
+                  ? `${primaryScorer.name} · `
+                  : ''}
+                {progress.thru ? `thru ${progress.thru}` : 'not started'}
+              </Text>
+            }>
+            Tracked stats
+          </SectionLabel>
+          <View style={styles.statGrid}>
+            {statSummaries.map((stat) => (
+              <StatTile
+                key={stat.key}
+                value={stat.value}
+                label={stat.label}
+                tone={stat.tone}
+                custom={stat.custom}
+                style={styles.statTile}
+              />
+            ))}
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.commentsWrap}>
         <SectionLabel right={<Text style={styles.commentCountLabel}>{commentCount}</Text>}>Comments</SectionLabel>
         <CommentsSection roundId={round.id} ownerUserId={round.ownerUserId ?? ''} />
@@ -141,7 +203,11 @@ function computeQuickStats(
   let girMade = 0;
   let girEntered = 0;
   for (const hole of holesInRange(round.course.holes, round.holeRange)) {
-    const applicable = applicableStatsForHole(round.enabledStatKeys, hole);
+    const applicable = applicableStatsForHole(
+      round.enabledStatKeys,
+      hole,
+      round.customStatDefinitions
+    );
     const values = getValues(scorer.id, hole.number);
     if (applicable.some((s) => s.key === 'fir') && typeof values.fir === 'boolean') {
       firEntered += 1;
@@ -158,6 +224,58 @@ function computeQuickStats(
     gir: girEntered ? `${girMade}/${girEntered}` : '—',
     girState: girEntered ? (girMade * 2 >= girEntered ? 'on' : 'no') : 'neutral',
   };
+}
+
+function computeStatSummaries(
+  round: Round,
+  scorer: RoundScorer | undefined,
+  rows: readonly HoleDetailsRow[]
+): StatSummary[] {
+  if (!scorer || !round.trackedScorerIds.includes(scorer.id)) return [];
+  const holes = holesInRange(round.course.holes, round.holeRange);
+  return enabledStatDefinitions(
+    round.enabledStatKeys,
+    round.customStatDefinitions
+  ).map((stat) => {
+    const custom = isCustomStatKey(stat.key);
+    if (stat.type === 'binary') {
+      const aggregate = aggregateBinary(rows, scorer.id, stat, holes);
+      return {
+        key: stat.key,
+        label: displayStatName(stat.key, stat.label),
+        value:
+          aggregate.denom > 0 ? `${aggregate.num}/${aggregate.denom}` : '—',
+        tone:
+          aggregate.denom === 0
+            ? 'default'
+            : custom
+              ? 'cyan'
+              : stat.key === 'gir'
+                ? 'cyan'
+                : stat.yesTone === 'bad' && aggregate.num > 0
+                  ? 'danger'
+                  : 'lime',
+        custom,
+      };
+    }
+    const aggregate = aggregateInteger(rows, scorer.id, stat, holes);
+    return {
+      key: stat.key,
+      label: displayStatName(stat.key, stat.label),
+      value: aggregate.taggedCount > 0 ? String(aggregate.sum) : '—',
+      tone:
+        aggregate.taggedCount === 0 || aggregate.sum === 0
+          ? 'default'
+          : custom
+            ? 'cyan'
+            : stat.aggregateTone === 'bad'
+              ? 'danger'
+              : stat.aggregateTone === 'good'
+                ? 'lime'
+                : 'default',
+      custom,
+    };
+  });
 }
 
 function formatCourseSubline(round: Round, scorer: RoundScorer | undefined, thru: number): string {
@@ -248,6 +366,20 @@ function makeStyles(colors: ThemeColors) {
     },
     detailCard: {
       overflow: 'hidden',
+    },
+    statGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 9,
+    },
+    statTile: {
+      flexBasis: '48%',
+      minWidth: 140,
+    },
+    statProgressLabel: {
+      color: colors.cyan,
+      fontSize: 11,
+      fontWeight: '900',
     },
     commentsWrap: {
       gap: 0,

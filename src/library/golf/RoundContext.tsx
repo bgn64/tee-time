@@ -15,8 +15,9 @@
  *     etc.), so they are online operations.
  *
  * jsonb columns (course_snapshot, participants, player_ids, teams,
- * enabled_stat_keys, tracked_scorer_ids) are returned by PostgREST as native
- * objects/arrays and written as objects — no TEXT/JSON-string boundary.
+ * enabled_stat_keys, tracked_scorer_ids, custom_stat_definitions) are returned
+ * by PostgREST as native objects/arrays and written as objects — no
+ * TEXT/JSON-string boundary.
  *
  * Hydration flags (`roundHydrated`, `currentHoleHydrated`) are exposed so
  * setup screens don't bounce a user with an in-flight round back to
@@ -38,7 +39,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { enqueueWrite } from '@/library/data/writeOutbox';
 import { supabase } from '@/library/supabase/client';
+import type { StatDefinition } from './builtInStats';
 import { defaultTeeIdForCourse } from './courseHelpers';
+import { parseCustomStatDefinitions } from './customStats';
 import {
   clearCurrentHoleForScorecard,
   readCurrentHole,
@@ -73,6 +76,7 @@ type ScorecardRow = {
   hole_range: string | null;
   enabled_stat_keys: string[] | null;
   tracked_scorer_ids: string[] | null;
+  custom_stat_definitions: unknown;
   started_at: string | null;
   completed_at: string | null;
   updated_at: string | null;
@@ -102,6 +106,7 @@ type RoundContextValue = {
     teams?: Team[];
     enabledStatKeys?: readonly string[];
     trackedScorerIds?: readonly string[];
+    customStatDefinitions?: readonly StatDefinition[];
   }) => Promise<string>;
   setCustomHoleScore: (scorerId: string, holeNumber: number, strokes: number) => Promise<void>;
   setScoreForRound: (
@@ -250,6 +255,9 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       completedAt: scorecardRow.completed_at ?? undefined,
       enabledStatKeys: asArray<string>(scorecardRow.enabled_stat_keys),
       trackedScorerIds: asArray<string>(scorecardRow.tracked_scorer_ids),
+      customStatDefinitions: parseCustomStatDefinitions(
+        scorecardRow.custom_stat_definitions
+      ),
     };
   }, [scorecardRow, scoreRows, currentHole]);
 
@@ -276,6 +284,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
       teams,
       enabledStatKeys = [],
       trackedScorerIds = [],
+      customStatDefinitions = [],
     }) => {
       if (!userId) {
         throw new Error('You must be signed in to start a round.');
@@ -363,6 +372,7 @@ export function RoundProvider({ children }: { children: ReactNode }) {
         hole_range: holeRange,
         enabled_stat_keys: [...enabledStatKeys],
         tracked_scorer_ids: [...trackedScorerIds],
+        custom_stat_definitions: [...customStatDefinitions],
         started_at: now,
         completed_at: null,
         updated_at: now,

@@ -5,16 +5,24 @@ import { ActivityIndicator, KeyboardAvoidingView, Modal, Platform, Pressable, Sc
 
 import { Avatar, GlassCard, GlassSurface, NeonButton, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
 import { ScrambleBody } from '@/components/scoring/ScrambleBody';
+import { CustomStatSheet } from '@/components/scoring/CustomStatSheet';
 import { TeePickerSheet, teeSwatch } from '@/components/scoring/TeePickerSheet';
-import { defaultEnabledStatKeys, type StatKey } from '@/library/golf/builtInStats';
+import {
+  BUILT_IN_STATS,
+  defaultEnabledStatKeys,
+  type StatDefinition,
+  type StatKey,
+} from '@/library/golf/builtInStats';
 import { defaultTeeIdForCourse } from '@/library/golf/courseHelpers';
 import { createCustomPlayer, softDeleteCustomPlayer, useCustomPlayers } from '@/library/golf/customPlayers';
+import { isCustomStatKey, useCustomStats } from '@/library/golf/customStats';
 import { customParticipantKey, userParticipantKey } from '@/library/golf/participantKey';
 import { useRound } from '@/library/golf/RoundContext';
 import { buildInitialScrambleState, buildTeamsFromGroups } from '@/library/golf/teams';
 import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
 import { useCourse } from '@/library/golf/useCourses';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
+import { displayStatName } from '@/library/golf/statDisplay';
 import { useRequiredAccount } from '@/library/social/AccountContext';
 import { useFriends } from '@/library/social/FriendsContext';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -24,14 +32,6 @@ import type { ScoringRule, Tee, Team } from '@/types/golf';
 
 const MAX_PLAYERS = 4;
 const NEW_TEAM_PLACEHOLDER = 'New team';
-const STAT_OPTIONS: readonly { key: StatKey; label: string }[] = [
-  { key: 'fir', label: 'Fairways' },
-  { key: 'gir', label: 'Greens' },
-  { key: 'putts', label: 'Putts' },
-  { key: 'ob', label: 'Penalties' },
-  { key: 'sand', label: 'Sand' },
-];
-
 type FriendEntry = { kind: 'friend'; participantKey: string; userId: string };
 type CustomEntry = { kind: 'custom'; participantKey: string; customPlayerId: string };
 type ListEntry = FriendEntry | CustomEntry;
@@ -46,6 +46,11 @@ export default function PlayersScreen() {
   const account = useRequiredAccount();
   const { friends } = useFriends();
   const { customPlayers: customRows } = useCustomPlayers(account.userId);
+  const {
+    definitions: customStatDefinitions,
+    isLoading: customStatsLoading,
+    error: customStatsError,
+  } = useCustomStats(account.userId);
   const { rounds: completedRounds } = useCompletedRounds();
   const defaultCourseId = useMemo(() => {
     const latest = completedRounds.reduce<(typeof completedRounds)[number] | null>(
@@ -74,11 +79,20 @@ export default function PlayersScreen() {
   const [scoringRule, setScoringRule] = useState<ScoringRule>('stroke');
   const [roundTeeId, setRoundTeeId] = useState<string | undefined>(undefined);
   const [teePickerOpen, setTeePickerOpen] = useState(false);
+  const [customStatSheetOpen, setCustomStatSheetOpen] = useState(false);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
-  const [enabledStatKeys, setEnabledStatKeys] = useState<readonly StatKey[]>(() =>
-    defaultEnabledStatKeys().filter((key) => key !== 'ob')
+  const [enabledStatKeys, setEnabledStatKeys] = useState<readonly StatKey[]>(
+    () => defaultEnabledStatKeys()
   );
+  const statOptions = useMemo(
+    () => [...BUILT_IN_STATS, ...customStatDefinitions],
+    [customStatDefinitions]
+  );
+  const selectedBuiltInCount = enabledStatKeys.filter(
+    (key) => !isCustomStatKey(key)
+  ).length;
+  const selectedCustomCount = enabledStatKeys.filter(isCustomStatKey).length;
 
   const defaultTeeId = course ? defaultTeeIdForCourse(course) : undefined;
   const [scrambleInit] = useState(() => buildInitialScrambleState([selfKey], undefined));
@@ -201,12 +215,21 @@ export default function PlayersScreen() {
     }
   }
   const toggleStatKey = (key: StatKey) => setEnabledStatKeys((prev) => (prev.includes(key) ? prev.filter((x) => x !== key) : [...prev, key]));
+  const handleCustomStatCreated = (definition: StatDefinition) => {
+    setEnabledStatKeys((prev) =>
+      prev.includes(definition.key) ? prev : [...prev, definition.key]
+    );
+    setCustomStatSheetOpen(false);
+  };
 
   async function handleStart() {
     if (starting || selectedKeys.length === 0 || !courseReady) return;
     setStarting(true); setStartError(null);
     try {
       const finalEnabledStatKeys = enabledStatKeys;
+      const selectedCustomDefinitions = customStatDefinitions.filter((stat) =>
+        finalEnabledStatKeys.includes(stat.key)
+      );
       if (scoringRule === 'scramble') {
         if (!scrambleCanStart || scrambleTeams.length === 0) throw new Error('Every team needs at least one player.');
         await startRound({
@@ -218,6 +241,7 @@ export default function PlayersScreen() {
           teams: scrambleTeams,
           enabledStatKeys: finalEnabledStatKeys,
           trackedScorerIds: finalEnabledStatKeys.length > 0 ? scrambleTeams.map((t) => t.id) : [],
+          customStatDefinitions: selectedCustomDefinitions,
         });
       } else {
         const teeIds = Object.fromEntries(selectedKeys.map((key) => [key, selectedTeeId]));
@@ -228,6 +252,7 @@ export default function PlayersScreen() {
           teeIds,
           enabledStatKeys: finalEnabledStatKeys,
           trackedScorerIds: finalEnabledStatKeys.length > 0 ? selectedKeys : [],
+          customStatDefinitions: selectedCustomDefinitions,
         });
       }
       navigation.reset({ index: 1, routes: [{ name: 'index' as never }, { name: 'scoring' as never }] });
@@ -312,13 +337,39 @@ export default function PlayersScreen() {
           </GlassSurface>
         </Pressable>
 
-        <SectionLabel>Track stats</SectionLabel>
+        <SectionLabel
+          right={
+            <Text style={styles.statCount}>
+              {selectedBuiltInCount} built-in · {selectedCustomCount} custom
+            </Text>
+          }>
+          Track stats
+        </SectionLabel>
         <View style={styles.statChips}>
-          {STAT_OPTIONS.map((stat) => {
+          {statOptions.map((stat) => {
             const selected = enabledStatKeys.includes(stat.key);
-            return <Pressable key={stat.key} onPress={() => toggleStatKey(stat.key)} style={({ pressed }) => [styles.statToggle, selected && styles.statToggleOn, pressed && styles.pressed]}><Text style={[styles.statMark, selected && styles.statMarkOn]}>{selected ? '✓' : '+'}</Text><Text style={[styles.statText, selected && styles.statTextOn]}>{stat.label}</Text></Pressable>;
+            const custom = isCustomStatKey(stat.key);
+            return <Pressable key={stat.key} onPress={() => toggleStatKey(stat.key)} style={({ pressed }) => [styles.statToggle, custom && styles.statToggleCustom, selected && styles.statToggleOn, pressed && styles.pressed]}><Text style={[styles.statMark, selected && styles.statMarkOn]}>{selected ? '✓' : '+'}</Text><Text style={[styles.statText, selected && styles.statTextOn]}>{displayStatName(stat.key, stat.label)}</Text></Pressable>;
           })}
         </View>
+        <Pressable
+          disabled={customStatsLoading}
+          onPress={() => setCustomStatSheetOpen(true)}
+          style={({ pressed }) => [
+            styles.addStat,
+            customStatsLoading && styles.disabled,
+            pressed && !customStatsLoading ? styles.pressed : null,
+          ]}>
+          <View style={styles.addStatIcon}>
+            <Ionicons name="add" size={16} color={colors.cyan} />
+          </View>
+          <Text style={styles.addStatText}>Add custom stat</Text>
+        </Pressable>
+        {customStatsError ? (
+          <Text style={styles.startError}>
+            Could not load custom stats: {customStatsError.message}
+          </Text>
+        ) : null}
         {startError ? <Text style={styles.startError}>{startError}</Text> : null}
       </ScrollView>
       <View style={styles.footerWrap} pointerEvents="box-none">
@@ -327,6 +378,12 @@ export default function PlayersScreen() {
         </GlassSurface>
       </View>
       <TeePickerSheet visible={teePickerOpen && hasTees} scorerName="Round" tees={courseTees} selectedTeeId={selectedTeeId} onCancel={() => setTeePickerOpen(false)} onPick={(teeId) => { setRoundTeeId(teeId); setTeePickerOpen(false); }} />
+      <CustomStatSheet
+        visible={customStatSheetOpen}
+        ownerUserId={account.userId}
+        onCancel={() => setCustomStatSheetOpen(false)}
+        onCreated={handleCustomStatCreated}
+      />
       <NamePromptModal visible={namePromptOpen} value={namePromptValue} setValue={setNamePromptValue} inputRef={namePromptInputRef} onCancel={cancelNamePrompt} onSubmit={submitNamePrompt} styles={styles} colors={colors} />
       <CustomPlayerMenu target={menuTarget} onClose={() => setMenuTarget(null)} onDelete={(id) => void handleDeleteCustom(id)} styles={styles} />
     </View>
@@ -469,11 +526,16 @@ function makeStyles(colors: ThemeColors) {
     toggleRowSep: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.hairline },
     statChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
     statToggle: { flexDirection: 'row', alignItems: 'center', gap: 5, borderRadius: 999, borderWidth: 1, borderColor: colors.glassStroke, backgroundColor: colors.glassFill, paddingVertical: 8, paddingHorizontal: 10 },
+    statToggleCustom: { borderStyle: 'dashed' },
     statToggleOn: { borderColor: colors.lime, backgroundColor: colors.glowLime },
     statMark: { color: colors.textMuted, fontSize: 12, fontWeight: '900' },
     statMarkOn: { color: colors.lime },
     statText: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
     statTextOn: { color: colors.textTitle },
+    statCount: { color: colors.cyan, fontSize: 11, fontWeight: '900' },
+    addStat: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, paddingHorizontal: 12, paddingVertical: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.cyan, backgroundColor: colors.glowCyan, borderRadius: 14 },
+    addStatIcon: { width: 24, height: 24, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.glowCyan },
+    addStatText: { color: colors.cyan, fontSize: 12, fontWeight: '900' },
     startError: { color: colors.accent, fontSize: 13, fontWeight: '800', textAlign: 'center', marginTop: 4, marginBottom: 10 },
     footerWrap: { position: 'absolute', left: 0, right: 0, bottom: 12, alignItems: 'center', paddingHorizontal: 12 },
     footer: { width: '100%', maxWidth: PHONE_MAX_WIDTH, padding: 10, borderRadius: 24 },
