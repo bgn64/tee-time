@@ -1,6 +1,6 @@
 surface: new-round-course-picker
 title: New round course picker
-status: approved
+status: implemented
 interaction_fidelity: simulated
 source:
   route: /(tabs)/(score)/new
@@ -61,3 +61,12 @@ reconciliation:
     - src/components/AppHeader.tsx
     - src/app/(tabs)/_layout.tsx
     - src/library/theme/themes.ts
+implementation:
+  files:
+    - src/app/(tabs)/(score)/new/index.tsx
+    - src/components/scoring/CourseRow.tsx
+  backend_changes: none
+  verification:
+    typescript: passed
+    lint: passed
+    visual: skipped_by_user

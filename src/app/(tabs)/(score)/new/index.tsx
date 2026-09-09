@@ -2,11 +2,13 @@
  * Course Selection — step 1 of the new-round flow, opened from the
  * Rounds tab's hub via the "New round" action.
  *
- * Search-driven picker over the `public.courses` catalog. Typing into
- * the search bar issues debounced REST queries; tapping a row returns
- * to the single New round form with the selected course id. Catalog rows
- * without per-hole scorecard data are enriched lazily by `useCourse(id)` on the next screen, so the
- * picker itself doesn't need to discriminate enriched vs un-enriched.
+ * The idle state shows the signed-in user's three most recently played
+ * distinct courses and latest score at each. Typing into the search bar
+ * switches to debounced REST queries over the `public.courses` catalog;
+ * tapping either kind of row returns to the single New round form with the
+ * selected course id. Catalog rows without per-hole scorecard data are
+ * enriched lazily by `useCourse(id)` on the next screen, so the picker itself
+ * doesn't need to discriminate enriched vs un-enriched.
  *
  * Redirect gate: if a round is already in flight, send the user
  * straight to `/scoring` so they can't deep-link to the picker and
@@ -31,8 +33,11 @@ import {
 import { GlassCard, GlassSurface, PHONE_MAX_WIDTH, SectionLabel } from '@/components/aurora';
 import { AddCourseRow } from '@/components/course/AddCourseRow';
 import { CourseRow } from '@/components/scoring/CourseRow';
+import { getScorerProgress, scorerIdForUser } from '@/library/golf/scoring';
+import { useCompletedRounds } from '@/library/golf/useCompletedRounds';
 import { useCoursesSearch } from '@/library/golf/useCourses';
 import { useRound } from '@/library/golf/RoundContext';
+import { useAccount } from '@/library/social/AccountContext';
 import { useTheme } from '@/library/theme/ThemeContext';
 
 function getGreeting(): string {
@@ -44,11 +49,38 @@ function getGreeting(): string {
 
 export default function CourseSelectionScreen() {
   const { colors } = useTheme();
+  const { account } = useAccount();
   const { currentRound, roundHydrated } = useRound();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [query, setQuery] = useState('');
   const { courses, loading, error } = useCoursesSearch(query);
+  const { rounds: completedRounds, isLoading: completedRoundsLoading } = useCompletedRounds();
+  const recentCourses = useMemo(() => {
+    const userId = account?.userId;
+    if (!userId) return [];
+
+    const seenCourseIds = new Set<string>();
+    const recent: { course: (typeof completedRounds)[number]['course']; score: number }[] = [];
+    const newestFirst = [...completedRounds].sort(
+      (a, b) =>
+        Date.parse(b.completedAt ?? b.startedAt) - Date.parse(a.completedAt ?? a.startedAt)
+    );
+
+    for (const round of newestFirst) {
+      const scorerId = scorerIdForUser(round, userId);
+      if (!scorerId || seenCourseIds.has(round.course.id)) continue;
+
+      const progress = getScorerProgress(round, scorerId);
+      if (progress.thruCount === 0) continue;
+
+      seenCourseIds.add(round.course.id);
+      recent.push({ course: round.course, score: progress.relativeScore });
+      if (recent.length === 3) break;
+    }
+
+    return recent;
+  }, [account?.userId, completedRounds]);
 
   if (!roundHydrated) {
     return (
@@ -64,6 +96,8 @@ export default function CourseSelectionScreen() {
 
   const trimmedQuery = query.trim();
   const showEmptyPrompt = trimmedQuery.length === 0;
+  const showRecentCourses = showEmptyPrompt && recentCourses.length > 0;
+  const showEmptyHelper = showEmptyPrompt && !completedRoundsLoading && !showRecentCourses;
   const showNoResults = !showEmptyPrompt && !loading && !error && courses.length === 0;
 
   return (
@@ -97,10 +131,35 @@ export default function CourseSelectionScreen() {
           <Text style={styles.errorText}>{error}</Text>
         ) : null}
 
-        {showEmptyPrompt ? (
+        {showEmptyPrompt && completedRoundsLoading ? (
+          <ActivityIndicator color={colors.lime} style={styles.recentLoading} />
+        ) : null}
+
+        {showEmptyHelper ? (
           <Text style={styles.helperText}>
             Start typing a course name to see matches.
           </Text>
+        ) : null}
+
+        {showRecentCourses ? (
+          <GlassCard strong style={styles.resultsCard}>
+            <SectionLabel style={styles.sectionLabel}>Recently played</SectionLabel>
+            <View style={styles.list}>
+              {recentCourses.map(({ course, score }) => (
+                <CourseRow
+                  key={course.id}
+                  course={course}
+                  lastRoundScore={score}
+                  onPress={() =>
+                    router.replace({
+                      pathname: '/(tabs)/(score)' as never,
+                      params: { courseId: course.id },
+                    })
+                  }
+                />
+              ))}
+            </View>
+          </GlassCard>
         ) : null}
 
         {showNoResults ? (
@@ -212,6 +271,10 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '700',
       color: colors.textMuted,
       paddingVertical: 8,
+    },
+    recentLoading: {
+      alignSelf: 'flex-start',
+      marginVertical: 8,
     },
     errorText: {
       fontSize: 13,
