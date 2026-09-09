@@ -5,15 +5,14 @@ description: >-
   background contract, and the shared components/aurora/* primitives. Use when
   implementing or restyling any UI, changing colors / theme tokens / backgrounds,
   building a new screen or component, or working around react-native-web visual
-  quirks. Pairs with mockup-driven-design (the mockup is the spec; this is how to
-  build it in React Native).
+  quirks.
 ---
 
 # Aurora design system
 
 How the "Aurora Glass" look is implemented in the React Native (Expo, web-first)
-app. The visual spec lives in the mockup (`mockup-driven-design`); this skill is
-how to realize it in code.
+app. The approved canonical surface mockup from `mockup-contract` is the visual
+spec; this skill explains how to realize it in code.
 
 Validate every change with `npx tsc --noEmit` and `npm run lint`.
 
@@ -83,5 +82,4 @@ break. Known traps:
 Reads are React Query (`@tanstack/react-query`) hooks over Supabase REST/RPC,
 refreshed on demand/focus; writes go through a persistent outbox
 (`src/library/data/writeOutbox.ts`). Backend schema/policies live in
-`supabase/migrations/`. Changing backend behavior is gated — see
-`feedback-to-feature`.
+`supabase/migrations/`. Get explicit user approval before changing backend behavior.
