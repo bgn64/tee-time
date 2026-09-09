@@ -69,4 +69,4 @@ implementation:
   verification:
     typescript: passed
     lint: passed
-    visual: skipped_by_user
+    visual: passed_with_local_supabase_fixtures

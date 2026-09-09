@@ -39,5 +39,7 @@ Date: 2026-09-09
 - `npx tsc --noEmit` — exit 0.
 - `npm run lint` — exit 0.
 - Editor diagnostics and `git diff --check` — clean.
-- Authenticated app-versus-mockup visual verification was skipped at the user's
-  direction because this worktree has no local Supabase environment configured.
+- Authenticated app-versus-mockup visual verification passed at 390 x 844 using
+  the deterministic local Supabase fixtures. Confirmed the three expected
+  scores, search replacement, course deduplication/limit, and recent-row
+  selection into New round setup.

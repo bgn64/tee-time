@@ -32,16 +32,38 @@ Production access stays invite-only: Supabase public signup is disabled; magic-l
 
 ## Quick start (local)
 
+Docker Desktop must be running. The official Supabase CLI starts an isolated
+local Postgres, Auth, REST API, Studio, and Mailpit stack, applies every
+migration, and loads deterministic development fixtures.
+
 ```powershell
 npm install
-npx supabase start            # local Postgres + auth + studio (Docker required)
-npm run web
+npm run local:start
 ```
 
-Local `.env.local` (gitignored) needs at minimum:
+Open `http://localhost:8081` and sign in as `dev@tee-time.test`. The one-time
+code is captured locally at `http://127.0.0.1:55324`; no email leaves the
+machine. Supabase Studio is available at `http://127.0.0.1:55323`.
+
+The local launcher injects the Docker stack's URL and anon key into Expo without
+creating or overwriting `.env.local`. Reset all local data and reload the same
+fixtures, or stop the containers, with:
+
+```powershell
+npm run local:reset
+npm run local:stop
+```
+
+The deterministic dataset includes one profile, four fully enriched courses,
+and five completed rounds. It deliberately contains an older duplicate course
+and a fourth distinct course so the recent-course ordering, deduplication, and
+three-row limit can be verified.
+
+To run against a hosted Supabase environment instead, use `npm run web` and
+provide a gitignored `.env.local` with:
 
 ```text
-EXPO_PUBLIC_SUPABASE_URL=<staging URL OR http://127.0.0.1:54321 for local>
+EXPO_PUBLIC_SUPABASE_URL=<staging URL>
 EXPO_PUBLIC_SUPABASE_ANON_KEY=<matching anon/publishable key>
 ```
 
@@ -70,7 +92,10 @@ src/
   types/                Course / Tee / Hole / RoundParticipant / etc.
 
 supabase/
-  migrations/           002_…009_… — applied in order by `supabase db push`
+  config.toml           Docker-backed local Supabase configuration
+  migrations/           production schema history, applied in order
+  seeds/                deterministic local-only auth and app fixtures
+  templates/            local Auth email templates
   tests/                (optional) Postgres-level RLS / RPC tests
 
 powersync/
@@ -79,6 +104,7 @@ powersync/
   sync-config.yaml      sync streams — deployed to prod by CI when this file changes
 
 scripts/
+  start-local.ts        injects local Supabase config and starts Expo web
   ingest-opengolf.ts    upserts OpenGolfAPI bulk CSV into the `courses` table
   validate-cutover.ts   one-off post-cutover validation (kept for posterity)
 
