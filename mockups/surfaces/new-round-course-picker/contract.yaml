@@ -1,6 +1,6 @@
 surface: new-round-course-picker
 title: New round course picker
-status: reconciled
+status: approved
 interaction_fidelity: simulated
 source:
   route: /(tabs)/(score)/new
@@ -14,16 +14,36 @@ viewports:
     width: 1440
     height: 1000
 states:
-  - id: idle
-    description: Empty search shows the current helper prompt and add-course action.
+  - id: recent
+    description: Empty search shows the three most recently completed distinct courses and the signed-in user's latest score at each.
   - id: results
     description: A non-empty query replaces the helper with matching catalog courses.
+  - id: no-history
+    description: A user without completed rounds sees the existing empty-search helper prompt.
 interactions:
   - trigger: Type any non-whitespace text in the course search field.
-    outcome: Show the deterministic Matching courses fixture.
+    outcome: Replace recent courses with the deterministic Matching courses fixture.
   - trigger: Clear the course search field.
-    outcome: Restore the empty-search helper prompt.
+    outcome: Restore recent courses, or the helper prompt when the user has no completed rounds.
+  - trigger: Select a recent-course row.
+    outcome: Navigate to the existing New round form with that course selected.
 fixtures:
+  recent_courses:
+    rule: Distinct courses ordered by latest completed_at descending, limited to 3.
+    score: Signed-in user's final relative-to-par score from the latest completed round at that course.
+    courses:
+      - name: Fraserview Golf Course
+        location: Vancouver, BC
+        score_relative_to_par: 4
+        display_score: "+4"
+      - name: University Golf Club
+        location: Vancouver, BC
+        score_relative_to_par: 0
+        display_score: E
+      - name: Northlands Golf Course
+        location: North Vancouver, BC
+        score_relative_to_par: -2
+        display_score: "-2"
   search_results:
     query: north
     courses:
