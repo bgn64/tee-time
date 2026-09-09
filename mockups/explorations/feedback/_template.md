@@ -1,7 +1,7 @@
 <!--
   Feedback log for one feedback→feature run. Copy this file to
   `<topic>.md` in this folder at the start of a run (see the
-  `feedback-to-feature` skill). Commit it on the feature branch.
+  `mockup-contract` skill). Commit it on the feature branch.
 -->
 
 # Feedback: <topic>
@@ -15,7 +15,7 @@ Date: <YYYY-MM-DD>
 
 - Verbatim: "<exact user feedback>"
 - Triage: clean | needs-backend | redesign | decline
-- Proposed mockup change: <what changes in 04-aurora-glass.html>
+- Proposed mockup change: <what changes in the canonical surface mockup>
 - Decision: accepted | overridden → <final decision, if the user changed it>
 - Backend: none | <migration / RPC / policy required> (requires explicit approval)
 

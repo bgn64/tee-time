@@ -10,17 +10,20 @@ with an "Aurora Glass" visual system.
 - Work on a feature branch named `bgn64/<topic>`, cut from the latest `main`.
 - Ask before committing or pushing. Add the trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` to commits.
 
-## Responding to user feedback
+## UI changes
 
-When the user gives feedback / feature requests, follow the `feedback-to-feature`
-skill (`.github/skills/feedback-to-feature/`). The loop, gated at each step:
+For every user-facing UI change, load `mockup-contract` first. Its approval gates
+are mandatory. Tee-time defaults:
 
-1. Clean tree + latest `main`, then branch.
-2. Log feedback → design-only triage (no `src/` reading) → edit the mockup. Skill: `mockup-driven-design`.
-3. User approves the mockup (he verifies it himself — don't screenshot the mockup).
-4. Read the app; diff mockup vs running app with screenshots; plan. Skill: `visual-verification`. Backend changes need explicit user permission.
-5. Implement UI + approved backend; verify against the mockup; batch edits before screenshotting.
+- Canonical mockups: `mockups/surfaces/<surface>/`; catalog: `mockups/index.html`.
+- Legacy explorations: `mockups/explorations/` (reference only).
+- Keep each canonical `index.html` self-contained and usable from `file://`.
+- Start web: `npm run web`; default URL: `http://localhost:8081`.
+- Use the available browser/UI automation MCP; discover its tools at runtime.
+- Use `aurora-design-system` when implementing.
 
-Design-system reference for implementation: `aurora-design-system`.
+Reconcile only the surface being changed. Ask before the separate baseline and
+approved-design commits. Never alter an approved mockup to excuse an implementation
+deviation; revise and reapprove the design first.
 
-Skills live in `.github/skills/`; load the relevant one for the task at hand.
+Get explicit permission before writing backend, schema, RPC, or policy changes.

@@ -1,0 +1,21 @@
+version: 1
+surface: replace-with-surface-name
+canonical: index.html
+status: reconciled
+routes:
+  - /replace-with-route
+viewports:
+  - name: mobile
+    width: 390
+    height: 844
+states:
+  - name: default
+    fixture: default
+interactions:
+  - name: replace-with-interaction
+    action: replace-with-user-action
+    outcome: replace-with-visible-result
+    fidelity: simulated
+fixtures:
+  - name: default
+    purpose: Show the normal populated state
