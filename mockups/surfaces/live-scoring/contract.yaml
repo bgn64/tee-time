@@ -1,0 +1,55 @@
+surface: live-scoring
+title: Live scoring
+status: reconciled
+interaction_fidelity: simulated
+source:
+  route: /(tabs)/(score)/scoring
+  web_path: /scoring
+  components:
+    - src/components/round/ScoringRoundView.tsx
+    - src/components/round/LensSwitcher.tsx
+    - src/components/round/ScoringCardLens.tsx
+    - src/components/round/ScoringChatLens.tsx
+viewports:
+  - name: mobile
+    width: 390
+    height: 844
+  - name: wide-web
+    width: 1440
+    height: 1000
+states:
+  - id: hole
+    description: Current per-hole score and tracked-stat entry surface.
+  - id: card
+    description: Read-only standings and running scorecard through the scored holes.
+  - id: chat
+    description: Live comments and reply composer; fixture has no comments.
+interactions:
+  - trigger: Select Hole, Card, or Chat in the segmented control.
+    outcome: Replace the scoring body while preserving the course header and live round.
+fixtures:
+  round:
+    id: local-round-live-stats
+    course: Fraserview Golf Course
+    scoring_rule: stroke
+    current_hole: 1
+    holes_scored: 12
+    running_score: "+4"
+    scorer: testgolfer
+    enabled_stats:
+      - fir
+      - gir
+      - putts
+      - ob
+      - sand
+    stat_holes_entered: 12
+reconciliation:
+  method: live-app-inspected
+  environment: Docker-backed local Supabase fixtures
+  inspected_states:
+    - hole
+    - card
+    - chat
+  inspected_viewports:
+    - 390x844
+    - 1440x1000
