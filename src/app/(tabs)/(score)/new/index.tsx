@@ -157,7 +157,7 @@ export default function CourseSelectionScreen() {
                   course={course}
                   lastRoundScore={score}
                   onPress={() =>
-                    router.replace({
+                    router.dismissTo({
                       pathname: '/(tabs)/(score)' as never,
                       params: { courseId: course.id },
                     })
@@ -183,7 +183,7 @@ export default function CourseSelectionScreen() {
                   key={c.id}
                   course={c}
                   onPress={() =>
-                    router.replace({
+                    router.dismissTo({
                       pathname: '/(tabs)/(score)' as never,
                       params: { courseId: c.id },
                     })

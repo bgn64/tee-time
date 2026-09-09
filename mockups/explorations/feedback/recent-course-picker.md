@@ -33,6 +33,8 @@ Date: 2026-09-09
   last-round score is supplied.
 - Stroke-play and scramble rounds share the existing scorer-resolution and
   progress helpers.
+- Course selection dismisses back to the existing New round form with updated
+  route params instead of stacking a duplicate form with a back affordance.
 
 ## Verification
 
@@ -43,3 +45,5 @@ Date: 2026-09-09
   the deterministic local Supabase fixtures. Confirmed the three expected
   scores, search replacement, course deduplication/limit, and recent-row
   selection into New round setup.
+- Recent and typed-search selections both return to the root New round route
+  with the selected course and no unexpected header back chevron.
