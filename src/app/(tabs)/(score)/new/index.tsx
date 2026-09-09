@@ -27,6 +27,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 
@@ -51,6 +52,7 @@ export default function CourseSelectionScreen() {
   const { colors } = useTheme();
   const { account } = useAccount();
   const { currentRound, roundHydrated } = useRound();
+  const { width: viewportWidth } = useWindowDimensions();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const [query, setQuery] = useState('');
@@ -144,7 +146,11 @@ export default function CourseSelectionScreen() {
         {showRecentCourses ? (
           <GlassCard strong style={styles.resultsCard}>
             <SectionLabel style={styles.sectionLabel}>Recently played</SectionLabel>
-            <View style={styles.list}>
+            <View
+              style={[
+                styles.list,
+                viewportWidth < PHONE_MAX_WIDTH ? styles.recentListNarrow : null,
+              ]}>
               {recentCourses.map(({ course, score }) => (
                 <CourseRow
                   key={course.id}
@@ -257,8 +263,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
     list: {
       gap: 10,
     },
+    recentListNarrow: {
+      marginRight: -12,
+    },
     resultsCard: {
       marginTop: 8,
+      padding: 14,
     },
     addRow: {
       marginTop: 12,

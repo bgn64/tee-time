@@ -39,7 +39,7 @@ export function CourseRow({ course, onPress, detail, lastRoundScore }: Props) {
 
   return (
     <Pressable
-      style={styles.row}
+      style={[styles.row, lastRoundScore != null ? styles.scoredRow : null]}
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={
@@ -64,14 +64,18 @@ export function CourseRow({ course, onPress, detail, lastRoundScore }: Props) {
         ) : null}
       </View>
       {lastRoundScore != null && scoreColor ? (
-        <View style={styles.lastScore}>
-          <NumericText style={[styles.scoreValue, { color: scoreColor }]}>
-            {formatScore(lastRoundScore)}
-          </NumericText>
-          <Text style={styles.scoreCaption}>Last round</Text>
+        <View style={styles.trailingScore}>
+          <View style={styles.lastScore}>
+            <NumericText style={[styles.scoreValue, { color: scoreColor }]}>
+              {formatScore(lastRoundScore)}
+            </NumericText>
+            <Text style={styles.scoreCaption}>Last round</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </View>
-      ) : null}
-      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+      )}
     </Pressable>
   );
 }
@@ -88,6 +92,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderRadius: 18,
       borderWidth: 1,
       borderColor: colors.glassStroke,
+    },
+    scoredRow: {
+      paddingRight: 11,
     },
     icon: {
       width: 36,
@@ -126,6 +133,12 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       minWidth: 42,
       alignItems: 'flex-end',
       gap: 1,
+    },
+    trailingScore: {
+      flexShrink: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
     },
     scoreValue: {
       fontSize: 17,
