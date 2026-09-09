@@ -1,0 +1,43 @@
+surface: new-round-course-picker
+title: New round course picker
+status: reconciled
+interaction_fidelity: simulated
+source:
+  route: /(tabs)/(score)/new
+  web_path: /new
+  component: src/app/(tabs)/(score)/new/index.tsx
+viewports:
+  - name: mobile
+    width: 390
+    height: 844
+  - name: wide-web
+    width: 1440
+    height: 1000
+states:
+  - id: idle
+    description: Empty search shows the current helper prompt and add-course action.
+  - id: results
+    description: A non-empty query replaces the helper with matching catalog courses.
+interactions:
+  - trigger: Type any non-whitespace text in the course search field.
+    outcome: Show the deterministic Matching courses fixture.
+  - trigger: Clear the course search field.
+    outcome: Restore the empty-search helper prompt.
+fixtures:
+  search_results:
+    query: north
+    courses:
+      - name: North Shore Golf Club
+        location: Vancouver, BC
+      - name: Northlands Golf Course
+        location: North Vancouver, BC
+reconciliation:
+  method: source-inspected
+  blocker: Local Expo render requires Supabase environment variables that are not present in this worktree.
+  inspected:
+    - src/app/(tabs)/(score)/new/index.tsx
+    - src/components/scoring/CourseRow.tsx
+    - src/components/course/AddCourseRow.tsx
+    - src/components/AppHeader.tsx
+    - src/app/(tabs)/_layout.tsx
+    - src/library/theme/themes.ts
