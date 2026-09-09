@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>New Round Course Picker - Recent Courses Proposal</title>
+<style>
+  :root {
+    --canvas: #151820;
+    --night: #05070c;
+    --night-top: #13283a;
+    --night-violet: #231a44;
+    --screen-top: #0c1018;
+    --screen-bottom: #0a0e16;
+    --lime: #b6ff3b;
+    --cyan: #39e6c6;
+    --text-title: #eaf2ee;
+    --text-body: #c4d0dc;
+    --text-muted: #93a3b3;
+    --glass: rgba(255,255,255,0.06);
+    --glass-strong: rgba(255,255,255,0.09);
+    --stroke: rgba(255,255,255,0.15);
+    --hairline: rgba(255,255,255,0.07);
+    --glow-cyan: rgba(57,230,198,0.12);
+  }
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    color: var(--text-body);
+    background: var(--canvas);
+    font-family: "Avenir Next", Avenir, "Segoe UI", sans-serif;
+    letter-spacing: 0;
+  }
+  button, input { font: inherit; letter-spacing: 0; }
+  .stage {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: minmax(180px, 240px) minmax(320px, 480px);
+    justify-content: center;
+    gap: 48px;
+    padding: 28px;
+  }
+  .controls {
+    align-self: start;
+    position: sticky;
+    top: 28px;
+    padding-top: 28px;
+  }
+  .controls p { margin: 0; }
+  .controls .eyebrow {
+    color: var(--cyan);
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+  .controls h1 {
+    margin: 8px 0 10px;
+    color: var(--text-title);
+    font-size: 24px;
+    line-height: 1.1;
+  }
+  .controls .note {
+    color: var(--text-muted);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .state-nav { display: grid; gap: 8px; margin-top: 22px; }
+  .state-nav button {
+    appearance: none;
+    border: 1px solid var(--stroke);
+    border-radius: 8px;
+    padding: 9px 11px;
+    color: var(--text-body);
+    background: var(--glass);
+    text-align: left;
+    cursor: pointer;
+  }
+  .state-nav button[aria-current="true"] {
+    color: var(--night);
+    border-color: var(--lime);
+    background: var(--lime);
+    font-weight: 800;
+  }
+  .phone {
+    width: 100%;
+    min-height: calc(100vh - 56px);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background:
+      radial-gradient(circle at 8% 12%, rgba(57,230,198,0.13), transparent 34%),
+      radial-gradient(circle at 95% 30%, rgba(157,123,255,0.16), transparent 38%),
+      linear-gradient(180deg, var(--screen-top), var(--screen-bottom));
+    border: 1px solid var(--stroke);
+    box-shadow: 0 28px 80px rgba(0,0,0,0.38);
+  }
+  .app-header {
+    height: 52px;
+    flex: 0 0 52px;
+    display: flex;
+    align-items: center;
+    padding: 0 14px;
+  }
+  .back {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 0;
+    border: 0;
+    color: var(--lime);
+    background: transparent;
+    font-size: 15px;
+    font-weight: 700;
+  }
+  .back span { font-size: 25px; line-height: 1; }
+  main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 16px 36px;
+  }
+  .hero { margin-bottom: 16px; }
+  .greeting {
+    margin: 0;
+    color: var(--cyan);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+  }
+  .title {
+    margin: 4px 0 0;
+    color: var(--text-title);
+    font-size: 30px;
+    font-weight: 900;
+    line-height: 1.17;
+  }
+  .subtitle {
+    margin: 6px 0 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 19px;
+  }
+  .search {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    margin-bottom: 14px;
+    border: 1px solid var(--stroke);
+    border-radius: 18px;
+    background: var(--glass-strong);
+    box-shadow: 0 0 28px rgba(182,255,59,0.05);
+  }
+  .search-mark {
+    width: 18px;
+    height: 18px;
+    position: relative;
+    flex: 0 0 18px;
+  }
+  .search-mark::before {
+    content: "";
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    border: 2px solid var(--text-muted);
+    border-radius: 50%;
+  }
+  .search-mark::after {
+    content: "";
+    position: absolute;
+    width: 7px;
+    height: 2px;
+    left: 11px;
+    top: 12px;
+    background: var(--text-muted);
+    transform: rotate(45deg);
+    transform-origin: left center;
+    border-radius: 2px;
+  }
+  .search input {
+    width: 100%;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    outline: none;
+    color: var(--text-body);
+    background: transparent;
+    font-size: 15px;
+  }
+  .search input::placeholder { color: var(--text-muted); opacity: 1; }
+  .helper {
+    margin: 0;
+    padding: 8px 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .results-card {
+    display: none;
+    margin-top: 8px;
+    padding: 14px;
+    border: 1px solid var(--stroke);
+    border-radius: 18px;
+    background: var(--glass-strong);
+  }
+  .section-label {
+    margin: 0 0 11px;
+    color: var(--text-muted);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+  }
+  .course-list { display: grid; gap: 10px; }
+  .course-row, .add-course {
+    width: 100%;
+    min-height: 62px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--stroke);
+    border-radius: 18px;
+    color: inherit;
+    background: var(--glass);
+    text-align: left;
+    cursor: pointer;
+  }
+  .course-icon, .add-icon {
+    width: 36px;
+    height: 36px;
+    flex: 0 0 36px;
+    display: grid;
+    place-items: center;
+    border-radius: 14px;
+    border: 1px solid var(--cyan);
+    color: var(--cyan);
+    background: var(--glow-cyan);
+    font-size: 19px;
+    font-weight: 600;
+  }
+  .add-icon { border-style: dashed; border-radius: 12px; font-size: 24px; }
+  .course-copy { min-width: 0; flex: 1; }
+  .course-name, .add-title {
+    display: block;
+    overflow: hidden;
+    color: var(--text-title);
+    font-size: 15px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .course-meta, .add-meta {
+    display: block;
+    overflow: hidden;
+    margin-top: 2px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .chevron { color: var(--text-muted); font-size: 20px; }
+  .last-score {
+    min-width: 42px;
+    display: grid;
+    justify-items: end;
+    gap: 1px;
+  }
+  .score-value {
+    font-size: 17px;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    line-height: 18px;
+  }
+  .score-value.good { color: var(--lime); }
+  .score-value.steady { color: var(--cyan); }
+  .score-value.bad { color: #ff8e8e; }
+  .score-caption {
+    color: var(--text-muted);
+    font-size: 8px;
+    font-weight: 900;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+  .add-wrap { margin-top: 12px; }
+  .add-title { color: var(--cyan); }
+  .tab-bar {
+    height: 64px;
+    flex: 0 0 64px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    align-items: center;
+    border-top: 1px solid var(--stroke);
+    background: rgba(11,18,28,0.94);
+  }
+  .tab {
+    display: grid;
+    justify-items: center;
+    gap: 2px;
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 700;
+  }
+  .tab .glyph { font-size: 21px; line-height: 22px; }
+  .tab.active { color: var(--lime); }
+  .recent-card { display: none; }
+  body[data-state="recent"] .helper { display: none; }
+  body[data-state="recent"] .recent-card { display: block; }
+  body[data-state="results"] .helper { display: none; }
+  body[data-state="results"] .matching-card { display: block; }
+  @media (max-width: 700px) {
+    body { background: var(--screen-bottom); }
+    .stage { display: block; min-height: 100vh; padding: 0; }
+    .controls { display: none; }
+    .phone { min-height: 100vh; border: 0; box-shadow: none; }
+  }
+</style>
+</head>
+<body data-state="recent">
+  <div class="stage">
+    <aside class="controls" aria-label="Mockup controls">
+      <p class="eyebrow">Proposed change</p>
+      <h1>New round course picker</h1>
+      <p class="note">Recent courses fill the idle state. Typing still switches to catalog results.</p>
+      <div class="state-nav">
+        <button type="button" data-show="recent" aria-current="true">Recently played</button>
+        <button type="button" data-show="results" aria-current="false">Matching courses</button>
+        <button type="button" data-show="no-history" aria-current="false">No recent history</button>
+      </div>
+    </aside>
+
+    <section class="phone" aria-label="Tee Time app mockup">
+      <header class="app-header">
+        <button class="back" type="button" aria-label="Go back"><span>&lsaquo;</span> New round</button>
+      </header>
+
+      <main>
+        <div class="hero">
+          <p class="greeting">Good afternoon</p>
+          <h2 class="title">Choose your course</h2>
+          <p class="subtitle">Search the catalog, then finish setup on one Aurora screen.</p>
+        </div>
+
+        <label class="search">
+          <span class="search-mark" aria-hidden="true"></span>
+          <input id="course-search" type="search" placeholder="Search courses by name" autocomplete="off" />
+        </label>
+
+        <p class="helper">Start typing a course name to see matches.</p>
+
+        <section class="results-card recent-card" aria-labelledby="recent-title">
+          <h3 class="section-label" id="recent-title">Recently played</h3>
+          <div class="course-list">
+            <button class="course-row" type="button" aria-label="Select Fraserview Golf Course, last round plus four">
+              <span class="course-icon" aria-hidden="true">&#9873;</span>
+              <span class="course-copy">
+                <span class="course-name">Fraserview Golf Course</span>
+                <span class="course-meta">Vancouver, BC</span>
+              </span>
+              <span class="last-score">
+                <strong class="score-value bad">+4</strong>
+                <span class="score-caption">Last round</span>
+              </span>
+              <span class="chevron" aria-hidden="true">&rsaquo;</span>
+            </button>
+            <button class="course-row" type="button" aria-label="Select University Golf Club, last round even par">
+              <span class="course-icon" aria-hidden="true">&#9873;</span>
+              <span class="course-copy">
+                <span class="course-name">University Golf Club</span>
+                <span class="course-meta">Vancouver, BC</span>
+              </span>
+              <span class="last-score">
+                <strong class="score-value steady">E</strong>
+                <span class="score-caption">Last round</span>
+              </span>
+              <span class="chevron" aria-hidden="true">&rsaquo;</span>
+            </button>
+            <button class="course-row" type="button" aria-label="Select Northlands Golf Course, last round minus two">
+              <span class="course-icon" aria-hidden="true">&#9873;</span>
+              <span class="course-copy">
+                <span class="course-name">Northlands Golf Course</span>
+                <span class="course-meta">North Vancouver, BC</span>
+              </span>
+              <span class="last-score">
+                <strong class="score-value good">&minus;2</strong>
+                <span class="score-caption">Last round</span>
+              </span>
+              <span class="chevron" aria-hidden="true">&rsaquo;</span>
+            </button>
+          </div>
+        </section>
+
+        <section class="results-card matching-card" aria-labelledby="matching-title">
+          <h3 class="section-label" id="matching-title">Matching courses</h3>
+          <div class="course-list">
+            <button class="course-row" type="button">
+              <span class="course-icon" aria-hidden="true">&#9873;</span>
+              <span class="course-copy">
+                <span class="course-name">North Shore Golf Club</span>
+                <span class="course-meta">Vancouver, BC</span>
+              </span>
+              <span class="chevron" aria-hidden="true">&rsaquo;</span>
+            </button>
+            <button class="course-row" type="button">
+              <span class="course-icon" aria-hidden="true">&#9873;</span>
+              <span class="course-copy">
+                <span class="course-name">Northlands Golf Course</span>
+                <span class="course-meta">North Vancouver, BC</span>
+              </span>
+              <span class="chevron" aria-hidden="true">&rsaquo;</span>
+            </button>
+          </div>
+        </section>
+
+        <div class="add-wrap">
+          <button class="add-course" type="button">
+            <span class="add-icon" aria-hidden="true">+</span>
+            <span class="course-copy">
+              <span class="add-title">Add a course</span>
+              <span class="add-meta">Not in the catalog? Create it.</span>
+            </span>
+            <span class="chevron" aria-hidden="true">&rsaquo;</span>
+          </button>
+        </div>
+      </main>
+
+      <footer class="tab-bar" aria-label="Primary navigation">
+        <span class="tab"><span class="glyph">&#9678;</span>Feed</span>
+        <span class="tab active"><span class="glyph">+</span>Score</span>
+        <span class="tab"><span class="glyph">&#8981;</span>Search</span>
+        <span class="tab"><span class="glyph">&#9684;</span>You</span>
+      </footer>
+    </section>
+  </div>
+
+<script>
+  const input = document.getElementById('course-search');
+  const stateButtons = [...document.querySelectorAll('[data-show]')];
+
+  let emptyState = 'recent';
+
+  function setState(state) {
+    document.body.dataset.state = state;
+    stateButtons.forEach((button) => {
+      button.setAttribute('aria-current', String(button.dataset.show === state));
+    });
+    if (state === 'recent' || state === 'no-history') {
+      emptyState = state;
+      input.value = '';
+    }
+    if (state === 'results' && !input.value) input.value = 'north';
+  }
+
+  stateButtons.forEach((button) => {
+    button.addEventListener('click', () => setState(button.dataset.show));
+  });
+
+  input.addEventListener('input', () => setState(input.value.trim() ? 'results' : emptyState));
+</script>
+</body>
+</html>

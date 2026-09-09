@@ -43,6 +43,7 @@
     "dotenv": "^17.4.2",
     "eslint": "^9.0.0",
     "eslint-config-expo": "~56.0.4",
+    "supabase": "2.116.0",
     "tsx": "^4.21.0",
     "typescript": "~6.0.3"
   },
@@ -52,6 +53,9 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
+    "local:start": "supabase start && tsx scripts/start-local.ts",
+    "local:reset": "supabase start && supabase db reset",
+    "local:stop": "supabase stop",
     "lint": "expo lint",
     "ingest:opengolf": "tsx scripts/ingest-opengolf.ts",
     "reenrich:opengolf": "tsx scripts/reenrich-opengolf.ts",

@@ -33,7 +33,7 @@ export default function NewRoundAddCourseScreen() {
   }
 
   const onCreated = (course: Course) => {
-    router.replace({
+    router.dismissTo({
       pathname: '/(tabs)/(score)' as never,
       params: { courseId: course.id },
     });

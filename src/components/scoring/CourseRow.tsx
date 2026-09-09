@@ -9,6 +9,8 @@ import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { NumericText } from '@/components/aurora';
+import { formatScore } from '@/library/golf/scoring';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { Course } from '@/types/golf';
 
@@ -17,16 +19,34 @@ type Props = {
   onPress: () => void;
   /** Optional secondary line shown under the name (e.g. "City · par 72 · 4 tees"). Defaults to the course location. */
   detail?: string;
+  /** Most recent relative-to-par result, shown as a compact trailing score. */
+  lastRoundScore?: number;
 };
 
-export function CourseRow({ course, onPress, detail }: Props) {
+export function CourseRow({ course, onPress, detail, lastRoundScore }: Props) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const meta = detail ?? course.location;
+  const scoreColor =
+    lastRoundScore == null
+      ? null
+      : lastRoundScore < 0
+        ? colors.performanceGood
+        : lastRoundScore > 0
+          ? colors.performanceBad
+          : colors.performanceSteady;
 
   return (
-    <Pressable style={styles.row} onPress={onPress}>
+    <Pressable
+      style={[styles.row, lastRoundScore != null ? styles.scoredRow : null]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={
+        lastRoundScore == null
+          ? undefined
+          : `Select ${course.name}, last round ${formatScore(lastRoundScore)}`
+      }>
       <View style={styles.icon}>
         <Ionicons name="golf-outline" size={20} color={colors.primaryDark} />
       </View>
@@ -43,7 +63,19 @@ export function CourseRow({ course, onPress, detail }: Props) {
           </Text>
         ) : null}
       </View>
-      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+      {lastRoundScore != null && scoreColor ? (
+        <View style={styles.trailingScore}>
+          <View style={styles.lastScore}>
+            <NumericText style={[styles.scoreValue, { color: scoreColor }]}>
+              {formatScore(lastRoundScore)}
+            </NumericText>
+            <Text style={styles.scoreCaption}>Last round</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+        </View>
+      ) : (
+        <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+      )}
     </Pressable>
   );
 }
@@ -60,6 +92,9 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       borderRadius: 18,
       borderWidth: 1,
       borderColor: colors.glassStroke,
+    },
+    scoredRow: {
+      paddingRight: 11,
     },
     icon: {
       width: 36,
@@ -93,6 +128,29 @@ function makeStyles(colors: ReturnType<typeof useTheme>['colors']) {
       fontWeight: '600',
       color: colors.textMuted,
       marginTop: 2,
+    },
+    lastScore: {
+      minWidth: 42,
+      alignItems: 'flex-end',
+      gap: 1,
+    },
+    trailingScore: {
+      flexShrink: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    scoreValue: {
+      fontSize: 17,
+      fontWeight: '900',
+      lineHeight: 18,
+    },
+    scoreCaption: {
+      color: colors.textMuted,
+      fontSize: 8,
+      fontWeight: '900',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
     },
   });
 }
