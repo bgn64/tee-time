@@ -1,6 +1,6 @@
 surface: live-scoring
 title: Live scoring
-status: reconciled
+status: approved
 interaction_fidelity: simulated
 source:
   route: /(tabs)/(score)/scoring
@@ -22,11 +22,23 @@ states:
     description: Current per-hole score and tracked-stat entry surface.
   - id: card
     description: Read-only standings and running scorecard through the scored holes.
+  - id: stats
+    description: Signed-in player's round-level tracked-stat aggregates through entered holes.
+  - id: stats-empty
+    description: Enabled tracked stats before any stat values have been entered.
+  - id: no-stats
+    description: Round without enabled tracked stats retains the existing Hole, Card, and Chat lenses.
   - id: chat
     description: Live comments and reply composer; fixture has no comments.
 interactions:
-  - trigger: Select Hole, Card, or Chat in the segmented control.
+  - trigger: Select Hole, Card, Stats, or Chat in the segmented control.
     outcome: Replace the scoring body while preserving the course header and live round.
+  - trigger: Record or change a tracked stat on the Hole lens.
+    outcome: Update the corresponding aggregate in the Stats lens without leaving the round.
+  - trigger: Open Stats when no values have been entered.
+    outcome: Show the configured stat tiles with em dashes instead of treating missing values as zero.
+  - trigger: Score a round without any enabled tracked stats.
+    outcome: Omit the Stats lens from the segmented control.
 fixtures:
   round:
     id: local-round-live-stats
@@ -42,7 +54,36 @@ fixtures:
       - putts
       - ob
       - sand
+      - custom:two_putts_or_less
     stat_holes_entered: 12
+    stat_aggregates:
+      fir: 6/9
+      gir: 8/12
+      putts: 22
+      ob: 2
+      sand: 3
+      custom_two_putts_or_less: 11/12
+    proposed_custom_stat:
+      label: Two putts or less
+      type: binary
+      display: dashed cyan tile
+  no_values_round:
+    enabled_stats:
+      - fir
+      - gir
+      - putts
+      - ob
+      - sand
+      - custom:two_putts_or_less
+    display_value: em_dash
+design:
+  lens_label: Stats
+  subject:
+    stroke: signed-in player
+    scramble: signed-in player's team
+  visibility: Hide the Stats lens when the round has no enabled tracked stats.
+  aggregation: Reuse the existing Round Detail binary and integer aggregation rules.
+  backend_changes: none
 reconciliation:
   method: live-app-inspected
   environment: Docker-backed local Supabase fixtures

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Live Scoring - Reconciled Baseline</title>
+<title>Live Scoring - Approved Running Stats</title>
 <style>
   :root {
     --canvas: #dfeee9;
@@ -146,7 +146,7 @@
   .course-meta { margin-top: 4px; color: var(--muted); font-size: 11px; font-weight: 700; }
   .switcher {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 5px;
     margin-top: 14px;
     padding: 5px;
@@ -172,14 +172,21 @@
   }
   .lens { display: none; }
   body[data-state="hole"] .hole-lens,
+  body[data-state="no-stats"] .hole-lens,
   body[data-state="card"] .card-lens,
+  body[data-state="stats"] .stats-lens,
+  body[data-state="stats-empty"] .stats-lens,
   body[data-state="chat"] .chat-lens { display: block; }
   .hero {
-    display: flex;
+    display: none;
     align-items: center;
     gap: 16px;
     padding: 14px 4px 0;
   }
+  body[data-state="hole"] .hero,
+  body[data-state="no-stats"] .hero { display: flex; }
+  body[data-state="no-stats"] .switcher { grid-template-columns: repeat(3, 1fr); }
+  body[data-state="no-stats"] .stats-tab { display: none; }
   .hole-number {
     color: var(--lime);
     font: 900 60px/62px Georgia, serif;
@@ -281,6 +288,93 @@
   .grid-divider { height: 1px; margin: 7px 0; background: var(--hairline); }
   .grid-total { display: flex; justify-content: space-between; margin-top: 9px; padding-top: 10px; border-top: 1px solid var(--hairline); color: var(--muted); font-size: 12px; }
   .grid-total strong { color: var(--danger); }
+  .stats-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 18px 4px 12px;
+  }
+  .stats-heading h2 {
+    margin: 0;
+    color: var(--ink);
+    font-size: 20px;
+    line-height: 1.1;
+  }
+  .stats-heading p {
+    margin: 4px 0 0;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+  }
+  .stats-progress {
+    flex: 0 0 auto;
+    color: var(--cyan);
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .7px;
+    text-transform: uppercase;
+  }
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .stat-tile {
+    min-height: 88px;
+    padding: 15px 16px;
+    border: 1px solid var(--stroke);
+    border-radius: 16px;
+    background: var(--glass-strong);
+    box-shadow: 0 12px 24px rgba(66,102,90,.08);
+  }
+  .stat-tile strong {
+    display: block;
+    color: var(--ink);
+    font-size: 25px;
+    font-weight: 900;
+    font-variant-numeric: tabular-nums;
+    line-height: 28px;
+  }
+  .stat-tile span {
+    display: block;
+    margin-top: 7px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+  }
+  .stat-tile.good strong { color: var(--lime); }
+  .stat-tile.cyan strong { color: var(--cyan); }
+  .stat-tile.danger strong { color: var(--danger); }
+  .stat-tile.custom { border-style: dashed; border-color: var(--cyan); }
+  .stat-tile.custom strong { color: var(--cyan); }
+  .stat-note {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+    padding: 13px 14px;
+    border: 1px solid var(--stroke);
+    border-radius: 14px;
+    color: var(--muted);
+    background: var(--glass);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  .stat-note b {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: var(--cyan);
+    box-shadow: 0 0 12px var(--glow-cyan);
+  }
+  .empty-stats { display: none; }
+  body[data-state="stats-empty"] .populated-stats { display: none; }
+  body[data-state="stats-empty"] .empty-stats { display: grid; }
+  body[data-state="stats-empty"] .stat-tile strong { color: var(--muted); }
+  body[data-state="stats-empty"] .stat-note b { background: var(--muted); box-shadow: none; }
   .composer { display: flex; gap: 8px; align-items: center; }
   .composer input { flex: 1; min-width: 0; padding: 13px 14px; border: 1px solid var(--stroke); border-radius: 16px; color: var(--body); background: var(--glass); }
   .composer button { width: 44px; height: 44px; border: 0; border-radius: 14px; color: var(--muted); background: var(--glass); font-size: 19px; }
@@ -307,12 +401,15 @@
 <body data-state="hole">
   <div class="stage">
     <aside class="controls" aria-label="Mockup controls">
-      <p class="eyebrow">Reconciled baseline</p>
+      <p class="eyebrow">Approved design</p>
       <h1>Live scoring</h1>
-      <p class="note">Current Hole, Card, and Chat lenses before the requested running-stat summary.</p>
+      <p class="note">A dedicated Stats lens keeps round-level progress one tap from score entry without crowding Hole or Card.</p>
       <div class="state-nav">
         <button type="button" data-show="hole" aria-current="true">Hole entry</button>
         <button type="button" data-show="card" aria-current="false">Running card</button>
+        <button type="button" data-show="stats" aria-current="false">Stats · thru 12</button>
+        <button type="button" data-show="stats-empty" aria-current="false">Stats · no values yet</button>
+        <button type="button" data-show="no-stats" aria-current="false">No stats configured</button>
         <button type="button" data-show="chat" aria-current="false">Live chat</button>
       </div>
     </aside>
@@ -332,6 +429,7 @@
           <div class="switcher" role="tablist" aria-label="Scoring views">
             <button type="button" role="tab" data-show="hole" aria-selected="true">Hole</button>
             <button type="button" role="tab" data-show="card" aria-selected="false">Card</button>
+            <button class="stats-tab" type="button" role="tab" data-show="stats" aria-selected="false">Stats</button>
             <button type="button" role="tab" data-show="chat" aria-selected="false">&#128172; Chat</button>
           </div>
           <div class="lens hole-lens hero">
@@ -390,6 +488,37 @@
           </div>
         </section>
 
+        <section class="lens stats-lens">
+          <div class="stats-heading">
+            <div>
+              <h2>Your stats</h2>
+              <p>@testgolfer</p>
+            </div>
+            <span class="stats-progress">Thru 12</span>
+          </div>
+
+          <div class="stat-grid populated-stats">
+            <div class="stat-tile good"><strong>6/9</strong><span>Fairways</span></div>
+            <div class="stat-tile cyan"><strong>8/12</strong><span>Greens</span></div>
+            <div class="stat-tile"><strong>22</strong><span>Putts</span></div>
+            <div class="stat-tile danger"><strong>2</strong><span>Penalties</span></div>
+            <div class="stat-tile"><strong>3</strong><span>Sand</span></div>
+            <div class="stat-tile custom"><strong>11/12</strong><span>Two putts or less</span></div>
+          </div>
+
+          <div class="stat-grid empty-stats">
+            <div class="stat-tile"><strong>&mdash;</strong><span>Fairways</span></div>
+            <div class="stat-tile"><strong>&mdash;</strong><span>Greens</span></div>
+            <div class="stat-tile"><strong>&mdash;</strong><span>Putts</span></div>
+            <div class="stat-tile"><strong>&mdash;</strong><span>Penalties</span></div>
+            <div class="stat-tile"><strong>&mdash;</strong><span>Sand</span></div>
+            <div class="stat-tile custom"><strong>&mdash;</strong><span>Two putts or less</span></div>
+          </div>
+
+          <div class="stat-note populated-stats"><b></b>12 holes with stat entries.</div>
+          <div class="stat-note empty-stats"><b></b>No stat values recorded yet.</div>
+        </section>
+
         <section class="lens chat-lens">
           <div class="section-label">Live comments</div>
           <div class="composer"><input aria-label="Add a comment" placeholder="Add a comment&hellip;" /><button type="button" disabled>&uarr;</button></div>
@@ -410,12 +539,12 @@
 
   function setState(state) {
     document.body.dataset.state = state;
+    const activeLens = state === 'stats-empty' ? 'stats' : state === 'no-stats' ? 'hole' : state;
     stateButtons.forEach((button) => {
-      const active = button.dataset.show === state;
       if (button.getAttribute('role') === 'tab') {
-        button.setAttribute('aria-selected', String(active));
+        button.setAttribute('aria-selected', String(button.dataset.show === activeLens));
       } else {
-        button.setAttribute('aria-current', String(active));
+        button.setAttribute('aria-current', String(button.dataset.show === state));
       }
     });
   }
