@@ -1,5 +1,5 @@
 /**
- * LensSwitcher — the Hole · Card · Chat segmented control on the live
+ * LensSwitcher — the Hole · Card · Stats · Chat segmented control on the live
  * scoring screen (mockup `04-aurora-glass.html`, the `.seg` control under
  * the course bar). Switches the scoring surface between per-hole entry,
  * the mid-round standings + running scorecard, and the live comment
@@ -12,27 +12,30 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '@/library/theme/ThemeContext';
 import type { ThemeColors } from '@/library/theme/themes';
 
-export type ScoringLens = 'hole' | 'card' | 'chat';
+export type ScoringLens = 'hole' | 'card' | 'stats' | 'chat';
 
 const OPTIONS: { key: ScoringLens; label: string }[] = [
   { key: 'hole', label: 'Hole' },
   { key: 'card', label: 'Card' },
+  { key: 'stats', label: 'Stats' },
   { key: 'chat', label: '💬 Chat' },
 ];
 
 export function LensSwitcher({
   value,
   onChange,
+  showStats = false,
 }: {
   value: ScoringLens;
   onChange: (lens: ScoringLens) => void;
+  showStats?: boolean;
 }) {
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <View style={styles.seg} accessibilityRole="tablist">
-      {OPTIONS.map((opt) => {
+      {OPTIONS.filter((opt) => opt.key !== 'stats' || showStats).map((opt) => {
         const active = opt.key === value;
         return (
           <Pressable

@@ -79,15 +79,15 @@ type Props = {
   secondaryLabel?: string;
   onSecondary?: () => void;
   /**
-   * Live-scoring lens system (mockup `04-aurora-glass.html`): when
-   * `onChangeLens` is provided, the header shows a Hole · Card · Chat
-   * switcher and the `card`/`chat` lenses swap the Hole body for the
-   * injected `cardLens` / `chatLens`. The edit-round screen omits these
-   * and keeps the plain Hole surface.
+  * Live-scoring lens system: when `onChangeLens` is provided, the header
+  * shows a Hole · Card · Stats · Chat switcher and swaps the Hole body for
+  * the injected read-only lens. Stats is omitted when `statsLens` is absent.
+  * The edit-round screen omits the lens system and keeps the Hole surface.
    */
   lens?: ScoringLens;
   onChangeLens?: (lens: ScoringLens) => void;
   cardLens?: ReactNode;
+  statsLens?: ReactNode;
   chatLens?: ReactNode;
 };
 
@@ -104,6 +104,7 @@ export function ScoringRoundView({
   lens,
   onChangeLens,
   cardLens,
+  statsLens,
   chatLens,
 }: Props) {
   const { colors } = useTheme();
@@ -161,7 +162,11 @@ export function ScoringRoundView({
               </Text>
             </View>
             {showSwitcher && onChangeLens ? (
-              <LensSwitcher value={activeLens} onChange={onChangeLens} />
+              <LensSwitcher
+                value={activeLens}
+                onChange={onChangeLens}
+                showStats={statsLens != null}
+              />
             ) : null}
             {activeLens === 'hole' && currentHole && heroStats ? (
               <View style={styles.hero}>
@@ -229,6 +234,8 @@ export function ScoringRoundView({
             </>
           ) : activeLens === 'card' ? (
             cardLens ?? null
+          ) : activeLens === 'stats' ? (
+            statsLens ?? null
           ) : (
             chatLens ?? null
           )}

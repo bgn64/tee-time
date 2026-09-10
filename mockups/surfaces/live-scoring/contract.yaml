@@ -1,6 +1,6 @@
 surface: live-scoring
 title: Live scoring
-status: approved
+status: implemented
 interaction_fidelity: simulated
 source:
   route: /(tabs)/(score)/scoring
@@ -94,3 +94,23 @@ reconciliation:
   inspected_viewports:
     - 390x844
     - 1440x1000
+implementation:
+  files:
+    - src/app/(tabs)/(score)/scoring.tsx
+    - src/components/round/LensSwitcher.tsx
+    - src/components/round/RoundDetailView.tsx
+    - src/components/round/ScoringRoundView.tsx
+    - src/components/round/ScoringStatsLens.tsx
+    - src/library/golf/roundStatSummaries.ts
+  backend_changes: none
+  verification:
+    typescript: passed
+    lint: passed
+    populated_stats: passed
+    empty_stats: passed
+    no_configured_stats: passed
+    live_aggregate_update: passed
+    scramble_team_subject: passed
+    viewports:
+      - 390x844
+      - 1440x1000
