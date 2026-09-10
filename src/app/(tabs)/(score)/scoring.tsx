@@ -41,11 +41,14 @@ import type { ScoringLens } from '@/components/round/LensSwitcher';
 import { ScoringCardLens } from '@/components/round/ScoringCardLens';
 import { ScoringChatLens } from '@/components/round/ScoringChatLens';
 import { ScoringRoundView } from '@/components/round/ScoringRoundView';
+import { ScoringStatsLens } from '@/components/round/ScoringStatsLens';
+import { enabledStatDefinitions } from '@/library/golf/builtInStats';
 import { useRound } from '@/library/golf/RoundContext';
 import {
   computeRoundCompletionGaps,
   formatCompletionWarning,
 } from '@/library/golf/roundCompletion';
+import { scorerIdForUser } from '@/library/golf/scoring';
 import { useParticipantResolver } from '@/library/golf/useParticipantResolver';
 import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useTheme } from '@/library/theme/ThemeContext';
@@ -57,6 +60,7 @@ export default function ScoringScreen() {
     currentRound,
     roundHydrated,
     currentHoleHydrated,
+    userId,
     setCustomHoleScore,
     setCurrentHole,
     completeCurrentRound,
@@ -163,6 +167,14 @@ export default function ScoringScreen() {
   if (!currentRound) return null;
 
   const round = currentRound;
+  const statsScorerId = userId ? scorerIdForUser(round, userId) : undefined;
+  const hasStatsLens =
+    !!statsScorerId &&
+    round.trackedScorerIds.includes(statsScorerId) &&
+    enabledStatDefinitions(
+      round.enabledStatKeys,
+      round.customStatDefinitions
+    ).length > 0;
   const currentHole = round.course.holes.find(
     (h) => h.number === round.currentHoleNumber
   );
@@ -242,6 +254,15 @@ export default function ScoringScreen() {
           onChangeLens={setLens}
           cardLens={
             <ScoringCardLens round={round} currentHoleNumber={currentHole.number} />
+          }
+          statsLens={
+            hasStatsLens && userId ? (
+              <ScoringStatsLens
+                round={round}
+                rows={detailsRows}
+                userId={userId}
+              />
+            ) : undefined
           }
           chatLens={<ScoringChatLens round={round} />}
         />

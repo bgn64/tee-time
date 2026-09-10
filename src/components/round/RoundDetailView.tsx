@@ -12,16 +12,9 @@ import type { OverflowItem } from './HeaderOverflowMenu';
 import { RoundScorecardGrid } from './RoundScorecardGrid';
 import { GlassCard, NumericText, SectionLabel, StatChip, StatTile } from '@/components/aurora';
 import {
-  aggregateBinary,
-  aggregateInteger,
-} from '@/library/golf/aggregateHoleDetails';
-import {
   applicableStatsForHole,
-  enabledStatDefinitions,
 } from '@/library/golf/builtInStats';
 import { yardageForHoleRange } from '@/library/golf/courseHelpers';
-import { isCustomStatKey } from '@/library/golf/customStats';
-import { displayStatName } from '@/library/golf/statDisplay';
 import {
   performanceToneColor,
   useRoundPerformance,
@@ -34,10 +27,8 @@ import {
   playerProgress,
   scorerIdForUser,
 } from '@/library/golf/scoring';
-import {
-  useRoundHoleDetails,
-  type HoleDetailsRow,
-} from '@/library/golf/useRoundHoleDetails';
+import { buildRoundStatSummaries } from '@/library/golf/roundStatSummaries';
+import { useRoundHoleDetails } from '@/library/golf/useRoundHoleDetails';
 import { useRoundScorers, type RoundScorer } from '@/library/golf/useRoundScorers';
 import { useCommentSummary } from '@/library/comments/useRoundComments';
 import { useProfile } from '@/library/social/FriendsContext';
@@ -56,14 +47,6 @@ type QuickStats = {
   firState: 'on' | 'no' | 'neutral';
   gir: string;
   girState: 'on' | 'no' | 'neutral';
-};
-
-type StatSummary = {
-  key: string;
-  label: string;
-  value: string;
-  tone: 'default' | 'lime' | 'cyan' | 'danger';
-  custom: boolean;
 };
 
 export function RoundDetailView({
@@ -105,9 +88,9 @@ export function RoundDetailView({
   );
   const performanceColor = performanceToneColor(colors, performance.tone);
   const quickStats = computeQuickStats(round, primaryScorer, getValues);
-  const statSummaries = computeStatSummaries(
+  const statSummaries = buildRoundStatSummaries(
     round,
-    primaryScorer,
+    primaryScorer?.id,
     detailRows
   );
   const courseSubline = formatCourseSubline(round, primaryScorer, progress.thru);
@@ -224,58 +207,6 @@ function computeQuickStats(
     gir: girEntered ? `${girMade}/${girEntered}` : '—',
     girState: girEntered ? (girMade * 2 >= girEntered ? 'on' : 'no') : 'neutral',
   };
-}
-
-function computeStatSummaries(
-  round: Round,
-  scorer: RoundScorer | undefined,
-  rows: readonly HoleDetailsRow[]
-): StatSummary[] {
-  if (!scorer || !round.trackedScorerIds.includes(scorer.id)) return [];
-  const holes = holesInRange(round.course.holes, round.holeRange);
-  return enabledStatDefinitions(
-    round.enabledStatKeys,
-    round.customStatDefinitions
-  ).map((stat) => {
-    const custom = isCustomStatKey(stat.key);
-    if (stat.type === 'binary') {
-      const aggregate = aggregateBinary(rows, scorer.id, stat, holes);
-      return {
-        key: stat.key,
-        label: displayStatName(stat.key, stat.label),
-        value:
-          aggregate.denom > 0 ? `${aggregate.num}/${aggregate.denom}` : '—',
-        tone:
-          aggregate.denom === 0
-            ? 'default'
-            : custom
-              ? 'cyan'
-              : stat.key === 'gir'
-                ? 'cyan'
-                : stat.yesTone === 'bad' && aggregate.num > 0
-                  ? 'danger'
-                  : 'lime',
-        custom,
-      };
-    }
-    const aggregate = aggregateInteger(rows, scorer.id, stat, holes);
-    return {
-      key: stat.key,
-      label: displayStatName(stat.key, stat.label),
-      value: aggregate.taggedCount > 0 ? String(aggregate.sum) : '—',
-      tone:
-        aggregate.taggedCount === 0 || aggregate.sum === 0
-          ? 'default'
-          : custom
-            ? 'cyan'
-            : stat.aggregateTone === 'bad'
-              ? 'danger'
-              : stat.aggregateTone === 'good'
-                ? 'lime'
-                : 'default',
-      custom,
-    };
-  });
 }
 
 function formatCourseSubline(round: Round, scorer: RoundScorer | undefined, thru: number): string {

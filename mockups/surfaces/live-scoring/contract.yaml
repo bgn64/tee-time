@@ -1,0 +1,116 @@
+surface: live-scoring
+title: Live scoring
+status: implemented
+interaction_fidelity: simulated
+source:
+  route: /(tabs)/(score)/scoring
+  web_path: /scoring
+  components:
+    - src/components/round/ScoringRoundView.tsx
+    - src/components/round/LensSwitcher.tsx
+    - src/components/round/ScoringCardLens.tsx
+    - src/components/round/ScoringChatLens.tsx
+viewports:
+  - name: mobile
+    width: 390
+    height: 844
+  - name: wide-web
+    width: 1440
+    height: 1000
+states:
+  - id: hole
+    description: Current per-hole score and tracked-stat entry surface.
+  - id: card
+    description: Read-only standings and running scorecard through the scored holes.
+  - id: stats
+    description: Signed-in player's round-level tracked-stat aggregates through entered holes.
+  - id: stats-empty
+    description: Enabled tracked stats before any stat values have been entered.
+  - id: no-stats
+    description: Round without enabled tracked stats retains the existing Hole, Card, and Chat lenses.
+  - id: chat
+    description: Live comments and reply composer; fixture has no comments.
+interactions:
+  - trigger: Select Hole, Card, Stats, or Chat in the segmented control.
+    outcome: Replace the scoring body while preserving the course header and live round.
+  - trigger: Record or change a tracked stat on the Hole lens.
+    outcome: Update the corresponding aggregate in the Stats lens without leaving the round.
+  - trigger: Open Stats when no values have been entered.
+    outcome: Show the configured stat tiles with em dashes instead of treating missing values as zero.
+  - trigger: Score a round without any enabled tracked stats.
+    outcome: Omit the Stats lens from the segmented control.
+fixtures:
+  round:
+    id: local-round-live-stats
+    course: Fraserview Golf Course
+    scoring_rule: stroke
+    current_hole: 1
+    holes_scored: 12
+    running_score: "+4"
+    scorer: testgolfer
+    enabled_stats:
+      - fir
+      - gir
+      - putts
+      - ob
+      - sand
+      - custom:two_putts_or_less
+    stat_holes_entered: 12
+    stat_aggregates:
+      fir: 6/9
+      gir: 8/12
+      putts: 22
+      ob: 2
+      sand: 3
+      custom_two_putts_or_less: 11/12
+    proposed_custom_stat:
+      label: Two putts or less
+      type: binary
+      display: dashed cyan tile
+  no_values_round:
+    enabled_stats:
+      - fir
+      - gir
+      - putts
+      - ob
+      - sand
+      - custom:two_putts_or_less
+    display_value: em_dash
+design:
+  lens_label: Stats
+  subject:
+    stroke: signed-in player
+    scramble: signed-in player's team
+  visibility: Hide the Stats lens when the round has no enabled tracked stats.
+  aggregation: Reuse the existing Round Detail binary and integer aggregation rules.
+  backend_changes: none
+reconciliation:
+  method: live-app-inspected
+  environment: Docker-backed local Supabase fixtures
+  inspected_states:
+    - hole
+    - card
+    - chat
+  inspected_viewports:
+    - 390x844
+    - 1440x1000
+implementation:
+  files:
+    - src/app/(tabs)/(score)/scoring.tsx
+    - src/components/round/LensSwitcher.tsx
+    - src/components/round/RoundDetailView.tsx
+    - src/components/round/ScoringRoundView.tsx
+    - src/components/round/ScoringStatsLens.tsx
+    - src/library/golf/roundStatSummaries.ts
+  backend_changes: none
+  verification:
+    typescript: passed
+    lint: passed
+    populated_stats: passed
+    empty_stats: passed
+    no_configured_stats: passed
+    live_aggregate_update: passed
+    scramble_team_subject: passed
+    viewports:
+      - 390x844
+      - 1440x1000
