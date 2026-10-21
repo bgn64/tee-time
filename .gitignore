@@ -70,3 +70,7 @@ example
 
 .tmp-export/
 
+# Private database exports and self-hosting credentials
+/prod-backups/
+/deploy/self-hosted/.env
+/deploy/self-hosted/*.env

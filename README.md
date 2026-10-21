@@ -17,6 +17,13 @@ This README is the operations handbook. For per-area code structure see the fold
 | DB deploy | GitHub Actions (`.github/workflows/deploy-production.yml`) — see [Deploy model](#deploy-model) |
 | Course catalog | OpenGolfAPI bulk CSV (ingested via `scripts/ingest-opengolf.ts`) + lazy enrichment via `src/library/golf/courseEnrichment.ts` |
 
+### Self-hosting (prepared, not cut over)
+
+See [the ZimaOS deployment runbook](docs/self-hosting.md) for the container build,
+pinned official Supabase stack, manual deployment, migration, backup, and recovery
+commands. Existing Vercel and hosted Supabase deployment remain unchanged until
+the explicit cutover. The self-hosted app keeps invite-only email-code login.
+
 Supabase Postgres is the source of truth for everything users read in-app: `scorecards`, `scorecard_scores`, `profiles`, `friendships`, `friend_requests`, `custom_players`, `comments`, `round_likes`. The app reads them over REST (TanStack Query), with RLS scoping each query to the caller's own + friends' rows; reads refresh on demand / pull-to-refresh rather than live-syncing. The `courses` catalog is queried via Supabase REST and snapshots the picked course onto each new scorecard at `startRound` time.
 
 ## Current release model

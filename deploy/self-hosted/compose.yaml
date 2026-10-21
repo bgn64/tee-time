@@ -1,0 +1,70 @@
+services:
+  api-gw:
+    ports: !override
+      - "127.0.0.1:${TEE_TIME_ADMIN_PORT:-8000}:8000"
+
+  supavisor:
+    ports: !reset []
+
+  auth:
+    environment:
+      GOTRUE_DISABLE_SIGNUP: "true"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_EXTERNAL_ANONYMOUS_USERS_ENABLED: "false"
+      GOTRUE_MAILER_AUTOCONFIRM: "false"
+      GOTRUE_EXTERNAL_PHONE_ENABLED: "false"
+      GOTRUE_SMS_AUTOCONFIRM: "false"
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://web/auth-email.html
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: "{{ .Token }} is your Tee Time code"
+      GOTRUE_MAILER_OTP_LENGTH: "6"
+
+  web:
+    image: tee-time-web:${TEE_TIME_APP_REVISION:?Run through self-host.sh}
+    build:
+      context: ${TEE_TIME_REPO:?Run through self-host.sh}
+      dockerfile: deploy/self-hosted/Dockerfile
+      target: web
+      args:
+        EXPO_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL:?Set the public API URL}
+        EXPO_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY:?Generate the public anon key}
+    restart: unless-stopped
+    depends_on:
+      api-gw:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${TEE_TIME_WEB_PORT:-8088}:80"
+      - "127.0.0.1:${TEE_TIME_API_PORT:-8089}:81"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+  tools:
+    image: tee-time-tools:${TEE_TIME_APP_REVISION:?Run through self-host.sh}
+    profiles: [tools]
+    build:
+      context: ${TEE_TIME_REPO:?Run through self-host.sh}
+      dockerfile: deploy/self-hosted/Dockerfile
+      target: tools
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      ANON_KEY: ${ANON_KEY}
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
+      SECRET_KEY_BASE: ${SECRET_KEY_BASE}
+      REALTIME_DB_ENC_KEY: ${REALTIME_DB_ENC_KEY}
+      VAULT_ENC_KEY: ${VAULT_ENC_KEY}
+      PG_META_CRYPTO_KEY: ${PG_META_CRYPTO_KEY}
+      SITE_URL: ${SITE_URL}
+      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+      API_EXTERNAL_URL: ${API_EXTERNAL_URL}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
