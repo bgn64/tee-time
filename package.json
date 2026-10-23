@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:migrate": "node scripts/migrate.mts",
+    "account:create": "node scripts/create-account.mts",
+    "test:auth": "node --test scripts/auth.test.mts"
   },
   "dependencies": {
     "better-auth": "^1.7.12",
