@@ -93,9 +93,96 @@ For a browser check, visit `/dashboard` while signed out, try an incorrect
 password, sign in successfully, refresh, sign out, and revisit `/dashboard`.
 Private details must never be returned to a signed-out visitor.
 
+## Container deployment (LAN or Tailscale)
+
+Install Docker Engine with the Compose plugin on the server (or Docker Desktop
+using Linux containers). Node.js is not required on the host. The multi-stage
+image builds with Node 24 LTS, runs the standalone production server as a non-root
+user, and retains the migration/account commands. Local environment files,
+databases, and dependencies are excluded from the build context. Builds require
+internet access for the base image, packages, and Google Fonts.
+
+1. Copy `.env.container.example` to `.env.container` and generate a secret:
+
+   ```text
+   docker run --rm node:24-bookworm-slim node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
+   ```
+
+   Set `BETTER_AUTH_SECRET` to the result. Protect this file like a password.
+   No real secret or household database is needed during the image build; its
+   temporary auth configuration is not used by the running container.
+
+2. Choose the listening address and browser URL in `.env.container`:
+
+   - For a test on the Docker host, keep the localhost defaults.
+   - For Tailscale-only access, set `APP_BIND_ADDRESS` to the server's Tailscale
+     IPv4 address, and `BETTER_AUTH_URL` to `http://<tailscale-ip>:3000`.
+   - For LAN access, use the server's LAN IPv4 address instead.
+
+   `APP_PORT` changes the host port; include it in `BETTER_AUTH_URL`. The auth URL
+   must exactly match the origin you use in the browser, without a trailing slash.
+   Use one consistent address on all devices; use the Tailscale address on the
+   LAN too when accessing via Tailscale. Avoid `0.0.0.0` unless you intentionally
+   want all host interfaces exposed. The selected address must exist when Docker
+   starts the container.
+
+   No public domain or internet-facing reverse proxy is needed. Keep router port
+   forwarding disabled and restrict access with your host firewall and Tailscale
+   policy. Tailscale encrypts the device-to-server connection; plain LAN HTTP does
+   not encrypt passwords or session cookies. Use Tailscale or HTTPS for sign-in
+   on untrusted networks. For optional Tailscale Serve HTTPS, keep the localhost
+   binding and set the auth URL to the HTTPS origin supplied by Serve.
+
+3. Build, initialize the database, and create an account:
+
+   ```text
+   docker compose --env-file .env.container build
+   docker compose --env-file .env.container run --rm app npm run db:migrate
+   docker compose --env-file .env.container run --rm app npm run account:create
+   docker compose --env-file .env.container up -d
+   docker compose --env-file .env.container ps
+   ```
+
+   Account creation needs an interactive terminal. Migrations are explicit rather
+   than automatically modifying the schema on every restart. Do not start the
+   server if migration fails. Open your configured URL, sign in, refresh, and sign
+   out; check that `/dashboard` is inaccessible after signing out.
+
+The `app-data` named volume holds SQLite and its WAL/SHM files on the server's
+local disk. It survives rebuilds, container replacement, and `docker compose down`.
+**Do not use `down -v`**, which deletes this volume. Existing development data is
+not imported automatically. Keep this a single app instance.
+
+For logs and an additional account while the server is running:
+
+```text
+docker compose --env-file .env.container logs --tail=100 app
+docker compose --env-file .env.container exec app npm run account:create
+```
+
+The health check probes the login page. Docker restarts a crashed app, but a
+health-check failure alone does not trigger a restart.
+
+Before updating, stop the app and back up the **entire data directory** using the
+server's Docker-volume backup tooling while no app or administrative command is
+running. Keep a copy off the server and test restoring it. After backing up:
+
+```text
+docker compose --env-file .env.container stop app
+docker compose --env-file .env.container build
+docker compose --env-file .env.container run --rm app npm run db:migrate
+docker compose --env-file .env.container up -d
+docker compose --env-file .env.container ps
+```
+
+For a persistence check, create an account, run `docker compose --env-file
+.env.container down`, bring it back with `up -d`, and confirm the same account
+still signs in. After configuration changes, run `up -d` again to recreate the
+container with the new environment.
+
 ## Scope
 
-This is a local-development foundation, not an internet-ready deployment.
-Docker/ZimaOS, HTTPS, production secrets, persistent mounts, backups, and
-deployment hardening are a separate next phase. Do not expose the development
-server publicly or use real credentials over untrusted HTTP networks.
+This is a personal-use app with a private-server container deployment, not an
+internet-ready service. Public hosting and broader deployment hardening remain
+out of scope. Do not expose the development server publicly or use real
+credentials over untrusted HTTP networks.
