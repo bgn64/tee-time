@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 600" fill="none">
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#d6ddd0"/><stop offset="1" stop-color="#f3ebd4"/></linearGradient>
+    <linearGradient id="fairway" x2=".6" y2="1"><stop stop-color="#98aa77"/><stop offset="1" stop-color="#b1be8c"/></linearGradient>
+    <linearGradient id="foreground" x2="1" y2="1"><stop stop-color="#214b37"/><stop offset="1" stop-color="#103c2e"/></linearGradient>
+    <pattern id="stripes" width="62" height="62" patternUnits="userSpaceOnUse" patternTransform="rotate(-26)"><rect width="31" height="62" fill="#d6deaa" opacity=".14"/></pattern>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".65" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".07"/></feComponentTransfer><feBlend in="SourceGraphic" mode="multiply"/></filter>
+  </defs>
+  <g filter="url(#grain)">
+    <path fill="url(#sky)" d="M0 0h900v600H0z"/>
+    <circle cx="679" cy="104" r="40" fill="#fff6da" opacity=".65"/>
+    <path d="M0 228 130 148 245 220 390 125 529 212 661 147 900 220v380H0Z" fill="#9aa98a" opacity=".55"/>
+    <path d="M0 260q220-130 450-15t450-20v375H0Z" fill="#718b68"/>
+    <path d="M0 301q205-127 425-30t475-13v342H0Z" fill="#446e51"/>
+    <path d="M429 267q112-28 146 14t-60 87q-110 49-25 110t179 122H132q-24-91 93-153t151-89q-53-60 53-91" fill="url(#fairway)"/>
+    <path d="M429 267q112-28 146 14t-60 87q-110 49-25 110t179 122H132q-24-91 93-153t151-89q-53-60 53-91" fill="url(#stripes)"/>
+    <ellipse cx="475" cy="299" rx="96" ry="28" fill="#b4c38e"/>
+    <path d="M371 337q-50 0-48 27t66 9q39-23-18-36" fill="#dfd3ad"/>
+    <path d="M523 397q68-20 85 10t-41 21q-68-2-44-31" fill="#e4d7af"/>
+    <path d="M0 324q128-48 198 42t-31 234H0Z" fill="url(#foreground)"/>
+    <path d="M900 305q-181 12-245 93t37 202h208Z" fill="url(#foreground)"/>
+    <g fill="#193f30">
+      <path d="m82 155-55 152h110Zm0 46-67 139h134Z"/><path d="M77 303h11v94H77Z"/>
+      <path d="m172 208-42 113h84Zm0 34-54 106h108Z"/><path d="M168 309h9v68h-9Z"/>
+      <path d="m785 133-62 179h124Zm0 58-73 163h146Z"/><path d="M779 299h12v110h-12Z"/>
+      <path d="m862 185-48 146h96Zm0 45-62 132h124Z"/><path d="M857 327h10v84h-10Z"/>
+    </g>
+    <path d="M482 298v-84" stroke="#f5ead1" stroke-width="3"/>
+    <path d="m483 214 36 12-36 13Z" fill="#b66340"/>
+    <ellipse cx="482" cy="301" rx="7" ry="2" fill="#3a5c3b"/>
+    <path d="M0 555q101-57 199-11t185 56H0Zm900-39q-89-3-157 84h157Z" fill="#0e3528" opacity=".8"/>
+  </g>
+</svg>

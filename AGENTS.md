@@ -1,29 +1,9 @@
-# Working on tee-time
+<!-- BEGIN:nextjs-agent-rules -->
 
-tee-time is an Expo / React Native (web-first) golf app, designed mockup-first
-with an "Aurora Glass" visual system.
+## This is NOT the Next.js you know
 
-## Always
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
-- Expo SDK 56 — read the versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing Expo/RN code. The API has changed from older versions.
-- Validate every change: `npx tsc --noEmit` and `npm run lint` (runs `expo lint`, loads `.env.local`). There is no test runner.
-- Work on a feature branch named `bgn64/<topic>`, cut from the latest `main`.
-- Ask before committing or pushing. Add the trailer `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` to commits.
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
-## UI changes
-
-For every user-facing UI change, load `mockup-contract` first. Its approval gates
-are mandatory. Tee-time defaults:
-
-- Canonical mockups: `mockups/surfaces/<surface>/`; catalog: `mockups/index.html`.
-- Legacy explorations: `mockups/explorations/` (reference only).
-- Keep each canonical `index.html` self-contained and usable from `file://`.
-- Start web: `npm run web`; default URL: `http://localhost:8081`.
-- Use the available browser/UI automation MCP; discover its tools at runtime.
-- Use `aurora-design-system` when implementing.
-
-Reconcile only the surface being changed. Ask before the separate baseline and
-approved-design commits. Never alter an approved mockup to excuse an implementation
-deviation; revise and reapprove the design first.
-
-Get explicit permission before writing backend, schema, RPC, or policy changes.
+<!-- END:nextjs-agent-rules -->

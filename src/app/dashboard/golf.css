@@ -1,0 +1,75 @@
+.tt-loading { min-height: 100dvh; display: grid; place-items: center; background: #111b26; color: #9fb5c4; font-family: var(--font-geist-sans), Arial, sans-serif; }
+.tt-production .tt-content { scrollbar-color: #34505f transparent; }
+.tt-production .tt-page-heading { margin-block: 24px; }
+.tt-production .tt-section-heading { flex-wrap: wrap; }
+.tt-production .tt-help { font-size: 12px; }
+.tt-production .tt-field { font-size: 14px; }
+.tt-production .tt-button { margin-block: 14px; font-size: 14px !important; }
+.tt-production .tt-text-button { font-size: 12px !important; }
+.tt-production .tt-row-body strong { font-size: 15px; overflow-wrap: anywhere; }
+.tt-production .tt-row-body > span { font-size: 12px; }
+.tt-production .tt-row-body .tt-row-caption { font-size: 11px; }
+.tt-production .tt-activity { margin-block: 12px; }
+.tt-production .tt-activity-heading strong { font-size: 13px; }
+.tt-production .tt-activity .tt-round-row { margin: 12px 0 0; border: 0; padding: 0; }
+.tt-production .tt-round-thumb { background: #21353f url("/preview-contours.svg") center / cover; filter: none; }
+.tt-production .tt-score-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.tt-production .tt-direct-score { width: 100%; max-width: 140px; height: 85px; padding: 0; text-align: center; background: none; color: #eef4f8; border: 0; border-radius: 10px; font-size: 64px; font-weight: 450; letter-spacing: -3px; appearance: textfield; }
+.tt-production .tt-direct-score::-webkit-inner-spin-button, .tt-production .tt-direct-score::-webkit-outer-spin-button { appearance: none; margin: 0; }
+.tt-production .tt-score-entry > div { min-width: 0; }
+.tt-production .tt-quick-scores { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.tt-production .tt-quick-scores button { min-height: 46px; font-size: 15px; }
+.tt-production .tt-detail-fields { border: 0; padding-inline: 0; min-width: 0; }
+.tt-production .tt-detail-fields label { font-size: 12px; }
+.tt-production .tt-detail-fields input { min-width: 0; width: 100%; min-height: 44px; font-size: 16px; padding: 8px; border: 1px solid #446070; border-radius: 8px; background: #21333f; color: #eef4f8; }
+.tt-production .tt-hole-log { margin-top: 20px; font-size: 12px; }
+.tt-production .tt-hole-log summary { min-height: 44px; padding-block: 12px; cursor: pointer; }
+.tt-production .tt-hole-log section { padding-block: 16px; border-top: 1px solid #34505a; }
+.tt-production .tt-hole-log h3 { font-weight: 550; font-size: 13px; margin-bottom: 10px; }
+.tt-production .tt-hole-log dl > div { display: flex; justify-content: space-between; gap: 15px; margin-block: 8px; }
+.tt-production .tt-hole-log dt { color: #9fb5c4; }
+.tt-production .tt-hole-log p { line-height: 1.8; overflow-wrap: anywhere; }
+.tt-production .tt-save-bar { position: sticky; top: 0; z-index: 3; padding: 12px; background: #21333f; border-radius: 12px; margin-top: 12px; font-size: 12px; }
+.tt-production .tt-save-bar p { padding-top: 8px; }
+.tt-production .tt-search { margin-bottom: 18px; }
+.tt-production .tt-search input::placeholder { color: #9aaebf; }
+.tt-production .tt-compact-course.selected { border-color: #6be4d4; background: #233943; }
+.tt-production .tt-compact-course .tt-course-card-copy { gap: 8px; margin-right: 18px; padding: 16px; }
+.tt-production .tt-compact-course .tt-course-card-copy strong { font-size: 17px; letter-spacing: -.3px; }
+.tt-production .tt-compact-course .tt-course-card-copy > span { font-size: 12px; }
+.tt-production .tt-setup-player { align-items: stretch; flex-direction: column; padding-block: 8px; gap: 0; }
+.tt-production .tt-player-selections { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 0 8px 27px; }
+.tt-production .tt-player-selections select { flex: 1; width: auto; max-width: 100%; }
+.tt-production .tt-player-option label { font-size: 14px; }
+.tt-production .tt-stat-options { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+.tt-production .tt-stat-options label { display: flex; align-items: center; gap: 8px; min-height: 44px; font-size: 12px; }
+.tt-production input[type="checkbox"] { accent-color: #6be4d4; min-width: 18px; min-height: 18px; }
+.tt-production .tt-course-hole-editor { display: grid; grid-template-columns: .8fr .8fr 1.3fr; gap: 12px; min-width: 0; padding: 14px; border: 1px solid #34505a; border-radius: 14px; margin: 18px 0; }
+.tt-production .tt-course-hole-editor legend { padding-inline: 8px; font-size: 13px; }
+.tt-production .tt-course-hole-editor label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; }
+.tt-production .tt-course-hole-editor input { width: 100%; min-width: 0; padding: 8px; min-height: 44px; border: 1px solid #446070; border-radius: 8px; background: #21333f; color: #eef4f8; font-size: 16px; }
+.tt-production .tt-contributor-list { display: flex; flex-direction: column; gap: 10px; padding-top: 12px; }
+.tt-production .tt-contributor-list label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 12px; }
+.tt-production .tt-contributor-list select { min-width: 0; max-width: 70%; min-height: 44px; padding: 8px; border: 1px solid #446070; border-radius: 8px; background: #21333f; color: #eef4f8; font-size: 14px; }
+.tt-production .tt-summary-grid { margin-block: 20px; }
+.tt-production .tt-summary-grid strong { font-size: 37px; }
+.tt-production .tt-summary-grid div > span:last-child { font-size: 11px; }
+.tt-production .tt-stat-grid small { font-size: 11px; }
+.tt-production .tt-stat-grid span { font-size: 12px; }
+.tt-production .tt-people-list strong { font-size: 14px; }
+.tt-production .tt-people-list span > span { font-size: 11px; }
+.tt-production .tt-loading-inline { padding-block: 22px; }
+.tt-production .tt-custom-stat { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid #34505a; font-size: 13px; }
+.tt-production .tt-catalog-credit { font-size: 10px; margin: 12px 0 20px; line-height: 1.8; }
+.tt-production .tt-catalog-credit a { text-decoration: underline; text-underline-offset: 3px; }
+.tt-production .tt-dialog::backdrop { background: #060c14bd; }
+.tt-production .tt-sheet > p { font-size: 13px; }
+.tt-production .tt-dialog .tt-field label { font-size: 14px; }
+.tt-production .tt-comments { max-height: none; }
+.tt-production .tt-comments p { font-size: 14px; }
+.tt-production .tt-stat-grid { gap: 7px; }
+.tt-production .tt-bottom-nav button span { font-size: 11px; }
+@media (max-width: 374px) {
+  .tt-production .tt-scorer { padding: 13px; }
+  .tt-production .tt-stat-grid strong { font-size: 25px; }
+}
