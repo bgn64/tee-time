@@ -59,7 +59,7 @@ Run commands from the project directory.
 2. Copy the environment example:
 
    ```powershell
-   Copy-Item .env.example .env.local
+   Copy-Item .env.local.example .env.local
    node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
    ```
 
@@ -175,7 +175,7 @@ from the course catalog; do not publish the household database or source dump.
 `DATABASE_PATH` defaults to `./data/tee-time.sqlite`, relative to the project
 directory. Accounts and sessions survive app restarts. SQLite may also create
 `-wal` and `-shm` sidecar files. Local data and environment files are excluded
-from source control; `.env.example` contains no secret and is safe to share.
+from source control; `.env.local.example` contains no secret and is safe to share.
 
 Keep the database on local disk. Use SQLite's backup facilities or stop all app
 processes before copying the database for a consistent backup. Do not delete
@@ -224,7 +224,8 @@ that feed. Installation from a home network has not yet been verified.
 
 1. Copy `.env.container.example` to `.env.container` and generate a secret:
 
-   ```text
+   ```powershell
+   Copy-Item .env.container.example .env.container
    docker run --rm node:24-bookworm-slim node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
    ```
 
@@ -239,7 +240,9 @@ that feed. Installation from a home network has not yet been verified.
      IPv4 address, and `BETTER_AUTH_URL` to `http://<tailscale-ip>:3000`.
    - For LAN access, use the server's LAN IPv4 address instead.
 
-   `APP_PORT` changes the host port; include it in `BETTER_AUTH_URL`. The auth URL
+   `APP_PORT` changes the host port; include it in `BETTER_AUTH_URL`. For example,
+   a local test on port 3001 needs both `APP_PORT=3001` and
+   `BETTER_AUTH_URL=http://localhost:3001`. The auth URL
    must exactly match the origin you use in the browser, without a trailing slash.
    Use one consistent address on all devices; use the Tailscale address on the
    LAN too when accessing via Tailscale. Avoid `0.0.0.0` unless you intentionally
