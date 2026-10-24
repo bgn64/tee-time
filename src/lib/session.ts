@@ -10,5 +10,5 @@ export async function getSession() {
 export async function requireUser() {
   const session = await getSession();
   if (!session) redirect("/login");
-  return { name: session.user.name, email: session.user.email };
+  return { id: session.user.id, name: session.user.name, email: session.user.email };
 }

@@ -9,10 +9,13 @@
     "lint": "eslint",
     "db:migrate": "node scripts/migrate.mts",
     "account:create": "node scripts/create-account.mts",
-    "test:auth": "node --test scripts/auth.test.mts"
+    "test:auth": "node --test scripts/auth.test.mts",
+    "test:preview": "node --test scripts/preview.test.mts",
+    "golf:import": "node scripts/import-golf.mts",
+    "test:golf": "node --test scripts/golf.test.mts"
   },
   "dependencies": {
-    "better-auth": "^1.7.12",
+    "better-auth": "^1.7.10",
     "better-sqlite3": "^13.0.3",
     "next": "16.4.2",
     "react": "19.3.0",

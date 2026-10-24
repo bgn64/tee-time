@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Tee Time",
-  description: "Your private household app.",
+  description: "Private golf scoring, rounds and friends.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

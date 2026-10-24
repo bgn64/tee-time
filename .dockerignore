@@ -11,3 +11,7 @@ data
 *.log
 coverage
 *.tsbuildinfo
+*.backup
+*.backup.gz
+src/app/preview
+scripts/preview.test.mts

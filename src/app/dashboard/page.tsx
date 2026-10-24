@@ -1,25 +1,20 @@
 import { Suspense } from "react";
+import type { Metadata } from "next";
 import { requireUser } from "@/lib/session";
-import { LogoutButton } from "./logout-button";
+import { golfDb } from "@/lib/golf";
+import { golfState } from "@/lib/golf-service.mts";
+import { GolfApp } from "./golf-app";
+import "@/components/golf.css";
+import "@/components/golf-directions.css";
+import "./golf.css";
 
-async function Dashboard() {
+export const metadata: Metadata = { title: "Tee Time", description: "Private golf scoring, rounds and friends.", robots: { index: false, follow: false } };
+
+async function AuthenticatedGolf() {
   const user = await requireUser();
-  return (
-    <section className="flex flex-col gap-5">
-      <h1 className="text-3xl font-bold">Welcome, {user.name}</h1>
-      <p>Signed in as <strong>{user.email}</strong>.</p>
-      <p>This is your private dashboard. Your session was verified on the server before these details were returned.</p>
-      <LogoutButton />
-    </section>
-  );
+  return <GolfApp initial={golfState(golfDb, user)} />;
 }
 
 export default function DashboardPage() {
-  return (
-    <main className="mx-auto flex w-full max-w-xl flex-1 flex-col justify-center gap-6 px-6 py-16">
-      <Suspense fallback={<p role="status">Checking your session...</p>}>
-        <Dashboard />
-      </Suspense>
-    </main>
-  );
+  return <Suspense fallback={<main className="tt-loading" role="status">Opening Tee Time...</main>}><AuthenticatedGolf /></Suspense>;
 }

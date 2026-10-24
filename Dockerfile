@@ -32,8 +32,8 @@ COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --chown=node:node package.json package-lock.json ./
-COPY --chown=node:node scripts/migrate.mts scripts/create-account.mts scripts/provision-account.mts ./scripts/
-COPY --chown=node:node src/lib/auth-config.mts ./src/lib/
+COPY --chown=node:node scripts/migrate.mts scripts/create-account.mts scripts/provision-account.mts scripts/import-golf.mts ./scripts/
+COPY --chown=node:node src/lib/*.mts ./src/lib/
 RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 EXPOSE 3000

@@ -1,0 +1,12 @@
+.tt-auth { min-height: 100dvh; flex: 1; display: grid; align-items: center; justify-items: center; padding: 32px 24px max(32px,env(safe-area-inset-bottom)); background: #111b26; color: #eef4f8; color-scheme: dark; font-family: var(--font-geist-sans),Arial,sans-serif; }
+.tt-auth-card { width: 100%; max-width: 380px; }
+.tt-auth-logo { font-size: 30px; font-weight: 650; letter-spacing: -1.5px; margin-bottom: 48px; }
+.tt-auth-logo span { color: #6be4d4; }
+.tt-auth h1 { font-size: 32px; font-weight: 550; letter-spacing: -1px; margin-bottom: 28px; }
+.tt-auth label { font-size: 14px; }
+.tt-auth input { min-height: 52px; border: 1px solid #446070; border-radius: 12px; color: #eef4f8; background: #1a2733; padding: 12px 14px; font-size: 16px; }
+.tt-auth button[type="submit"] { min-height: 52px; border-radius: 14px; background: #6be4d4; color: #10262a; font-weight: 650; }
+.tt-auth form > p { color: #9fb5c4; font-size: 12px; line-height: 1.7; }
+.tt-auth [role="alert"] { color: #ffb58b; }
+.tt-auth a { color: #9fb5c4; font-size: 13px; display: inline-flex; align-items: center; min-height: 44px; }
+.tt-auth :focus-visible { outline: 2px solid #6be4d4; outline-offset: 4px; }
