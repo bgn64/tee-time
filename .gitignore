@@ -33,7 +33,10 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.local.example
-!.env.container.example
+!.env.example
+# Local deployment configuration; commit only the template.
+/compose.yaml
+/compose.server.yaml
 /data/
 *.sqlite*
 *.db
