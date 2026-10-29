@@ -222,18 +222,43 @@ The dependency lockfile currently downloads packages from
 `ms-feed-25.pkgs.visualstudio.com`; the Docker host must also be able to reach
 that feed. Installation from a home network has not yet been verified.
 
-1. Copy `.env.container.example` to `.env.container` and generate a secret:
+1. Copy the tracked deployment examples to local configuration files and generate
+   a secret:
 
    ```powershell
-   Copy-Item .env.container.example .env.container
+   Copy-Item compose.yaml.example compose.yaml
+   Copy-Item .env.example .env
    docker run --rm node:24-bookworm-slim node -e "console.log(require('node:crypto').randomBytes(32).toString('base64'))"
    ```
 
-   Set `BETTER_AUTH_SECRET` to the result. Protect this file like a password.
+   On Ubuntu, use `cp compose.yaml.example compose.yaml` and
+   `cp .env.example .env` instead, then `chmod 600 .env`.
+   Set `BETTER_AUTH_SECRET` in `.env` to the result. Protect this file like a password.
    No real secret or household database is needed during the image build; its
    temporary auth configuration is not used by the running container.
 
-2. Choose the listening address and browser URL in `.env.container`:
+   Both `.env` and `compose.yaml` are Git-ignored deployment configuration.
+   Compose automatically reads them when run from the project directory, so no
+   `-f` or `--env-file` flag is needed. Keep `.env.local.example` / `.env.local`
+   for local Next.js development; do not copy deployment secrets into them.
+   Shell environment variables override Compose's `.env` values.
+   Template updates must be reviewed and incorporated into existing local files;
+   do not overwrite configured files with the examples during an upgrade.
+
+   **Existing deployments:** before pulling this convention change, back up your
+   configured Compose file outside the checkout: the formerly tracked
+   `compose.yaml` is removed from Git by this change. Preserve any local edits
+   before updating; Git may otherwise refuse the pull. After updating, restore
+   your saved deployment configuration as the now-ignored `compose.yaml`.
+   Rename
+   `.env.container` to `.env` if `.env` does not already exist. If you used
+   `compose.server.yaml`, rename it to `compose.yaml` if that destination does not
+   already exist. Otherwise keep your existing `compose.yaml`. Do not replace
+   customized configuration with the template. Keep the same project directory,
+   Compose project name, and `app-data` volume declaration so the existing database
+   volume is reused. Do not use `down -v`.
+
+2. Choose the listening address and browser URL in `.env`:
 
    - For a test on the Docker host, keep the localhost defaults.
    - For Tailscale-only access, set `APP_BIND_ADDRESS` to the server's Tailscale
@@ -263,11 +288,11 @@ that feed. Installation from a home network has not yet been verified.
    instead. Do not create replacement accounts or rerun the Supabase import.
 
    ```text
-   docker compose --env-file .env.container build
-   docker compose --env-file .env.container run --rm app npm run db:migrate
-   docker compose --env-file .env.container run --rm app npm run account:create
-   docker compose --env-file .env.container up -d
-   docker compose --env-file .env.container ps
+   docker compose build
+   docker compose run --rm app npm run db:migrate
+   docker compose run --rm app npm run account:create
+   docker compose up -d
+   docker compose ps
    ```
 
    Account creation needs an interactive terminal. Migrations are explicit rather
@@ -283,8 +308,8 @@ not imported automatically. Keep this a single app instance.
 For logs and an additional account while the server is running:
 
 ```text
-docker compose --env-file .env.container logs --tail=100 app
-docker compose --env-file .env.container exec app npm run account:create
+docker compose logs --tail=100 app
+docker compose exec app npm run account:create
 ```
 
 The health check probes the login page. Docker restarts a crashed app, but a
@@ -325,7 +350,8 @@ to a PR, or place it in `public`.
    world-readable. The original Supabase dump and legacy mapping are not needed
    when restoring this already-migrated snapshot.
 
-3. Clone/pull the merged code on the Docker host. Configure `.env.container` as
+3. Clone/pull the merged code on the Docker host. Prepare local `compose.yaml`
+   and `.env` from the examples if they do not already exist. Configure `.env` as
    described above: use your home-server URL and bind address, and generate a
    new random `BETTER_AUTH_SECRET`. Existing account passwords remain valid;
    existing sessions must sign in again. Do not copy the development
@@ -340,12 +366,12 @@ to a PR, or place it in `public`.
    your Docker host. These commands run from the cloned repository:
 
    ```text
-   docker compose --env-file .env.container build
-   docker compose --env-file .env.container stop app
-   docker compose --env-file .env.container run --rm --no-deps -v "/absolute/private/golf-transfer:/restore:ro" app node -e "const fs=require('node:fs'); const p=process.env.DATABASE_PATH; if([p,p+'-wal',p+'-shm'].some(f=>fs.existsSync(f)))throw Error('Destination database or sidecars already exist; refusing to overwrite.'); fs.copyFileSync(process.argv[1],p,fs.constants.COPYFILE_EXCL); const Database=require('better-sqlite3'); const db=new Database(p,{readonly:true,fileMustExist:true}); try{if(db.pragma('quick_check',{simple:true})!=='ok'||db.pragma('foreign_key_check').length)throw Error('Restored database integrity check failed.'); console.log('Restored database verified.');}finally{db.close();}" /restore/tee-time-transfer.sqlite
-   docker compose --env-file .env.container run --rm app npm run db:migrate
-   docker compose --env-file .env.container up -d
-   docker compose --env-file .env.container ps
+   docker compose build
+   docker compose stop app
+   docker compose run --rm --no-deps -v "/absolute/private/golf-transfer:/restore:ro" app node -e "const fs=require('node:fs'); const p=process.env.DATABASE_PATH; if([p,p+'-wal',p+'-shm'].some(f=>fs.existsSync(f)))throw Error('Destination database or sidecars already exist; refusing to overwrite.'); fs.copyFileSync(process.argv[1],p,fs.constants.COPYFILE_EXCL); const Database=require('better-sqlite3'); const db=new Database(p,{readonly:true,fileMustExist:true}); try{if(db.pragma('quick_check',{simple:true})!=='ok'||db.pragma('foreign_key_check').length)throw Error('Restored database integrity check failed.'); console.log('Restored database verified.');}finally{db.close();}" /restore/tee-time-transfer.sqlite
+   docker compose run --rm app npm run db:migrate
+   docker compose up -d
+   docker compose ps
    ```
 
    Stop if any command fails. Restore runs as the image's non-root user, so the
@@ -368,8 +394,8 @@ image or put it in `public`. For example, replace `C:\private\golf-import` with
 the absolute host path (a Linux path on a Linux server):
 
 ```text
-docker compose --env-file .env.container run --rm -v "C:\private\golf-import:/import:ro" app npm run golf:import -- --dump /import/source.backup.gz --mapping /import/accounts.json --dry-run
-docker compose --env-file .env.container run --rm -v "C:\private\golf-import:/import:ro" app npm run golf:import -- --dump /import/source.backup.gz --mapping /import/accounts.json
+docker compose run --rm -v "C:\private\golf-import:/import:ro" app npm run golf:import -- --dump /import/source.backup.gz --mapping /import/accounts.json --dry-run
+docker compose run --rm -v "C:\private\golf-import:/import:ro" app npm run golf:import -- --dump /import/source.backup.gz --mapping /import/accounts.json
 ```
 
 The consistent pre-import backup is created inside the persistent data volume.
@@ -385,15 +411,15 @@ server's Docker-volume backup tooling while no app or administrative command is
 running. Keep a copy off the server and test restoring it. After backing up:
 
 ```text
-docker compose --env-file .env.container stop app
-docker compose --env-file .env.container build
-docker compose --env-file .env.container run --rm app npm run db:migrate
-docker compose --env-file .env.container up -d
-docker compose --env-file .env.container ps
+docker compose stop app
+docker compose build
+docker compose run --rm app npm run db:migrate
+docker compose up -d
+docker compose ps
 ```
 
-For a persistence check, create an account, run `docker compose --env-file
-.env.container down`, bring it back with `up -d`, and confirm the same account
+For a persistence check, create an account, run `docker compose down`,
+bring it back with `up -d`, and confirm the same account
 still signs in. After configuration changes, run `up -d` again to recreate the
 container with the new environment.
 
