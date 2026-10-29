@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 32 32" role="img" aria-labelledby="title">
+  <title id="title">Tee Time</title>
+  <rect width="32" height="32" rx="7" fill="#111b26"/>
+  <g transform="translate(5 3.5)" fill="none" stroke="#6be4d4" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 22V3m0 1c5-4 9 4 15 0v10c-6 4-10-4-15 0"/>
+    <path d="M2 22h6"/>
+  </g>
+</svg>
