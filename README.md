@@ -4,6 +4,24 @@ A mobile-first, private golf scoring app built with Next.js, TypeScript,
 Better Auth, and SQLite. The approved **Signal** design uses dark slate panels,
 cyan accents, and concise, functional controls throughout the authenticated app.
 
+## Logo assets
+
+- [SVG logo](public/tee-time-logo.svg): scalable square icon using the header's
+  golf flag and Signal cyan (`#6be4d4`) on dark slate (`#111b26`).
+- [PNG logo](public/tee-time-logo.png): 512 x 512 export for custom 1Password
+  login icons and home-server dashboards.
+
+Both have rounded corners with transparent outer corners. Upload the PNG where
+SVG is unsupported, or use `/tee-time-logo.svg` or `/tee-time-logo.png` on your
+running app for dashboards that accept an image URL. These standalone assets do
+not change the app's header or favicon.
+
+Regenerate the PNG after editing the SVG using the existing Sharp dependency:
+
+```powershell
+node -e "require('sharp')('public\\tee-time-logo.svg').png().toFile('public\\tee-time-logo.png').catch(error => { console.error(error); process.exitCode = 1; })"
+```
+
 ## Golf app
 
 The root opens the protected dashboard; signed-out visitors go to sign-in.
